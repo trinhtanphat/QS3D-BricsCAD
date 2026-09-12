@@ -24,7 +24,8 @@ namespace QS3D.BricsCAD.V25.UI
         private ObjectId _quantityExactFaceObjectId = ObjectId.Null;
         private FullSubentityPath _quantityExactFacePath;
         private bool _quantityExactFaceHasHighlight;
-        private bool _quantityExactFaceDocumentEventsAttached;
+        private bool _quantityExactFaceDocumentToBeDeactivatedAttached;
+        private bool _quantityExactFaceDocumentBecameCurrentAttached;
 
         private static bool RegisterQuantityExactFaceHandlers()
         {
@@ -129,20 +130,40 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void AttachQuantityExactFaceDocumentEvents()
         {
-            if (_quantityExactFaceDocumentEventsAttached) return;
             var documents = BcadApplication.DocumentManager;
-            documents.DocumentToBeDeactivated += OnQuantityExactFaceDocumentSwitch;
-            documents.DocumentBecameCurrent += OnQuantityExactFaceDocumentSwitch;
-            _quantityExactFaceDocumentEventsAttached = true;
+            if (!_quantityExactFaceDocumentToBeDeactivatedAttached)
+            {
+                documents.DocumentToBeDeactivated += OnQuantityExactFaceDocumentSwitch;
+                _quantityExactFaceDocumentToBeDeactivatedAttached = true;
+            }
+            if (!_quantityExactFaceDocumentBecameCurrentAttached)
+            {
+                documents.DocumentBecameCurrent += OnQuantityExactFaceDocumentSwitch;
+                _quantityExactFaceDocumentBecameCurrentAttached = true;
+            }
         }
 
         private void DetachQuantityExactFaceDocumentEvents()
         {
-            if (!_quantityExactFaceDocumentEventsAttached) return;
             var documents = BcadApplication.DocumentManager;
-            documents.DocumentToBeDeactivated -= OnQuantityExactFaceDocumentSwitch;
-            documents.DocumentBecameCurrent -= OnQuantityExactFaceDocumentSwitch;
-            _quantityExactFaceDocumentEventsAttached = false;
+            if (_quantityExactFaceDocumentToBeDeactivatedAttached)
+            {
+                try
+                {
+                    documents.DocumentToBeDeactivated -= OnQuantityExactFaceDocumentSwitch;
+                    _quantityExactFaceDocumentToBeDeactivatedAttached = false;
+                }
+                catch (Exception ex) when (QuantityExactFaceRecoverable(ex)) { }
+            }
+            if (_quantityExactFaceDocumentBecameCurrentAttached)
+            {
+                try
+                {
+                    documents.DocumentBecameCurrent -= OnQuantityExactFaceDocumentSwitch;
+                    _quantityExactFaceDocumentBecameCurrentAttached = false;
+                }
+                catch (Exception ex) when (QuantityExactFaceRecoverable(ex)) { }
+            }
         }
 
         private void OnQuantityExactFaceDocumentSwitch(object sender, DocumentCollectionEventArgs e)
