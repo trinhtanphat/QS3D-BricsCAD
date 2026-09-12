@@ -17,12 +17,13 @@ if not show:
     errors.append("StartCenterPaletteCoordinator.Show was not found")
 else:
     body = show.group("body")
-    refresh_token = "panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);"
+    refresh_token = "panel.RefreshFromDocument(document, nativeDatabaseIdentity);"
     required = (
         "var wasVisible = palette.Visible;",
         "var wasSubscribed = _documentActivatedMayBeSubscribed;",
         "SubscribeToDocumentActivation();",
         "palette.Visible = true;",
+        "nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);",
         refresh_token,
         "if (!wasVisible)",
         "palette.Visible = false;",
