@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             RejectsScalarDriftBeforePersistenceRollback();
             AllowsPersistenceOnlyRollback();
             AllowsEquivalentPropertyMapReorderingRollback();
+            AllowsEquivalentPropertyKeyCaseRecanonicalizationRollback();
         }
 
         private static void RejectsPropertyDriftBeforePersistenceRollback()
@@ -129,6 +130,31 @@ namespace QS3D.Core.SmokeTests
             Equal("2", element.Properties["Beta"], "Equivalent property map lost Beta.");
             Equal(capturedDirty, element.Dirty, "Equivalent property map restore did not restore captured Dirty.");
             Equal(capturedUpdatedUtc, element.UpdatedUtc, "Equivalent property map restore did not restore captured UpdatedUtc.");
+        }
+
+        private static void AllowsEquivalentPropertyKeyCaseRecanonicalizationRollback()
+        {
+            var project = new ProjectState("P-CHECKPOINT-ELEMENT-MAP-CASE", "Checkpoint property key case identity");
+            var element = new ProjectElement("E1", ElementCategory.ArchitecturalWall);
+            element.SetProperty("Alpha", "1");
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+            project.Touch();
+
+            var checkpoint = ProjectPersistenceCheckpoint.Capture(project, new[] { element.Id });
+            var capturedDirty = element.Dirty;
+            var capturedUpdatedUtc = element.UpdatedUtc;
+
+            Equal(true, element.Properties.Remove("Alpha"), "Property case fixture could not remove Alpha.");
+            element.SetProperty("alpha", "1");
+            Equal(true, element.Properties.ContainsKey("ALPHA"), "Case-equivalent property identity was not preserved.");
+            Equal(false, checkpoint.Matches(project), "Checkpoint unexpectedly matched case-recanonicalized persistence metadata.");
+
+            checkpoint.Restore(project);
+
+            Equal("1", element.Properties["Alpha"], "Case-equivalent property map lost Alpha semantic identity.");
+            Equal(capturedDirty, element.Dirty, "Case-equivalent property restore did not restore captured Dirty.");
+            Equal(capturedUpdatedUtc, element.UpdatedUtc, "Case-equivalent property restore did not restore captured UpdatedUtc.");
         }
 
         private static TException Throws<TException>(Action action) where TException : Exception
