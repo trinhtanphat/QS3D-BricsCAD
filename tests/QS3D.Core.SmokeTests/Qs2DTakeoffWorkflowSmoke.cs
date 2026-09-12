@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
@@ -9,6 +10,18 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             var calibration = new DrawingCalibration(100d, 5d, "m");
+            var ingestor = new Qs2DSheetIngestor();
+            var validPdf = Encoding.ASCII.GetBytes("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\r\n");
+            var ingested = ingestor.IngestPdf("A100", "Valid PDF", "drawings/A100.pdf", "R1", calibration, validPdf, 1);
+            Expect(ingested.PdfPageNumber == 1 && ingested.ByteLength == validPdf.Length, "valid PDF ingestion");
+            Expect(ingested.SourceSha256.Length == 64, "valid PDF SHA-256 evidence");
+            ExpectThrows<InvalidOperationException>(() => ingestor.IngestPdf(
+                "A100", "Bad header", "drawings/A100.pdf", "R1", calibration,
+                Encoding.ASCII.GetBytes("%PDF-x.y\n%%EOF\n"), 1), "malformed PDF header rejection");
+            ExpectThrows<InvalidOperationException>(() => ingestor.IngestPdf(
+                "A100", "Truncated", "drawings/A100.pdf", "R1", calibration,
+                Encoding.ASCII.GetBytes("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n"), 1), "truncated PDF rejection");
+
             var oldSheet = new DrawingSheet2D("A101", "Ground Floor", DrawingSheetSourceKind.Pdf, "drawings/A101-r1.pdf", "R1", calibration);
             var newSheet = new DrawingSheet2D("A101", "Ground Floor", DrawingSheetSourceKind.Pdf, "drawings/A101-r2.pdf", "R2", calibration);
             var engine = new CalibratedTakeoffEngine2D();

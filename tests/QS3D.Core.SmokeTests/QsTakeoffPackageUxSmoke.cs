@@ -117,8 +117,8 @@ namespace QS3D.Core.SmokeTests
         {
             var ingestor = new Qs2DSheetIngestor();
             var calibration = new DrawingCalibration(100d, 10d, "m");
-            var pdf = Encoding.ASCII.GetBytes("%PDF-1.7\nfixture-a");
-            var pdf2 = Encoding.ASCII.GetBytes("%PDF-1.7\nfixture-b");
+            var pdf = Encoding.ASCII.GetBytes("%PDF-1.7\nfixture-a\n%%EOF\n");
+            var pdf2 = Encoding.ASCII.GetBytes("%PDF-1.7\nfixture-b\n%%EOF\n");
             var first = ingestor.IngestPdf("A401", "Plan", "A401.pdf", "R3", calibration, pdf, 2);
             var second = ingestor.IngestPdf("A401", "Plan", "A401.pdf", "R3", calibration, pdf2, 2);
             Equal(DrawingSheetSourceKind.Pdf, first.Sheet.SourceKind, "pdf source kind");
