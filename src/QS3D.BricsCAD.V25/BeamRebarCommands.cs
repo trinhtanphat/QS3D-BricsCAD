@@ -19,6 +19,7 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
             try
             {
                 var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
@@ -70,7 +71,7 @@ namespace QS3D.BricsCAD.V25
                 var message = count == 0
                     ? SelectionGuidance
                     : "Cốt thép 3D Dầm: đã tạo/cập nhật " + count + " thanh dọc.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message);
             }
             catch (Exception)
             {
@@ -84,26 +85,47 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private static void FinalizeUi(Document document, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try
             {
-                TryRefreshProject(document);
+                RefreshModelTree(document, nativeDatabaseIdentity);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.Regen();
-                TrySetPaletteStatus(document, message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                TrySetPaletteStatus(document, nativeDatabaseIdentity, message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning + " (" + ex.GetType().Name + ").");
             }
         }
 
-        private static bool IsActiveDocument(Document document)
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
             try
             {
-                return ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument);
+                return document.Database.UnmanagedObject;
+            }
+            catch
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                return false;
+
+            try
+            {
+                return document.Database.UnmanagedObject == nativeDatabaseIdentity;
             }
             catch
             {
@@ -111,21 +133,25 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void TryRefreshProject(Document document)
+        private static void RefreshModelTree(Document document, IntPtr nativeDatabaseIdentity)
         {
-            if (!IsActiveDocument(document)) return;
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             PaletteCoordinator.RefreshProject();
         }
 
-        private static void TrySetPaletteStatus(Document document, string message)
+        private static void TrySetPaletteStatus(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
-            if (!IsActiveDocument(document)) return;
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             PaletteCoordinator.SetStatus(message);
         }
 
         private static void Report(Document document, string message)
         {
-            try { TrySetPaletteStatus(document, message); }
+            try
+            {
+                if (ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                    PaletteCoordinator.SetStatus(message);
+            }
             catch { }
             TryWriteMessage(document, "\nQS3D " + message);
         }
