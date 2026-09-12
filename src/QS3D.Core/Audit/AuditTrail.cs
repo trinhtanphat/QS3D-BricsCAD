@@ -20,22 +20,40 @@ namespace QS3D.Core.Audit
             set
             {
                 if (_utc == value) return;
+                if (PersistenceMutationRequested != null) AuditTrail.ValidateOwnedUtcMutation(value);
                 PersistenceMutationRequested?.Invoke();
                 _utc = value;
             }
         }
 
-        public string Action { get => _action; set => SetText(ref _action, value); }
-        public string ElementId { get => _elementId; set => SetText(ref _elementId, value); }
-        public string Detail { get => _detail; set => SetText(ref _detail, value); }
-        public string Actor { get => _actor; set => SetText(ref _actor, value); }
-        public string CorrelationId { get => _correlationId; set => SetText(ref _correlationId, value); }
+        public string Action { get => _action; set => SetAction(value); }
+        public string ElementId { get => _elementId; set => SetOptionalIdentity(ref _elementId, value, nameof(ElementId), "Audit element id"); }
+        public string Detail { get => _detail; set => SetXmlText(ref _detail, value, nameof(Detail), "Audit detail"); }
+        public string Actor { get => _actor; set => SetXmlText(ref _actor, value, nameof(Actor), "Audit actor"); }
+        public string CorrelationId { get => _correlationId; set => SetOptionalIdentity(ref _correlationId, value, nameof(CorrelationId), "Audit correlation id"); }
 
         internal event System.Action? PersistenceMutationRequested;
 
-        private void SetText(ref string field, string value)
+        private void SetAction(string value)
+        {
+            if (string.Equals(_action, value, StringComparison.Ordinal)) return;
+            if (PersistenceMutationRequested != null) AuditTrail.ValidateOwnedActionMutation(value);
+            PersistenceMutationRequested?.Invoke();
+            _action = value;
+        }
+
+        private void SetOptionalIdentity(ref string field, string value, string parameterName, string label)
         {
             if (string.Equals(field, value, StringComparison.Ordinal)) return;
+            if (PersistenceMutationRequested != null) AuditTrail.ValidateOwnedOptionalIdentityMutation(value, parameterName, label);
+            PersistenceMutationRequested?.Invoke();
+            field = value;
+        }
+
+        private void SetXmlText(ref string field, string value, string parameterName, string label)
+        {
+            if (string.Equals(field, value, StringComparison.Ordinal)) return;
+            if (PersistenceMutationRequested != null) AuditTrail.ValidateOwnedXmlTextMutation(value, parameterName, label);
             PersistenceMutationRequested?.Invoke();
             field = value;
         }
@@ -333,6 +351,33 @@ namespace QS3D.Core.Audit
                 return "Audit trail contains an XML-invalid correlation id.";
 
             return null;
+        }
+
+        internal static void ValidateOwnedUtcMutation(DateTime value)
+        {
+            if (value.Kind != DateTimeKind.Utc)
+                throw new ArgumentException("Owned audit event timestamp must remain UTC.", nameof(value));
+        }
+
+        internal static void ValidateOwnedActionMutation(string? value)
+        {
+            if (value == null || string.IsNullOrWhiteSpace(value) ||
+                !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                ContainsControlCharacter(value))
+                throw new ArgumentException("Owned audit action must remain canonical without surrounding whitespace or control characters.", nameof(value));
+            RequireXmlCharacters(value, nameof(value), "Audit action");
+        }
+
+        internal static void ValidateOwnedOptionalIdentityMutation(string? value, string parameterName, string label)
+        {
+            var safeValue = value ?? string.Empty;
+            RequireCanonicalOptionalIdentity(safeValue, parameterName, label);
+            RequireXmlCharacters(safeValue, parameterName, label);
+        }
+
+        internal static void ValidateOwnedXmlTextMutation(string? value, string parameterName, string label)
+        {
+            RequireXmlCharacters(value ?? string.Empty, parameterName, label);
         }
 
         private static void RequireCanonicalOptionalIdentity(string value, string parameterName, string label)

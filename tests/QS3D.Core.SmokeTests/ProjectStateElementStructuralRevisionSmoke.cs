@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             AuditEventRejectedMutationsDoNotAdvance();
             AuditEventPropertyMutationsAdvanceExactlyOnce();
             AuditEventPropertyNoOpsDoNotAdvance();
+            AuditEventInvalidOwnedPropertyMutationsFailAtomically();
             AuditEventOwnershipTracksOnlyCurrentMembers();
             AuditTrailMutationsAdvanceExactlyOnce();
             AuditEventRevisionOverflowFailsBeforeMutation();
@@ -197,6 +198,36 @@ namespace QS3D.Core.SmokeTests
             item.Actor = item.Actor;
             item.CorrelationId = item.CorrelationId;
             Equal(version, project.ChangeVersion, "audit property no-op assignments");
+        }
+
+        private static void AuditEventInvalidOwnedPropertyMutationsFailAtomically()
+        {
+            var project = Project();
+            var item = Audit("canonical.action");
+            item.ElementId = "E1";
+            item.Detail = "detail";
+            item.Actor = "actor";
+            item.CorrelationId = "corr-1";
+            project.AuditEvents.Add(item);
+
+            AssertRejectedOwnedMutation(project, item, () => item.Utc = DateTime.SpecifyKind(item.Utc, DateTimeKind.Local), () => item.Utc, item.Utc, "non-UTC timestamp");
+            AssertRejectedOwnedMutation(project, item, () => item.Action = " padded ", () => item.Action, item.Action, "padded action");
+            AssertRejectedOwnedMutation(project, item, () => item.Action = "bad\u0001action", () => item.Action, item.Action, "control action");
+            AssertRejectedOwnedMutation(project, item, () => item.ElementId = " E2 ", () => item.ElementId, item.ElementId, "padded element id");
+            AssertRejectedOwnedMutation(project, item, () => item.ElementId = "E2\u0001", () => item.ElementId, item.ElementId, "control element id");
+            AssertRejectedOwnedMutation(project, item, () => item.Detail = "bad\u0001detail", () => item.Detail, item.Detail, "XML-invalid detail");
+            AssertRejectedOwnedMutation(project, item, () => item.Actor = "bad\u0001actor", () => item.Actor, item.Actor, "XML-invalid actor");
+            AssertRejectedOwnedMutation(project, item, () => item.CorrelationId = " corr-2 ", () => item.CorrelationId, item.CorrelationId, "padded correlation id");
+            AssertRejectedOwnedMutation(project, item, () => item.CorrelationId = "corr-2\u0001", () => item.CorrelationId, item.CorrelationId, "control correlation id");
+        }
+
+        private static void AssertRejectedOwnedMutation<T>(ProjectState project, AuditEvent item, Action mutation, Func<T> read, T expected, string label)
+        {
+            var beforeVersion = project.ChangeVersion;
+            Throws<ArgumentException>(mutation);
+            Equal(beforeVersion, project.ChangeVersion, label + " revision");
+            Equal(expected, read(), label + " value");
+            if (!ReferenceEquals(item, project.AuditEvents[0])) throw new Exception(label + ": owned audit event reference changed.");
         }
 
         private static void AuditEventOwnershipTracksOnlyCurrentMembers()
