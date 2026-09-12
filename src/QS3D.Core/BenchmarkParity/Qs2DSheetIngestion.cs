@@ -33,13 +33,13 @@ namespace QS3D.Core.BenchmarkParity
     public sealed class Qs2DSheetIngestor
     {
         private static readonly byte[] PngSignature = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 };
+        private static readonly byte[] PdfEofMarker = new byte[] { (byte)'%', (byte)'%', (byte)'E', (byte)'O', (byte)'F' };
 
         public IngestedDrawingSheet2D IngestPdf(string id, string name, string sourceReference, string revision, DrawingCalibration calibration, byte[] payload, int pageNumber)
         {
             RequirePayload(payload);
             if (pageNumber < 1) throw new ArgumentOutOfRangeException("pageNumber");
-            if (payload.Length < 5 || payload[0] != (byte)'%' || payload[1] != (byte)'P' || payload[2] != (byte)'D' || payload[3] != (byte)'F' || payload[4] != (byte)'-')
-                throw new InvalidOperationException("PDF payload signature is invalid.");
+            ValidatePdfPayload(payload);
 
             var sheet = new DrawingSheet2D(id, name, DrawingSheetSourceKind.Pdf, sourceReference, revision, calibration);
             return new IngestedDrawingSheet2D(sheet, Sha256(payload), payload.Length, pageNumber, null, 0, 0);
@@ -63,6 +63,36 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (payload == null) throw new ArgumentNullException("payload");
             if (payload.Length == 0) throw new ArgumentException("Sheet payload cannot be empty.", "payload");
+        }
+
+        private static void ValidatePdfPayload(byte[] payload)
+        {
+            if (payload.Length < 8 ||
+                payload[0] != (byte)'%' || payload[1] != (byte)'P' || payload[2] != (byte)'D' || payload[3] != (byte)'F' || payload[4] != (byte)'-' ||
+                !IsAsciiDigit(payload[5]) || payload[6] != (byte)'.' || !IsAsciiDigit(payload[7]))
+                throw new InvalidOperationException("PDF payload header is invalid.");
+
+            var end = payload.Length - 1;
+            while (end >= 0 && IsPdfWhitespace(payload[end])) end--;
+            var markerStart = end - PdfEofMarker.Length + 1;
+            if (markerStart < 0)
+                throw new InvalidOperationException("PDF payload is truncated or missing the terminal %%EOF marker.");
+
+            for (var i = 0; i < PdfEofMarker.Length; i++)
+            {
+                if (payload[markerStart + i] != PdfEofMarker[i])
+                    throw new InvalidOperationException("PDF payload is truncated or missing the terminal %%EOF marker.");
+            }
+        }
+
+        private static bool IsAsciiDigit(byte value)
+        {
+            return value >= (byte)'0' && value <= (byte)'9';
+        }
+
+        private static bool IsPdfWhitespace(byte value)
+        {
+            return value == 0 || value == 9 || value == 10 || value == 12 || value == 13 || value == 32;
         }
 
         private static string Sha256(byte[] payload)
