@@ -5,6 +5,10 @@
         MinWidth="940" MinHeight="620" WindowStartupLocation="CenterOwner"
         Background="#161B22" Foreground="#E6EDF3">
     <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Theme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
         <Style TargetType="TextBox">
             <Setter Property="Margin" Value="4"/><Setter Property="Padding" Value="7"/>
             <Setter Property="Background" Value="#0D1117"/><Setter Property="Foreground" Value="#E6EDF3"/>
@@ -21,6 +25,7 @@
             <Setter Property="Foreground" Value="#E6EDF3"/><Setter Property="BorderBrush" Value="#30363D"/>
         </Style>
         <Style TargetType="TextBlock"><Setter Property="Margin" Value="4"/></Style>
+        </ResourceDictionary>
     </Window.Resources>
 
     <Grid Margin="10">
