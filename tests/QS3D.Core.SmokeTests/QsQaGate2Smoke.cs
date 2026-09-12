@@ -13,6 +13,7 @@ namespace QS3D.Core.SmokeTests
             HonorsExplicitUnexpiredWaiver();
             RejectsExpiredWaiver();
             RejectsFutureDatedWaiverUntilApprovalTime();
+            RejectsNonUtcWaiverAndEvaluationTimestamps();
             AppliesConfigurableSeverityThreshold();
             DetectsIfcPsetSpatialTypeAndGuidConsistency();
             DuplicateGuidWaiverMustCoverEveryConflictingElement();
@@ -92,6 +93,25 @@ namespace QS3D.Core.SmokeTests
             var atApproval = new QsQaGate2().Evaluate(new[] { element }, profile, new[] { waiver }, approval);
             Expect(atApproval.Status == QsQaGateStatus.Pass, "waiver must become effective at its approval timestamp");
             Expect(atApproval.WaivedFindings.Count == 1 && atApproval.ActiveFindings.Count == 0, "effective waiver must remain auditable and release the finding");
+        }
+
+        private static void RejectsNonUtcWaiverAndEvaluationTimestamps()
+        {
+            var utc = Utc(2026, 9, 12);
+            var local = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Local);
+            var unspecified = new DateTime(2026, 9, 13, 0, 0, 0, DateTimeKind.Unspecified);
+
+            ExpectArgumentException(
+                () => new QsQaWaiver("QA2.MISSING_RELATIONSHIP", "E14", "bad approval kind", "lead.qs", local, utc.AddDays(1)),
+                "local waiver approval timestamp must fail closed");
+            ExpectArgumentException(
+                () => new QsQaWaiver("QA2.MISSING_RELATIONSHIP", "E14", "bad expiry kind", "lead.qs", utc, unspecified),
+                "unspecified waiver expiry timestamp must fail closed");
+
+            var element = ValidElement("E14", "GUID-14", includeTypeRelationship: true);
+            ExpectArgumentException(
+                () => new QsQaGate2().Evaluate(new[] { element }, QsQaRuleProfile.SolibriQuantityStrict(), null!, unspecified),
+                "unspecified QA evaluation timestamp must fail closed");
         }
 
         private static void AppliesConfigurableSeverityThreshold()
@@ -247,6 +267,20 @@ namespace QS3D.Core.SmokeTests
                 action();
             }
             catch (InvalidOperationException)
+            {
+                return;
+            }
+
+            throw new InvalidOperationException("QsQaGate2Smoke: " + message);
+        }
+
+        private static void ExpectArgumentException(Action action, string message)
+        {
+            try
+            {
+                action();
+            }
+            catch (ArgumentException)
             {
                 return;
             }
