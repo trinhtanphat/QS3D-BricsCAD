@@ -300,7 +300,7 @@ namespace QS3D.Core.Persistence
                 {
                     if (observed >= expected)
                         throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
-                    writer.Write(value ?? string.Empty);
+                    writer.Write(CanonicalizeOrdinalIgnoreCaseIdentity(value));
                     observed++;
                 }
                 if (observed != expected || values.Count != expected)
@@ -329,10 +329,13 @@ namespace QS3D.Core.Persistence
                 writer.Write(expected);
                 foreach (var pair in snapshot)
                 {
-                    writer.Write(pair.Key ?? string.Empty);
+                    writer.Write(CanonicalizeOrdinalIgnoreCaseIdentity(pair.Key));
                     writeValue(writer, pair.Value);
                 }
             }
+
+            private static string CanonicalizeOrdinalIgnoreCaseIdentity(string value) =>
+                (value ?? string.Empty).ToUpperInvariant();
 
             private static int RequireSupportedNestedCount(int count, string label)
             {
