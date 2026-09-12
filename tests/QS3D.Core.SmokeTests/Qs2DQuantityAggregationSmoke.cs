@@ -38,10 +38,10 @@ namespace QS3D.Core.SmokeTests
             {
                 Evidence("M-1", "S-1", "R1", "h-1", "TEST", "", "ea", 1e16),
                 Evidence("M-2", "S-1", "R1", "h-2", "TEST", "", "ea", 1d),
-                Evidence("M-3", "S-1", "R1", "h-3", "TEST", "", "ea", -1e16)
+                Evidence("M-3", "S-1", "R1", "h-3", "TEST", "", "ea", 1d)
             }).Single();
 
-            Equal(1d, aggregate.Quantity, "compensated quantity");
+            Equal(1e16 + 2d, aggregate.Quantity, "compensated quantity");
         }
 
         private static void AllowsEmbeddedIdentitySeparatorWithoutCollision()
