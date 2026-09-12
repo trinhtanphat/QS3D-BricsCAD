@@ -128,13 +128,13 @@ namespace QS3D.Core.SmokeTests
 
             var png = new byte[24] { 137,80,78,71,13,10,26,10, 0,0,0,13, 73,72,68,82, 0,0,0,32, 0,0,0,16 };
             var raster = ingestor.IngestRaster("A402", "Detail", "A402.png", "R1", calibration, png);
-            Equal(RasterSheetFormat.Png, raster.RasterFormat.Value, "png format");
+            Equal((RasterSheetFormat?)RasterSheetFormat.Png, raster.RasterFormat, "png format");
             Equal(32, raster.PixelWidth, "png width");
             Equal(16, raster.PixelHeight, "png height");
 
             var jpeg = new byte[] { 0xFF,0xD8,0xFF,0xC0,0x00,0x11,0x08,0x00,0x10,0x00,0x20,0x03,0x01,0x11,0x00,0x02,0x11,0x00,0x03,0x11,0x00 };
             var photo = ingestor.IngestRaster("A403", "Photo", "A403.jpg", "R1", calibration, jpeg);
-            Equal(RasterSheetFormat.Jpeg, photo.RasterFormat.Value, "jpeg format");
+            Equal((RasterSheetFormat?)RasterSheetFormat.Jpeg, photo.RasterFormat, "jpeg format");
             Equal(32, photo.PixelWidth, "jpeg width");
             Equal(16, photo.PixelHeight, "jpeg height");
 
