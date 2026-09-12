@@ -57,7 +57,7 @@ namespace QS3D.Core.SmokeTests
 
             var exposed = mesh.ArtifactBytes as IList<byte>;
             True(exposed != null, "artifact bytes read-only list surface");
-            True(exposed.IsReadOnly, "artifact bytes expose read-only collection");
+            True(exposed != null && exposed.IsReadOnly, "artifact bytes expose read-only collection");
 
             var consumerCopy = mesh.ArtifactBytes.ToArray();
             consumerCopy[0] = 77;
@@ -111,7 +111,7 @@ namespace QS3D.Core.SmokeTests
         {
             public IfcSceneMesh Resolve(string geometryReference)
             {
-                if (string.IsNullOrWhiteSpace(geometryReference)) return null;
+                if (string.IsNullOrWhiteSpace(geometryReference)) throw new ArgumentException("Geometry reference is required.", "geometryReference");
                 return new IfcSceneMesh(
                     new[]
                     {
