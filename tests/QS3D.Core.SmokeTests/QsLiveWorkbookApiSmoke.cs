@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             DeterministicWorkbookCascade();
             ConflictAndCycleHandling();
+            NonFiniteCascadeIsContained();
             CollisionSafeWorkbookIdentity();
             VersionedApiAuthorizationAndCaching();
         }
@@ -73,6 +74,35 @@ namespace QS3D.Core.SmokeTests
             };
             var cycleBatch = new LiveWorkbookRefreshEngine2().Refresh(cycle, new LiveWorkbookSourceSnapshot[0], "R2");
             True(cycleBatch.Results.All(x => x.Freshness == LiveWorkbookFreshness.Error), "cycle errors");
+        }
+
+        private static void NonFiniteCascadeIsContained()
+        {
+            var sources = new[]
+            {
+                new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.BimElement, "BIG", "R2", double.MaxValue, "ifc://model/BIG"),
+                new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.BimElement, "OK", "R2", 4d, "ifc://model/OK")
+            };
+            var bindings = new[]
+            {
+                new LiveWorkbookBinding("N1", "WB", "BOQ", "F10", "L10", LiveWorkbookSourceKind.BimElement, "BIG", "R2", new string[0], 2d, 0d, 11d),
+                new LiveWorkbookBinding("N2", "WB", "BOQ", "F11", "L11", LiveWorkbookSourceKind.BimElement, string.Empty, string.Empty, new[] { "N1" }, 1d, 0d, 12d),
+                new LiveWorkbookBinding("N3", "WB", "BOQ", "F12", "L12", LiveWorkbookSourceKind.BimElement, "OK", "R2", new string[0], 1d, 0d, 3d)
+            };
+
+            var batch = new LiveWorkbookRefreshEngine2().Refresh(bindings, sources, "R2");
+            var overflow = batch.Results.Single(x => x.Binding.BindingId == "N1");
+            var downstream = batch.Results.Single(x => x.Binding.BindingId == "N2");
+            var independent = batch.Results.Single(x => x.Binding.BindingId == "N3");
+
+            Equal(LiveWorkbookFreshness.Error, overflow.Freshness, "non-finite arithmetic is a binding error");
+            Near(11d, overflow.Value, "non-finite binding preserves accepted value");
+            True(overflow.Message.IndexOf("non-finite", StringComparison.OrdinalIgnoreCase) >= 0, "non-finite diagnostic");
+            Equal(LiveWorkbookFreshness.Error, downstream.Freshness, "downstream fails closed after arithmetic error");
+            True(downstream.Message.IndexOf("N1", StringComparison.OrdinalIgnoreCase) >= 0, "downstream identifies unusable upstream");
+            Equal(LiveWorkbookFreshness.Refreshed, independent.Freshness, "unrelated binding still refreshes");
+            Near(4d, independent.Value, "unrelated binding value");
+            True(batch.HasBlockingFailure, "non-finite arithmetic blocks publication");
         }
 
         private static void CollisionSafeWorkbookIdentity()
