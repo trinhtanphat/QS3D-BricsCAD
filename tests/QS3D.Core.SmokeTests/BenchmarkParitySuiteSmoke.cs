@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             QaGateBlocksInvalidModel();
             QsQaGate2Smoke.Run();
+            QaGateRejectsNonFiniteDimensions();
             CalibratedTwoDimensionalTakeoff();
             Qs2DTakeoffWorkflowSmoke.Run();
             QsTakeoffPackageUxSmoke.Run();
@@ -36,6 +37,33 @@ namespace QS3D.Core.SmokeTests
             var props = new Dictionary<string, string> { { "IfcGuid", "G1" }, { "IfcEntity", "IfcWall" }, { "QuantityUnit", "m3" } };
             var valid = new QsModelElementSnapshot("E2", "Wall", "Concrete", "STR.WALL", "L01", 4d, 0.2d, 3d, props);
             Equal(QsQaGateStatus.Pass, new QsQaGate().Evaluate(new[] { valid }, QsQaProfile.StrictIfcQuantity()).Status, "valid QA gate");
+        }
+
+        private static void QaGateRejectsNonFiniteDimensions()
+        {
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "IfcGuid", "FINITE-DIM-GUID" },
+                { "IfcPset.Pset_Qto", "present" },
+                { "IfcPset.Pset_Identity", "present" },
+                { "IfcRel.SpatialContainer", "L01" },
+                { "IfcRel.TypeAssignment", "Wall" }
+            };
+            var values = new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity };
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                var element = new QsModelElementSnapshot("NF-" + i, "Wall", "Concrete", "A-WALL", "L01", values[i], 0.2d, 3d, properties);
+                var decision = new QsQaGate2().Evaluate(
+                    new[] { element },
+                    QsQaRuleProfile.SolibriQuantityStrict(),
+                    null!,
+                    new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc));
+
+                Equal(QsQaGateStatus.Blocked, decision.Status, "non-finite QA2 dimension blocks");
+                True(decision.ActiveFindings.Any(x => x.RuleId == "QA2.INVALID_DIMENSIONS" && x.ElementId == element.Id), "non-finite QA2 dimension finding");
+                True(!decision.CanTakeoff && !decision.CanBoq && !decision.CanEstimate, "non-finite QA2 dimension hard gate");
+            }
         }
 
         private static void CalibratedTwoDimensionalTakeoff()
