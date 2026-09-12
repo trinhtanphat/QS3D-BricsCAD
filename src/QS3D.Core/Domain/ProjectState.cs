@@ -516,7 +516,7 @@ namespace QS3D.Core.Domain
             QuantityRules = new StructuralRevisionList<QuantityRule>(Touch);
             Metadata = new ProjectMetadataDictionary();
             MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(this, Metadata);
-            AuditEvents = new List<AuditEvent>();
+            AuditEvents = new StructuralRevisionList<AuditEvent>(Touch);
         }
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
