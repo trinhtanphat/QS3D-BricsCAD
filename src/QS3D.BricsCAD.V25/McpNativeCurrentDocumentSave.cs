@@ -209,6 +209,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     EnsureCommandContextAutomationNotStopped();
                     operation.EnsureSameActiveDocumentAndPath();
+                    operation.RequireSameNativeDatabaseGeneration();
 
                     object value;
                     try { value = Application.GetSystemVariable("DBMOD"); }
@@ -283,6 +284,7 @@ namespace QS3D.BricsCAD.V25
             internal Document? Document { get; private set; }
             internal string FullPath { get; private set; } = string.Empty;
             internal string TerminalError { get; private set; } = string.Empty;
+            internal IntPtr NativeDatabaseIdentity { get; private set; } = IntPtr.Zero;
             internal bool HasAttachedHandlers => _commandEndedAttached || _commandCancelledAttached || _commandFailedAttached;
 
             internal void QueueInCadContext()
@@ -302,6 +304,13 @@ namespace QS3D.BricsCAD.V25
                 if (document.IsReadOnly)
                     throw new InvalidOperationException(
                         "Active drawing is read-only. Native QSAVE was not queued; use an explicit writable Save As target instead.");
+
+                var database = document.Database;
+                if (database == null)
+                    throw new InvalidOperationException("Active drawing has no BricsCAD database; native QSAVE was not queued.");
+                NativeDatabaseIdentity = document.Database.UnmanagedObject;
+                if (NativeDatabaseIdentity == IntPtr.Zero)
+                    throw new InvalidOperationException("Active drawing native database is unavailable; native QSAVE was not queued.");
 
                 int commandActive;
                 try
@@ -433,8 +442,14 @@ namespace QS3D.BricsCAD.V25
             private void Complete(object sender, CommandEventArgs e, string error, string state)
             {
                 if (!Matches(sender, e)) return;
+                var generationError = string.Empty;
+                try { RequireSameNativeDatabaseGeneration(); }
+                catch
+                {
+                    generationError = "The native BricsCAD database generation changed before the QSAVE terminal event; save completion was not confirmed. Do not retry automatically.";
+                }
                 if (Interlocked.CompareExchange(ref _terminalSet, 1, 0) != 0) return;
-                TerminalError = error;
+                TerminalError = string.IsNullOrEmpty(generationError) ? error : generationError;
                 try
                 {
                     var detached = DetachInCadContext();
@@ -467,6 +482,24 @@ namespace QS3D.BricsCAD.V25
                 if (!Path.IsPathRooted(currentPath) || !SamePath(currentPath, FullPath))
                     throw new InvalidOperationException(
                         "The active BricsCAD document path changed while native QSAVE was executing or being verified.");
+            }
+
+            internal void RequireSameNativeDatabaseGeneration()
+            {
+                var document = Document;
+                if (document == null || NativeDatabaseIdentity == IntPtr.Zero)
+                    throw new InvalidOperationException(
+                        "Native BricsCAD database generation ownership was not established for QSAVE.");
+
+                var activeDocument = Application.DocumentManager.MdiActiveDocument;
+                if (!ReferenceEquals(activeDocument, document))
+                    throw new InvalidOperationException(
+                        "The active BricsCAD document changed while native QSAVE was executing or being verified.");
+
+                var database = activeDocument.Database;
+                if (database == null || database.UnmanagedObject == IntPtr.Zero || database.UnmanagedObject != NativeDatabaseIdentity)
+                    throw new InvalidOperationException(
+                        "The native BricsCAD database generation changed while QSAVE was executing or being verified.");
             }
 
             private static string NormalizeCommand(string command)
