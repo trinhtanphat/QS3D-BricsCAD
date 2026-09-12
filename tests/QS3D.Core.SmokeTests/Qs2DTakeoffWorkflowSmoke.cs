@@ -10,6 +10,13 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             var calibration = new DrawingCalibration(100d, 5d, "m");
+            ExpectThrows<ArgumentOutOfRangeException>(() => new DrawingSheet2D(
+                "A099", "Invalid source", (DrawingSheetSourceKind)999, "drawings/A099.bin", "R1", calibration),
+                "invalid drawing source kind rejection");
+            ExpectThrows<ArgumentOutOfRangeException>(() => new TakeoffMarkup2D(
+                "M-INVALID", "A099", (TakeoffMeasurementKind)999, 1d, "WALL", "ZONE-A", "Takeoff-Wall", "pdf:M-INVALID"),
+                "invalid measurement kind rejection");
+
             var ingestor = new Qs2DSheetIngestor();
             var validPdf = Encoding.ASCII.GetBytes("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\r\n");
             var ingested = ingestor.IngestPdf("A100", "Valid PDF", "drawings/A100.pdf", "R1", calibration, validPdf, 1);
@@ -48,6 +55,16 @@ namespace QS3D.Core.SmokeTests
             Expect(Math.Abs(deltas.Single(x => x.MarkupId == "M1").QuantityDelta - 0.5d) < 1e-12, "changed quantity delta");
             Expect(deltas.Single(x => x.MarkupId == "M2").Kind == RevisionMarkupChangeKind.Removed, "removed markup");
             Expect(deltas.Single(x => x.MarkupId == "M3").Kind == RevisionMarkupChangeKind.Added, "added markup");
+
+            var extremeOld = new TakeoffSheetResult2D(oldSheet, new[]
+            {
+                new TakeoffQuantityEvidence2D("M-EXTREME", "A101", "R1", "drawings/A101-r1.pdf", "pdf:M-EXTREME", "WALL", "ZONE-A", "Takeoff-Wall", double.MaxValue, "m")
+            });
+            var extremeNew = new TakeoffSheetResult2D(newSheet, new[]
+            {
+                new TakeoffQuantityEvidence2D("M-EXTREME", "A101", "R2", "drawings/A101-r2.pdf", "pdf:M-EXTREME", "WALL", "ZONE-A", "Takeoff-Wall", -double.MaxValue, "m")
+            });
+            ExpectThrows<ArgumentOutOfRangeException>(() => new DrawingRevisionComparer2D().Compare(extremeOld, extremeNew), "non-finite revision quantity delta rejection");
 
             var workflow = new AutodeskTakeoffWorkflow();
             var inventory = workflow.BuildInventoryAndEstimate(
