@@ -28,6 +28,7 @@ namespace QS3D.Core.SmokeTests
             P3BimEditingModelingBindings();
             P4RecognitionBinding();
             P5RebarBinding();
+            P6SpecialCategoryBindings();
         }
 
         private static void P2ShellProjectBindings()
@@ -99,6 +100,21 @@ namespace QS3D.Core.SmokeTests
                 ParityWorkflowRequirement.AtomicMutation | ParityWorkflowRequirement.Audit;
             AssertBinding(registry, "rebar", ParityWorkflowKind.SemanticMutation,
                 ParityWorkflowSurface.Ui, mutation);
+        }
+        private static void P6SpecialCategoryBindings()
+        {
+            var registry = ParitySpecialCategoriesCatalog.CreateRegistry();
+            if (registry.Bindings.Count != 8)
+                throw new InvalidOperationException("P6 special-category catalog must contain exactly eight bindings.");
+
+            var mutation = ParityWorkflowRequirement.ActiveDocument |
+                ParityWorkflowRequirement.Project | ParityWorkflowRequirement.Selection |
+                ParityWorkflowRequirement.AtomicMutation | ParityWorkflowRequirement.Audit;
+            foreach (var id in new[] { "room", "room.finish", "earthwork", "stair", "railing", "curtain", "door-opening", "grid" })
+            {
+                AssertBinding(registry, id, ParityWorkflowKind.SemanticMutation,
+                    ParityWorkflowSurface.Ui, mutation);
+            }
         }
         private static void AssertBinding(ParityWorkflowRegistry registry, string id,
             ParityWorkflowKind kind, ParityWorkflowSurface surfaces, ParityWorkflowRequirement requirements)
