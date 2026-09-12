@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             AuditEventStructuralMutationsAdvanceExactlyOnce();
             AuditEventNoOpMutationsDoNotAdvance();
             AuditEventRejectedMutationsDoNotAdvance();
+            AuditEventInvalidStructuralCandidatesFailAtomically();
             AuditEventPropertyMutationsAdvanceExactlyOnce();
             AuditEventPropertyNoOpsDoNotAdvance();
             AuditEventInvalidOwnedPropertyMutationsFailAtomically();
@@ -168,6 +169,23 @@ namespace QS3D.Core.SmokeTests
             AssertAuditUnchanged(project, version, count, first, "audit out-of-range RemoveAt");
             Throws<ArgumentOutOfRangeException>(() => project.AuditEvents[1] = Audit("out-of-range-set"));
             AssertAuditUnchanged(project, version, count, first, "audit out-of-range index replacement");
+        }
+
+        private static void AuditEventInvalidStructuralCandidatesFailAtomically()
+        {
+            var project = Project();
+            var first = Audit("first");
+            project.AuditEvents.Add(first);
+            var invalid = new AuditEvent
+            {
+                Utc = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Local),
+                Action = " invalid "
+            };
+            var version = project.ChangeVersion;
+            var count = project.AuditEvents.Count;
+
+            Throws<ArgumentException>(() => project.AuditEvents.Add(invalid));
+            AssertAuditUnchanged(project, version, count, first, "audit invalid structural Add");
         }
 
         private static void AuditEventPropertyMutationsAdvanceExactlyOnce()
