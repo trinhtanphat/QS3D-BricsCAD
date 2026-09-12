@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Domain;
 using QS3D.Core.Persistence;
+using QS3D.Core.Rules;
 
 namespace QS3D.Core.SmokeTests
 {
@@ -24,8 +25,9 @@ namespace QS3D.Core.SmokeTests
         private static void OversizedQuantityRuleCollectionFailsWithoutProjectMutation()
         {
             var project = Project("stamp-oversized-rules");
+            var rule = new QuantityRule("R1", ElementCategory.Beam, "Q1", "1", "v1");
             for (var index = 0; index <= MaximumTopLevelEntries; index++)
-                project.QuantityRules.Add(null!);
+                project.QuantityRules.Add(rule);
 
             var version = project.ChangeVersion;
             var updatedUtc = project.UpdatedUtc;
