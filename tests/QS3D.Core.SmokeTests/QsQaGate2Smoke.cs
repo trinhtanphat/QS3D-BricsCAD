@@ -17,6 +17,7 @@ namespace QS3D.Core.SmokeTests
             AppliesConfigurableSeverityThreshold();
             DetectsIfcPsetSpatialTypeAndGuidConsistency();
             DuplicateGuidWaiverMustCoverEveryConflictingElement();
+            DuplicateElementIdentityIsNonWaivable();
             HardGateDemandFailsClosedForGuardedWorkflows();
             GuardedExecutorBlocksBeforeWorkflowInvocation();
         }
@@ -188,6 +189,32 @@ namespace QS3D.Core.SmokeTests
 
             Expect(fullyWaived.Status == QsQaGateStatus.Pass, "all duplicate participants may be explicitly waived under existing element-scoped policy");
             Expect(fullyWaived.WaivedFindings.Count(x => x.RuleId == "QA2.DUPLICATE_IFC_GUID") == 2, "every conflicting element waiver must remain auditable");
+        }
+
+        private static void DuplicateElementIdentityIsNonWaivable()
+        {
+            var now = Utc(2026, 9, 12);
+            var a = ValidElement("Element-Shared", "GUID-A", includeTypeRelationship: true);
+            var b = ValidElement("element-shared", "GUID-B", includeTypeRelationship: true);
+            var waiver = new QsQaWaiver(
+                "QA2.DUPLICATE_ELEMENT_ID",
+                "ELEMENT-SHARED",
+                "Invalid attempt to waive ambiguous identity",
+                "lead.qs",
+                now.AddHours(-1),
+                now.AddDays(1));
+
+            var decision = new QsQaGate2().Evaluate(
+                new[] { a, b },
+                QsQaRuleProfile.SolibriQuantityStrict(),
+                new[] { waiver },
+                now);
+
+            var duplicateIds = decision.ActiveFindings.Where(x => x.RuleId == "QA2.DUPLICATE_ELEMENT_ID").ToList();
+            Expect(decision.Status == QsQaGateStatus.Blocked, "duplicate element identity must hard-block QA2");
+            Expect(duplicateIds.Count == 2, "every duplicate element identity participant must remain active");
+            Expect(decision.WaivedFindings.All(x => x.RuleId != "QA2.DUPLICATE_ELEMENT_ID"), "ambiguous duplicate element identity must never enter waived findings");
+            Expect(!decision.CanTakeoff && !decision.CanBoq && !decision.CanEstimate, "duplicate identity must block every guarded quantity workflow");
         }
 
         private static void HardGateDemandFailsClosedForGuardedWorkflows()

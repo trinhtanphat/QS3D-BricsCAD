@@ -12,11 +12,14 @@
 - IFC spatial-containment and type-assignment relationships;
 - consistency between the QS3D storey and IFC spatial-container value;
 - consistency between the QS3D element type and IFC type-assignment value;
-- unique IFC GUIDs.
+- unique IFC GUIDs;
+- unique QS3D element identities.
 
 Rule severities are configurable per rule. A profile also carries a blocking threshold, allowing project-specific QA policies without changing the analysis engine. `QA2.TYPE_ASSIGNMENT_MISMATCH` is Critical in the strict profile and can be overridden like the other rule severities.
 
 Duplicate IFC GUID analysis is conflict-set based: every element sharing the same non-empty normalized GUID receives its own `QA2.DUPLICATE_IFC_GUID` finding. Normalization trims surrounding whitespace and compares case-insensitively. This preserves element-level auditability and prevents input-order-dependent hard-gate results.
+
+Duplicate element identity analysis is also conflict-set based and case-insensitive. Every participant receives `QA2.DUPLICATE_ELEMENT_ID`. Unlike ordinary model-quality findings, this structural identity conflict is non-waivable because QA2 waiver identity itself is keyed by `(RuleId, ElementId)`; allowing a waiver before element identity is unique would make the audit target ambiguous. Correct or de-duplicate the element identities before Takeoff, BOQ or Estimate can proceed.
 
 ## Property/relationship adapter contract
 
@@ -36,6 +39,8 @@ Adapters should populate these keys from the authoritative IFC source. `IfcRel.S
 All QA2 time boundaries are explicitly UTC. `approvedUtc`, optional `expiresUtc`, and the `nowUtc` supplied to `QsQaGate2.Evaluate(...)` must have `DateTimeKind.Utc`; Local or Unspecified values fail closed instead of being interpreted through the host machine timezone. This keeps waiver decisions deterministic and audit-equivalent across CI, desktop, service, and regional deployments.
 
 For duplicate IFC GUIDs, waivers remain intentionally element-scoped. Waiving one participant does not release the collision because the other participants retain their own active findings. A host that intentionally accepts a temporary duplicate condition must explicitly waive every conflicting element, preserving a complete audit trail; alternatively, correcting the IFC identities removes the conflict findings normally.
+
+`QA2.DUPLICATE_ELEMENT_ID` is intentionally excluded from waiver application. Even a syntactically matching waiver stays inactive for this rule because two logical elements with the same normalized `ElementId` cannot be distinguished by the waiver key. This is a fail-closed audit-integrity rule rather than a project policy exception.
 
 ## Hard gate
 
@@ -69,12 +74,14 @@ Existing `QsIntelligencePipeline.Run(...)` overloads also remain source/binary c
 
 The duplicate-GUID hardening changes only finding completeness: callers that previously observed one finding for a duplicate pair now observe one finding per conflicting element. Rule id, severity customization, waiver schema, gate API and workflow behavior are unchanged. Consumers should treat findings as element-scoped audit records rather than assuming a single representative finding per GUID collision.
 
+The duplicate-element-identity hardening adds `QA2.DUPLICATE_ELEMENT_ID` to the strict profile and keeps it structurally non-waivable. No public constructor or method signature changes. Integrations that historically supplied duplicate `QsModelElementSnapshot.Id` values must assign stable unique identities before QA2 evaluation; reusing one ID for multiple logical elements is no longer accepted as a waivable condition.
+
 The waiver effective-window hardening does not change the waiver schema or method signatures. It corrects applicability so `ApprovedUtc` is an actual lower bound, matching `ExpiresUtc` as the optional upper bound. Integrations that intentionally schedule future exceptions should continue storing them normally; those exceptions simply remain inactive until their approval timestamp.
 
 The UTC hardening also keeps the public schema and signatures unchanged, but it intentionally stops accepting ambiguous `DateTimeKind.Local` or `DateTimeKind.Unspecified` inputs. Integrations that previously passed those values must normalize at their own application/serialization boundary and construct the QA2 waiver/evaluation timestamps as explicit UTC instants before calling the gate. Do not use `DateTime.SpecifyKind` unless the stored clock value is already known to represent UTC; convert from the source timezone to the correct UTC instant first.
 
 ## Smoke coverage
 
-`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid, expired and future-dated waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It verifies that future-dated waivers keep findings active until approval and become effective at the approval timestamp. It additionally verifies that Local/Unspecified waiver/evaluation timestamps fail closed, duplicate-GUID findings cover the complete conflict set, case/whitespace normalization is stable, a one-sided duplicate waiver remains blocked, and explicit waivers for every participant remain auditable. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
+`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid, expired and future-dated waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It verifies that future-dated waivers keep findings active until approval and become effective at the approval timestamp. It additionally verifies that Local/Unspecified waiver/evaluation timestamps fail closed, duplicate-GUID findings cover the complete conflict set, case/whitespace normalization is stable, a one-sided duplicate waiver remains blocked, and explicit waivers for every IFC GUID participant remain auditable. Duplicate element IDs are tested case-insensitively as a complete conflict set, remain active despite a matching waiver, and block Takeoff/BOQ/Estimate. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
 
 The registered `QsIntelligenceSmoke` additionally verifies the production integration: a blocking relationship failure prevents downstream Intelligence execution, an explicit valid waiver releases the gate while remaining auditable, and a warning-level profile permits BOQ execution with `PassWithWarnings`.
