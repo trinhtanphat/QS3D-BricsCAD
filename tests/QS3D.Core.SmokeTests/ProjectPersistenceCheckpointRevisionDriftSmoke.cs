@@ -57,6 +57,7 @@ namespace QS3D.Core.SmokeTests
             var checkpoint = ProjectPersistenceCheckpoint.Capture(project, new[] { "E1" });
             element.MarkDirty(ElementDirtyFlags.Quantity);
             var driftedElementDirty = element.Dirty;
+            var driftedElementUpdatedUtc = element.UpdatedUtc;
 
             project.Name = "Checkpoint restore newer revision";
             var newerProjectName = project.Name;
@@ -76,7 +77,9 @@ namespace QS3D.Core.SmokeTests
             Require(rejected,
                 "Persistence checkpoint restore accepted a newer project semantic revision.");
             Require(element.Dirty == driftedElementDirty,
-                "Rejected checkpoint restore partially rewrote element persistence state.");
+                "Rejected checkpoint restore partially rewrote element Dirty state.");
+            Require(element.UpdatedUtc == driftedElementUpdatedUtc,
+                "Rejected checkpoint restore partially rewrote element UpdatedUtc.");
             Require(string.Equals(project.Name, newerProjectName, StringComparison.Ordinal),
                 "Rejected checkpoint restore rewrote newer project semantic content.");
             Require(project.ChangeVersion == newerProjectVersion,
