@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 from pathlib import Path
 import re
 import sys
@@ -8,6 +8,7 @@ helper = ROOT / 'src/QS3D.BricsCAD.V25/McpPublicTextSanitizer.cs'
 v1 = ROOT / 'src/QS3D.BricsCAD.V25/McpEmbeddedServer.cs'
 v2 = ROOT / 'src/QS3D.BricsCAD.V25/McpEmbeddedServerV2.cs'
 status = ROOT / 'src/QS3D.BricsCAD.V25/McpCadViewStatusRuntime.cs'
+qs3d = ROOT / 'src/QS3D.BricsCAD.V25/McpQs3dDomainRuntime.cs'
 errors = []
 
 if not helper.exists():
@@ -34,6 +35,18 @@ else:
         errors.append('agent_status lastError crosses public success boundary unsanitized')
     if 'Bound(McpAgentExperience.LastError' in body:
         errors.append('agent_status still treats raw LastError as ordinary bounded status text')
+
+text = qs3d.read_text(encoding='utf-8-sig')
+if 'internal static string BuildStatusJson(bool deprecatedAlias)' not in text:
+    errors.append('missing QS3D BuildStatusJson')
+if 'Escape(McpPublicTextSanitizer.Sanitize(contextReason))' not in text:
+    errors.append('qs3d status contextReason crosses public success boundary unsanitized')
+if 'Escape(McpPublicTextSanitizer.Sanitize(errorMessage))' not in text:
+    errors.append('qs3d status error message crosses public success boundary unsanitized')
+if 'Escape(contextReason)' in text:
+    errors.append('qs3d status still serializes raw contextReason')
+if 'Escape(errorMessage)' in text:
+    errors.append('qs3d status still serializes raw error message')
 
 if errors:
     print('MCP public status redaction preflight FAILED')
