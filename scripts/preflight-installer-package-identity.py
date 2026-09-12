@@ -49,7 +49,14 @@ def main() -> int:
     require(installer, "PACKAGE-METADATA is missing productVersion", "product-version metadata requirement")
     require(installer, "[Version]::Parse([string]$metadata.version)", "metadata AssemblyVersion parse")
     require(installer, "Convert-ToStrictSemVerIdentity -Value ([string]$metadata.productVersion)", "metadata strict SemVer parse")
-    require(installer, "$metadataAssemblyVersion.Build -ne $metadataProductVersion.Patch", "assembly/product core binding")
+    if (
+        "$metadataAssemblyVersion.Major -ne $metadataProductVersion.Major" in installer
+        or "$metadataAssemblyVersion.Minor -ne $metadataProductVersion.Minor" in installer
+        or "$metadataAssemblyVersion.Build -ne $metadataProductVersion.Patch" in installer
+    ):
+        raise AssertionError(
+            "installer must treat AssemblyVersion compatibility identity independently from release-stamped ProductVersion identity"
+        )
 
     require(installer, "$text.IndexOf('+')", "SemVer build-metadata boundary")
     require(installer, "PublicText = $publicText", "public SemVer identity")
