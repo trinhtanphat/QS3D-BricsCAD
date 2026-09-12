@@ -65,6 +65,7 @@ namespace QS3D.Core.BenchmarkParity
             Zone = QsModelElementSnapshot.Optional(zone);
             Layer = QsModelElementSnapshot.Optional(layer);
             Quantity = QsModelElementSnapshot.Finite(quantity, "quantity");
+            if (Quantity < 0d) throw new ArgumentOutOfRangeException("quantity", "Takeoff quantity evidence cannot be negative.");
             Unit = QsModelElementSnapshot.Require(unit, "unit");
         }
         public string MarkupId { get; private set; }
