@@ -45,10 +45,24 @@ This execution boundary is deliberately host-neutral. BricsCAD/UI/API adapters s
 
 Warnings below the blocking threshold return `PassWithWarnings` and execute normally through the same guarded boundary.
 
-## Compatibility
+## QS Intelligence integration
 
-The earlier `QsQaGate` / `QsQaProfile` API remains available for existing benchmark-foundation callers. Gate 2.0 remains additive. Existing consumers of `CanTakeoff`, `CanBoq`, `CanEstimate`, and `DemandAllowed(...)` continue to work unchanged. `QsQaGuardedExecutor` is additive and is the recommended migration target for QS Intelligence/workflow callers that need structural protection against accidentally bypassing the gate.
+Production callers that have the authoritative model/IFC snapshot should use `QsIntelligencePipeline.RunWithQaGate2(...)`. The additive extension accepts the QA snapshot, configurable profile, waivers and a UTC QA evaluation timestamp together with the existing normalized quantity inputs. It evaluates QA once, then wraps the unified Intelligence execution in Takeoff, BOQ and Estimate guarded boundaries before `QsIntelligencePipeline.Run(...)` is invoked.
+
+The authoritative QA snapshot is evaluated before any normalized QS Intelligence downstream work is entered; the quantity records remain downstream business inputs, not substitutes for model-quality evidence.
+
+A blocked decision therefore prevents the Intelligence pipeline from producing revision-derived BOQ or estimate/cost output at all. The returned `QsQaGuardedIntelligenceReport` carries both the authoritative `QsQaGate2Decision` (including waived findings) and the normal `QsIntelligenceReport`, so clients do not need to re-run QA to render audit evidence.
+
+Do not synthesize IFC relationship/Pset evidence from `QsQuantityRecord`: those normalized records do not contain enough typed spatial/material/dimension context to prove Solibri-style completeness. Pass an authoritative `QsModelElementSnapshot` collection from the BIM/IFC adapter instead.
+
+## Compatibility / migration
+
+The earlier `QsQaGate` / `QsQaProfile` API remains available for existing benchmark-foundation callers. Gate 2.0 remains additive. Existing consumers of `CanTakeoff`, `CanBoq`, `CanEstimate`, and `DemandAllowed(...)` continue to work unchanged.
+
+Existing `QsIntelligencePipeline.Run(...)` overloads also remain source/binary compatible as a legacy path. Hosts migrating to the Solibri-parity production gate should switch to `RunWithQaGate2(...)` as soon as they can supply authoritative QA snapshots. The compatibility overloads intentionally do not fabricate IFC evidence or silently change existing behavior.
 
 ## Smoke coverage
 
 `QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid and expired waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
+
+The registered `QsIntelligenceSmoke` additionally verifies the production integration: a blocking relationship failure prevents downstream Intelligence execution, an explicit valid waiver releases the gate while remaining auditable, and a warning-level profile permits BOQ execution with `PassWithWarnings`.

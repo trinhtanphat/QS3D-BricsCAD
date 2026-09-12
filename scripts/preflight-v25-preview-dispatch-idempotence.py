@@ -52,7 +52,7 @@ def decide_dispatch(
             or prior_reservation_owners != prior_dispatch_owners
         ):
             return "ownership-mismatch"
-        return "prior-owner-neutral"
+        return "prepare"
 
     if not exact_dispatch_rows:
         return "dispatch"
@@ -91,6 +91,8 @@ def main() -> int:
         'if [[ -n "${reservation_owner_source}" || -n "${dispatch_fence_owner_source}" ]]; then',
         'git merge-base --is-ancestor "${reservation_owner_source}" "${source_sha}"',
         "will not reassign or duplicate-dispatch that ordinal",
+        "prepare_protected_version_pr",
+        "python scripts/v25-auto-version-pr.py prepare",
         'prior_dispatch_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${exact_dispatch_fence_run_id}")"',
         "prior_dispatch_query_status=$?",
         "Prior dispatch fence does not reference the canonical dispatcher workflow",
@@ -190,7 +192,7 @@ def main() -> int:
         < dispatch_index
     ):
         failures.append(
-            "dispatcher must scan the ledger, reject ambiguous ownership, reconcile a legitimate prior owner before exact retry, bind one exact prior-run snapshot, stop active attempts, permit terminal recovery, reserve, fence, then dispatch"
+            "dispatcher must scan the ledger, reject ambiguous ownership, route a legitimate prior owner through protected version-PR preparation before exact retry, bind one exact prior-run snapshot, stop active attempts, permit terminal recovery, reserve, fence, then dispatch"
         )
 
     prior_owner_end = source.find("if (( exact_dispatch_fence_run_id > 0 )); then", prior_owner_index)
@@ -199,9 +201,11 @@ def main() -> int:
     else:
         prior_owner_block = source[prior_owner_index:prior_owner_end]
         if "exit 0" not in prior_owner_block:
-            failures.append("legitimate prior ownership must make newer main neutral")
+            failures.append("legitimate prior ownership must finish after protected version-PR preparation")
+        if "prepare_protected_version_pr" not in prior_owner_block:
+            failures.append("legitimate prior ownership must request protected version-PR preparation")
         if 'gh api --method POST' in prior_owner_block or "gh workflow run" in prior_owner_block:
-            failures.append("prior-owner reconciliation must not create a reservation/fence or dispatch")
+            failures.append("prior-owner reconciliation must not create a release reservation/fence or dispatch directly")
 
     if "continue-on-error" in source:
         failures.append("dispatcher idempotence must not use continue-on-error")
@@ -249,8 +253,8 @@ def main() -> int:
         reservation_rows=((ordinal, other_sha),),
         dispatch_rows=((ordinal, other_sha, 100),),
         run_states={},
-    ) != "prior-owner-neutral":
-        failures.append("one matching prior reservation/fence owner must stop a newer source neutrally")
+    ) != "prepare":
+        failures.append("one matching prior reservation/fence owner must request protected version-PR preparation")
 
     if decide_dispatch(
         ordinal=ordinal,
@@ -330,7 +334,7 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: automatic V25 preview dispatch preserves immutable prior ownership, fences exact attempts, permits terminal retry, and prevents duplicate publication"
+        "PASS: automatic V25 preview dispatch routes immutable prior ownership to protected preparation, fences exact attempts, permits terminal retry, and prevents duplicate publication"
     )
     return 0
 

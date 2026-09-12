@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             BlocksStaleDrawingRevision();
             BuildsReadyMixedSourcePackage();
             ComparesPackageDrawingRevisions();
+            PreservesHighDynamicRangePackageQuantityDelta();
         }
 
         private static void BlocksStaleDrawingRevision()
@@ -96,6 +97,18 @@ namespace QS3D.Core.SmokeTests
             True(comparison.RequiresReview, "revision review required");
         }
 
+        private static void PreservesHighDynamicRangePackageQuantityDelta()
+        {
+            var oldPackage = new TakeoffPackageDefinition("PKG-D", "Architecture", "R1", "Uniclass", "Default");
+            var newPackage = new TakeoffPackageDefinition("PKG-D", "Architecture", "R2", "Uniclass", "Default");
+            TakeoffSheetResult2D Build(string id, string revision, double count)
+            {
+                var sheet = new DrawingSheet2D(id, "Plan", DrawingSheetSourceKind.Pdf, id + ".pdf", revision, new DrawingCalibration(1d, 1d, "m"));
+                return new CalibratedTakeoffEngine2D().Extract(sheet, new[] { new TakeoffMarkup2D("M-" + id, id, TakeoffMeasurementKind.Count, count, "ARC.ITEM", "L01", "A-ITEM", "H-" + id) });
+            }
+            var comparison = new AutodeskTakeoffPackageRevisionComparer().Compare(oldPackage, new[] { Build("C", "R1", 1e16) }, newPackage, new[] { Build("A", "R2", 1e16), Build("B", "R2", 1d) });
+            Near(1d, comparison.QuantityDelta, 0d, "high dynamic range revision quantity delta");
+        }
         private static void Equal<T>(T expected, T actual, string label)
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))

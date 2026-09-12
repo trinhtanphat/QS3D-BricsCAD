@@ -21,7 +21,9 @@ def main() -> int:
         'series_prefix="v${committed_major}.${committed_minor}.${committed_patch}-preview."',
         '--series-prefix "${series_prefix}"',
         'tag="${series_prefix}${committed_preview_ordinal}"',
-        "protected main ProductVersion must be advanced before automatic preview dispatch",
+        "prepare_protected_version_pr() {",
+        "python scripts/v25-auto-version-pr.py prepare",
+        "QS3D_AUTOMERGE_TOKEN",
         "Refusing to reserve or dispatch an uncommitted preview tag",
         "exact_reservation=0",
         'reservation_owner_source=""',
@@ -69,8 +71,12 @@ def main() -> int:
             )
 
     committed_index = source.find("committed_product_version=")
-    baseline_guard = source.find("if (( committed_preview_ordinal <= published_preview_ordinal )); then", committed_index)
-    reservation_capture = source.find('reservation_rows="$(', baseline_guard)
+    prepare_function = source.find("prepare_protected_version_pr() {", committed_index)
+    baseline_guard = source.find("if (( committed_preview_ordinal <= published_preview_ordinal )); then", prepare_function)
+    baseline_prepare = source.find('prepare_protected_version_pr "committed ${committed_product_version}', baseline_guard)
+    tag_guard = source.find('if [[ -n "$(git tag --list "${tag}")" ]]; then', baseline_prepare)
+    tag_prepare = source.find('prepare_protected_version_pr "committed ProductVersion', tag_guard)
+    reservation_capture = source.find('reservation_rows="$(', tag_prepare)
     reservation_status = source.find("reservation_query_status=$?", reservation_capture)
     reservation_failure = source.find("if (( reservation_query_status != 0 )); then", reservation_status)
     reservation_loop = source.find("while IFS= read -r reservation; do", reservation_failure)
@@ -87,7 +93,11 @@ def main() -> int:
     dispatch_index = source.find("gh workflow run release-v25-cloud.yml", reservation_write)
     indexes = (
         committed_index,
+        prepare_function,
         baseline_guard,
+        baseline_prepare,
+        tag_guard,
+        tag_prepare,
         reservation_capture,
         reservation_status,
         reservation_failure,
@@ -100,7 +110,7 @@ def main() -> int:
     )
     if min(indexes) < 0 or list(indexes) != sorted(indexes):
         failures.append(
-            "dispatcher must validate committed ProductVersion, fail closed while materializing the complete ledger, reject ambiguous ownership, reconcile a legitimate prior owner before side effects, then reserve and dispatch"
+            "dispatcher must validate committed ProductVersion, route READY-but-unusable identities through protected version-PR preparation, fail closed while materializing the complete ledger, reconcile ownership, then reserve and dispatch only a usable committed identity"
         )
 
     prior_owner_end = source.find("if (( exact_dispatch_fence_run_id > 0 )); then", prior_owner_guard)
@@ -109,11 +119,13 @@ def main() -> int:
     else:
         prior_owner_block = source[prior_owner_guard:prior_owner_end]
         if "exit 0" not in prior_owner_block:
-            failures.append("a legitimate earlier protected-main owner must stop the newer dispatcher neutrally")
+            failures.append("a legitimate earlier protected-main owner must route the newer dispatcher into protected version-PR preparation")
         if "exit 1" not in prior_owner_block:
             failures.append("incomplete, mismatched, non-ancestor, or exact-plus-prior ownership must remain fail closed")
+        if "prepare_protected_version_pr" not in prior_owner_block:
+            failures.append("a legitimate prior owner must request protected version-PR preparation before returning neutrally")
         if 'gh api --method POST' in prior_owner_block or "gh workflow run" in prior_owner_block:
-            failures.append("prior-owner reconciliation must not mutate the ledger or dispatch")
+            failures.append("prior-owner reconciliation must not mutate the release ledger or dispatch directly")
 
     exact_guard = source.find("if (( exact_reservation == 0 )); then", prior_owner_guard)
     if exact_guard < 0 or not (prior_owner_guard < exact_guard < reservation_write):
@@ -127,7 +139,7 @@ def main() -> int:
         return 1
 
     print(
-        "PASS: automatic V25 dispatch is bound to committed protected-main ProductVersion, fail-closed ledger enumeration, immutable prior ownership, and reserves only the exact current source"
+        "PASS: automatic V25 dispatch keeps committed ProductVersion authoritative, prepares unusable identities through a protected PR, fail-closes ledger ambiguity, and reserves only a usable exact current source"
     )
     return 0
 
