@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
@@ -291,35 +292,42 @@ namespace QS3D.BricsCAD.V25
             var grid = new Grid();
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var left = new StackPanel();
-            left.Children.Add(new TextBlock
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            var titleRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            titleRow.Children.Add(new TextBlock
             {
                 Text = "QS3D · ChatGPT MCP Agent Center",
                 FontSize = 25,
                 FontWeight = FontWeights.Bold,
-                Foreground = _palette.TextPrimary
+                Foreground = _palette.TextPrimary,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 7, 0)
             });
-            left.Children.Add(new TextBlock
-            {
-                Text = "ChatGPT ↔ MCP transport ↔ QS3D ↔ BricsCAD",
-                FontSize = 13,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = _palette.Accent,
-                Margin = new Thickness(0, 4, 0, 0)
-            });
-            left.Children.Add(new TextBlock
-            {
-                Text = "Kết nối, Agent desktop, backup/recovery và chẩn đoán từ một nơi. Login/password/API key ở provider flow; QS3D không scrape cookie hoặc nội dung hội thoại ChatGPT.",
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = _palette.TextSecondary,
-                FontSize = 12.5,
-                Margin = new Thickness(0, 6, 16, 0)
-            });
-            left.Children.Add(_statusChips);
-            grid.Children.Add(left);
+            titleRow.Children.Add(CreateInfoButton(
+                "Thông tin Agent Center",
+                "ChatGPT ↔ MCP transport ↔ QS3D ↔ BricsCAD"
+                + Environment.NewLine
+                + "Kết nối, Agent desktop, backup/recovery và chẩn đoán từ một nơi. Login/password/API key ở provider flow; QS3D không scrape cookie hoặc nội dung hội thoại ChatGPT."));
+            Grid.SetColumn(titleRow, 1);
+            grid.Children.Add(titleRow);
+
             var theme = CreateThemeSelector();
-            Grid.SetColumn(theme, 1);
+            Grid.SetColumn(theme, 2);
             grid.Children.Add(theme);
+
+            _statusChips.HorizontalAlignment = HorizontalAlignment.Center;
+            _statusChips.Margin = new Thickness(0, 9, 0, 0);
+            Grid.SetRow(_statusChips, 1);
+            Grid.SetColumnSpan(_statusChips, 3);
+            grid.Children.Add(_statusChips);
             return grid;
         }
 
@@ -404,23 +412,15 @@ namespace QS3D.BricsCAD.V25
 
             string title, detail, nextStep;
             GetTransportOnboarding(provider, out title, out detail, out nextStep);
-            actions.Children.Add(new TextBlock
+            var onboardingInfo = detail + Environment.NewLine + "Tiếp theo: " + nextStep;
+            if (provider == McpTransportProvider.OpenAiSecureTunnel)
             {
-                Text = title,
-                Foreground = _palette.TextPrimary,
-                FontSize = 15,
-                FontWeight = FontWeights.SemiBold,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 10, 0, 5)
-            });
-            actions.Children.Add(new TextBlock
-            {
-                Text = detail + Environment.NewLine + "Tiếp theo: " + nextStep,
-                Foreground = _palette.TextSecondary,
-                FontSize = 12,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 12)
-            });
+                onboardingInfo += Environment.NewLine + Environment.NewLine
+                    + "Secure Tunnel: ChatGPT chọn Connection = Tunnel và Tunnel ID tương ứng. "
+                    + "Không cấu hình QS3D public OAuth URL cho đường này. Runtime API key được xác minh rồi lưu trong Windows Credential Manager; "
+                    + "child process nhận key qua environment. Local bearer cũng chỉ truyền qua child environment; không ghi secret vào config/timeline.";
+            }
+            actions.Children.Add(CreateInformationHeading(title, onboardingInfo));
 
             if (provider == McpTransportProvider.OpenAiSecureTunnel)
                 PopulateOpenAiSecureTunnelActions(actions);
@@ -432,10 +432,12 @@ namespace QS3D.BricsCAD.V25
             AddGridCard(grid, CreateSectionCard(
                 "Kết nối",
                 "Chọn một transport. OpenAI Secure MCP Tunnel là đường không cần domain/public MCP; Cloudflare Named Tunnel giữ đường public URL + OAuth ổn định; Quick Tunnel chỉ test.",
-                actions), 0);
+                actions,
+                false,
+                true), 0);
             AddGridCard(grid, CreateSectionCard(
                 "Trạng thái kết nối",
-                "Chỉ hiển thị trạng thái thuộc transport đang chọn. Transport READY và việc user xác nhận đã thêm ChatGPT là trạng thái riêng; Cloudflare còn có bằng chứng OAuth traffic, còn Secure Tunnel không suy đoán tool traffic chỉ từ tiến trình tunnel.",
+                string.Empty,
                 _statusRows), 1);
             return grid;
         }
@@ -465,7 +467,27 @@ namespace QS3D.BricsCAD.V25
             _openAiTunnelIdText = CreateTextInput(McpOpenAiSecureTunnelManager.SavedTunnelId);
             actions.Children.Add(_openAiTunnelIdText);
 
-            actions.Children.Add(CreateInputLabel("Runtime API key · lưu bảo mật trong Windows Credential Manager sau khi xác minh; để trống để dùng key đã lưu hoặc CONTROL_PLANE_API_KEY/OPENAI_API_KEY"));
+            var runtimeKeyHeader = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 5)
+            };
+            runtimeKeyHeader.Children.Add(new TextBlock
+            {
+                Text = "Runtime API key",
+                Foreground = _palette.TextMuted,
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 7, 0)
+            });
+            runtimeKeyHeader.Children.Add(CreateInfoButton(
+                "Thông tin Runtime API key",
+                "Runtime API key · lưu bảo mật trong Windows Credential Manager sau khi xác minh; để trống để dùng key đã lưu hoặc CONTROL_PLANE_API_KEY/OPENAI_API_KEY."));
+            runtimeKeyHeader.Children.Add(CreateIconButton("\uE77F", "Dán Runtime API key từ clipboard", (_, __) => PasteRuntimeApiKey()));
+            actions.Children.Add(runtimeKeyHeader);
+
             _openAiRuntimeKeyBox = new PasswordBox
             {
                 MinHeight = 34,
@@ -486,14 +508,6 @@ namespace QS3D.BricsCAD.V25
             actions.Children.Add(CreateActionButton("Mở tunnel-client UI", (_, __) => OpenOpenAiAdminUi(), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Mở ChatGPT · Connection = Tunnel", (_, __) => OpenChatGpt(McpTransportProvider.OpenAiSecureTunnel), ActionKind.Secondary));
             actions.Children.Add(CreateActionButton("Đã thêm MCP trong ChatGPT", (_, __) => MarkChatGptRegistered(McpTransportProvider.OpenAiSecureTunnel), ActionKind.Secondary));
-            actions.Children.Add(new TextBlock
-            {
-                Text = "Secure Tunnel: ChatGPT chọn Connection = Tunnel và Tunnel ID tương ứng. Không cấu hình QS3D public OAuth URL cho đường này. Runtime API key được xác minh rồi lưu trong Windows Credential Manager; child process nhận key qua environment. Local bearer cũng chỉ truyền qua child environment; không ghi secret vào config/timeline.",
-                Foreground = _palette.TextSecondary,
-                TextWrapping = TextWrapping.Wrap,
-                FontSize = 11,
-                Margin = new Thickness(0, 2, 0, 0)
-            });
         }
 
         private void PopulateCloudflareNamedActions(StackPanel actions)
@@ -548,6 +562,114 @@ namespace QS3D.BricsCAD.V25
                 BorderBrush = _palette.Border,
                 BorderThickness = new Thickness(1)
             };
+        }
+
+        private UIElement CreateInformationHeading(string title, string information)
+        {
+            var row = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 10, 0, 12)
+            };
+            row.Children.Add(new TextBlock
+            {
+                Text = title,
+                Foreground = _palette.TextPrimary,
+                FontSize = 15,
+                FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 7, 0)
+            });
+            row.Children.Add(CreateInfoButton("Thông tin transport", information));
+            return row;
+        }
+
+        private Button CreateInfoButton(string accessibleName, string information)
+        {
+            var tooltipText = new TextBlock
+            {
+                Text = information ?? string.Empty,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 460,
+                LineHeight = 18,
+                Margin = new Thickness(2)
+            };
+            var tooltip = new ToolTip
+            {
+                Content = tooltipText,
+                MaxWidth = 500,
+                Padding = new Thickness(9, 7, 9, 7)
+            };
+            var button = new Button
+            {
+                Content = "i",
+                Width = 22,
+                Height = 22,
+                MinWidth = 22,
+                MinHeight = 22,
+                Padding = new Thickness(0),
+                Margin = new Thickness(0),
+                FontFamily = new FontFamily("Segoe UI"),
+                FontSize = 12,
+                FontStyle = FontStyles.Italic,
+                FontWeight = FontWeights.Bold,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                ToolTip = tooltip,
+                Style = CreateButtonStyle(ActionKind.Utility, false)
+            };
+            button.SetValue(AutomationProperties.NameProperty, accessibleName);
+            button.SetValue(AutomationProperties.HelpTextProperty, information ?? string.Empty);
+            button.SetValue(ToolTipService.InitialShowDelayProperty, 180);
+            button.SetValue(ToolTipService.ShowDurationProperty, 30000);
+            button.GotKeyboardFocus += (_, __) => tooltip.IsOpen = true;
+            button.LostKeyboardFocus += (_, __) => tooltip.IsOpen = false;
+            button.Unloaded += (_, __) => tooltip.IsOpen = false;
+            return button;
+        }
+
+        private Button CreateIconButton(string glyph, string accessibleName, RoutedEventHandler handler)
+        {
+            var button = CreateActionButton(glyph, handler, ActionKind.Utility);
+            button.Width = 30;
+            button.MinWidth = 30;
+            button.Height = 28;
+            button.MinHeight = 28;
+            button.Padding = new Thickness(0);
+            button.Margin = new Thickness(6, 0, 0, 0);
+            button.FontFamily = new FontFamily("Segoe MDL2 Assets");
+            button.FontSize = 13;
+            button.HorizontalContentAlignment = HorizontalAlignment.Center;
+            button.ToolTip = accessibleName;
+            button.SetValue(AutomationProperties.NameProperty, accessibleName);
+            return button;
+        }
+
+        private void PasteRuntimeApiKey()
+        {
+            try
+            {
+                if (!Clipboard.ContainsText())
+                {
+                    ShowToast(ToastKind.Info, "Runtime API key", "Clipboard không có text để dán.");
+                    return;
+                }
+                var value = (Clipboard.GetText() ?? string.Empty).Trim();
+                if (value.Length == 0)
+                {
+                    ShowToast(ToastKind.Info, "Runtime API key", "Clipboard đang trống.");
+                    return;
+                }
+                _openAiRuntimeKeyBox.Password = value;
+                ShowToast(ToastKind.Success, "Runtime API key", "Đã dán Runtime API key từ clipboard; giá trị secret không được ghi vào log.");
+            }
+            catch (Exception ex)
+            {
+                ShowToast(ToastKind.Error, "Clipboard", "Không dán được Runtime API key: " + ex.Message);
+            }
         }
 
         private void GetTransportOnboarding(McpTransportProvider provider, out string title, out string detail, out string nextStep)
@@ -779,25 +901,41 @@ namespace QS3D.BricsCAD.V25
             grid.Children.Add(card);
         }
 
-        private Border CreateSectionCard(string title, string description, UIElement body, bool danger = false)
+        private Border CreateSectionCard(string title, string description, UIElement body, bool danger = false, bool descriptionAsInfo = false)
         {
             var content = new StackPanel();
-            content.Children.Add(new TextBlock
+            var heading = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, descriptionAsInfo || string.IsNullOrWhiteSpace(description) ? 12 : 0)
+            };
+            heading.Children.Add(new TextBlock
             {
                 Text = title,
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = danger ? _palette.Danger : _palette.TextPrimary
+                Foreground = danger ? _palette.Danger : _palette.TextPrimary,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, descriptionAsInfo ? 7 : 0, 0)
             });
-            content.Children.Add(new TextBlock
+            if (descriptionAsInfo && !string.IsNullOrWhiteSpace(description))
+                heading.Children.Add(CreateInfoButton("Thông tin " + title, description));
+            content.Children.Add(heading);
+
+            if (!descriptionAsInfo && !string.IsNullOrWhiteSpace(description))
             {
-                Text = description,
-                TextWrapping = TextWrapping.Wrap,
-                Foreground = _palette.TextSecondary,
-                FontSize = 12,
-                LineHeight = 18,
-                Margin = new Thickness(0, 5, 0, 12)
-            });
+                content.Children.Add(new TextBlock
+                {
+                    Text = description,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = _palette.TextSecondary,
+                    FontSize = 12,
+                    LineHeight = 18,
+                    Margin = new Thickness(0, 5, 0, 12)
+                });
+            }
+
             content.Children.Add(body);
             return new Border
             {
@@ -994,6 +1132,61 @@ namespace QS3D.BricsCAD.V25
             row.Children.Add(labelBlock);
             row.Children.Add(valueBlock);
             return row;
+        }
+
+        private UIElement CreateCopyableStatusRow(string label, string value, string copyTitle, Brush? valueBrush = null)
+        {
+            var row = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(122) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var labelBlock = new TextBlock
+            {
+                Text = label,
+                FontSize = 11.5,
+                Foreground = _palette.TextMuted,
+                VerticalAlignment = VerticalAlignment.Top
+            };
+
+            var valueGrid = new Grid
+            {
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            valueGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            valueGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var valueBlock = new TextBlock
+            {
+                Text = value,
+                FontSize = 11.5,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = valueBrush ?? _palette.TextPrimary,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            valueGrid.Children.Add(valueBlock);
+
+            var copyButton = CreateIconButton("\uE8C8", "Sao chép " + copyTitle, (_, __) => CopyStatusValue(copyTitle, value));
+            Grid.SetColumn(copyButton, 1);
+            valueGrid.Children.Add(copyButton);
+
+            Grid.SetColumn(valueGrid, 1);
+            row.Children.Add(labelBlock);
+            row.Children.Add(valueGrid);
+            return row;
+        }
+
+        private void CopyStatusValue(string title, string value)
+        {
+            try
+            {
+                Clipboard.SetText(value ?? string.Empty);
+                ShowToast(ToastKind.Success, title, "Đã sao chép vào clipboard.");
+            }
+            catch (Exception ex)
+            {
+                ShowToast(ToastKind.Error, "Clipboard", "Không sao chép được: " + ex.Message);
+            }
         }
 
         private UIElement CreateFooter()
@@ -1712,9 +1905,12 @@ namespace QS3D.BricsCAD.V25
             _statusRows.Children.Clear();
             _statusRows.Children.Add(CreateStatusRow("Transport", McpTransportCoordinator.SelectedProviderLabel, _palette.Accent));
             _statusRows.Children.Add(CreateStatusRow("MCP embedded", mcpRunning ? "RUNNING" : "STOPPED", mcpRunning ? _palette.Success : _palette.TextMuted));
-            _statusRows.Children.Add(CreateStatusRow("Local endpoint", McpEmbeddedServer.Endpoint.ToString()));
+            _statusRows.Children.Add(CreateCopyableStatusRow("Local endpoint", McpEmbeddedServer.Endpoint.ToString(), "Local endpoint"));
             AppendProviderStatusRows(provider, openAiRunning, openAiReady, cloudflaredInstalled, authenticated, namedTunnelRunning, quickTunnelRunning);
-            _statusRows.Children.Add(CreateStatusRow("Public MCP", provider == McpTransportProvider.OpenAiSecureTunnel ? "Không cần public URL" : string.IsNullOrWhiteSpace(publicUrl) ? "Chưa có public URL" : publicUrl));
+            if (provider != McpTransportProvider.OpenAiSecureTunnel && !string.IsNullOrWhiteSpace(publicUrl))
+                _statusRows.Children.Add(CreateCopyableStatusRow("Public MCP", publicUrl, "Public MCP URL"));
+            else
+                _statusRows.Children.Add(CreateStatusRow("Public MCP", provider == McpTransportProvider.OpenAiSecureTunnel ? "Không cần public URL" : "Chưa có public URL"));
             _statusRows.Children.Add(CreateStatusRow("Transport sẵn sàng", transportReady
                 ? provider == McpTransportProvider.OpenAiSecureTunnel ? "CÓ · MCP + Secure Tunnel READY" : "CÓ · MCP + tunnel + public URL"
                 : "CHƯA", transportReady ? _palette.Success : _palette.Warning));
