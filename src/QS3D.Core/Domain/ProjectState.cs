@@ -516,7 +516,7 @@ namespace QS3D.Core.Domain
             QuantityRules = new StructuralRevisionList<QuantityRule>(Touch);
             Metadata = new ProjectMetadataDictionary();
             MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(this, Metadata);
-            AuditEvents = new StructuralRevisionList<AuditEvent>(Touch);
+            AuditEvents = new CatalogOwnershipList<AuditEvent>(AttachAuditEvent, DetachAuditEvent, Touch);
         }
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -614,6 +614,8 @@ namespace QS3D.Core.Domain
         private void DetachFloor(FloorDefinition floor) => floor.PersistenceMutationRequested -= Touch;
         private void AttachFamily(ProjectFamily family) => family.PersistenceMutationRequested += Touch;
         private void DetachFamily(ProjectFamily family) => family.PersistenceMutationRequested -= Touch;
+        private void AttachAuditEvent(AuditEvent auditEvent) => auditEvent.PersistenceMutationRequested += Touch;
+        private void DetachAuditEvent(AuditEvent auditEvent) => auditEvent.PersistenceMutationRequested -= Touch;
 
         private void SetActiveContextId(ref string field, string? value)
         {
