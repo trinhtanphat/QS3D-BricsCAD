@@ -75,10 +75,10 @@ namespace QS3D.Core.BenchmarkParity
         private readonly QuantBimStandaloneWorkbench _workbench;
         private readonly QuantBimStandaloneSceneBuilder _sceneBuilder;
         private readonly IQuantBimViewportRenderer _renderer;
-        private IfcStandaloneDocument _document;
+        private IfcStandaloneDocument? _document;
         private IfcWorkbenchFilter _filter;
         private IfcSelectionSet _selection;
-        private QuantBimViewportPresentation _presentation;
+        private QuantBimViewportPresentation? _presentation;
 
         public QuantBimStandaloneViewportHost(QuantBimStandaloneWorkbench workbench, QuantBimStandaloneSceneBuilder sceneBuilder, IQuantBimViewportRenderer renderer)
         {
@@ -89,8 +89,8 @@ namespace QS3D.Core.BenchmarkParity
             _selection = new IfcSelectionSet("Viewport", Array.Empty<string>());
         }
 
-        public IfcStandaloneDocument CurrentDocument { get { return _document; } }
-        public QuantBimViewportPresentation CurrentPresentation { get { return _presentation; } }
+        public IfcStandaloneDocument? CurrentDocument { get { return _document; } }
+        public QuantBimViewportPresentation? CurrentPresentation { get { return _presentation; } }
         public IfcSelectionSet CurrentSelection { get { return _selection; } }
 
         public QuantBimViewportPresentation Open(string path)
@@ -103,18 +103,18 @@ namespace QS3D.Core.BenchmarkParity
 
         public QuantBimViewportPresentation ApplyFilter(IfcWorkbenchFilter filter)
         {
-            RequireDocument();
+            var document = RequireDocument();
             _filter = filter ?? throw new ArgumentNullException("filter");
-            var visible = new HashSet<string>(_workbench.Filter(_document, _filter).Select(x => x.Guid), StringComparer.OrdinalIgnoreCase);
+            var visible = new HashSet<string>(_workbench.Filter(document, _filter).Select(x => x.Guid), StringComparer.OrdinalIgnoreCase);
             _selection = new IfcSelectionSet(_selection.Name, _selection.Guids.Where(visible.Contains));
             return Refresh();
         }
 
         public QuantBimViewportPresentation Select(string name, IEnumerable<string> guids)
         {
-            RequireDocument();
+            var document = RequireDocument();
             var next = new IfcSelectionSet(name, guids ?? throw new ArgumentNullException("guids"));
-            var visible = new HashSet<string>(_workbench.Filter(_document, _filter).Select(x => x.Guid), StringComparer.OrdinalIgnoreCase);
+            var visible = new HashSet<string>(_workbench.Filter(document, _filter).Select(x => x.Guid), StringComparer.OrdinalIgnoreCase);
             var hidden = next.Guids.FirstOrDefault(x => !visible.Contains(x));
             if (hidden != null) throw new InvalidOperationException("Cannot select an IFC element hidden by the current viewport filter: " + hidden + ".");
             _selection = next;
@@ -123,17 +123,17 @@ namespace QS3D.Core.BenchmarkParity
 
         public QuantBimViewportInspection Inspect(string guid)
         {
-            RequireDocument();
+            var document = RequireDocument();
             guid = QsModelElementSnapshot.Require(guid, "guid");
-            var element = _document.Elements.FirstOrDefault(x => string.Equals(x.Guid, guid, StringComparison.OrdinalIgnoreCase));
+            var element = document.Elements.FirstOrDefault(x => string.Equals(x.Guid, guid, StringComparison.OrdinalIgnoreCase));
             if (element == null) throw new InvalidOperationException("Unknown IFC element: " + guid + ".");
-            return new QuantBimViewportInspection(_document.Path, _document.Revision, element, _workbench.PropertyTree(element));
+            return new QuantBimViewportInspection(document.Path, document.Revision, element, _workbench.PropertyTree(element));
         }
 
         public IReadOnlyList<IfcQtoItem> TakeoffSelection()
         {
-            RequireDocument();
-            return _workbench.Takeoff(_document, _selection);
+            var document = RequireDocument();
+            return _workbench.Takeoff(document, _selection);
         }
 
         public IReadOnlyList<TakeoffInventoryLine> BuildSelectionBoq()
@@ -166,17 +166,19 @@ namespace QS3D.Core.BenchmarkParity
 
         private QuantBimViewportPresentation Refresh()
         {
-            RequireDocument();
-            var visible = _workbench.Filter(_document, _filter).Select(x => x.Guid).ToList();
-            var scene = _sceneBuilder.Build(_document, _selection);
+            var document = RequireDocument();
+            var visible = _workbench.Filter(document, _filter).Select(x => x.Guid).ToList();
+            var scene = _sceneBuilder.Build(document, _selection);
             _presentation = new QuantBimViewportPresentation(scene, visible, _selection.Guids);
             _renderer.Present(_presentation);
             return _presentation;
         }
 
-        private void RequireDocument()
+        private IfcStandaloneDocument RequireDocument()
         {
-            if (_document == null) throw new InvalidOperationException("Open an IFC document before using the viewport host.");
+            var document = _document;
+            if (document == null) throw new InvalidOperationException("Open an IFC document before using the viewport host.");
+            return document;
         }
 
         private static IfcWorkbenchFilter AllFilter()
