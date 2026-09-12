@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Agent;
 using QS3D.Core.Domain;
@@ -15,10 +16,26 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     internal static class McpQs3dDomainRuntime
     {
+        private const int DomainMutationCadContextDispatchTimeoutMilliseconds = 8000;
+        private const int DomainMutationCadContextQueued = 0;
+        private const int DomainMutationCadContextRunning = 1;
+        private const int DomainMutationCadContextCancelled = 2;
+        private const int DomainMutationCadContextTerminal = 3;
+
         private static readonly object Sync = new object();
         private static bool _available = true;
         private static string _lastErrorCode = string.Empty;
         private static string _lastErrorMessage = string.Empty;
+
+        private sealed class DomainMutationCadContextWorkItem
+        {
+            internal Func<string> Action = null!;
+            internal string Result = string.Empty;
+            internal Exception? Error;
+            internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+            internal int State = DomainMutationCadContextQueued;
+            internal int Abandoned;
+        }
 
         internal static bool IsTool(string? tool)
         {
@@ -103,14 +120,19 @@ namespace QS3D.BricsCAD.V25
             var body = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments;
             try
             {
-                var result = McpDiagnosticHub.InvokeInCadContext(() =>
+                var result = InvokeDomainMutationInCadContext(() =>
                 {
                     McpCadAgentRuntime.EnsureCurrentMutationRunning();
-                    if (string.Equals(tool, "qs3d_project_bind", StringComparison.Ordinal)) return BindProject(body);
-                    if (string.Equals(tool, "qs3d_project_reload", StringComparison.Ordinal)) return ReloadProject();
-                    if (string.Equals(tool, "qs3d_run_command", StringComparison.Ordinal)) return RunQs3dCommand(body);
-                    if (string.Equals(tool, "qs3d_place_single_footing", StringComparison.Ordinal)) return PlaceSingleFooting(body);
-                    throw new InvalidOperationException("Unknown QS3D domain mutation tool: " + tool);
+                    var document = RequireDocument();
+                    var nativeDatabaseIdentity = RequireLiveNativeDatabaseIdentity(document);
+                    string mutationResult;
+                    if (string.Equals(tool, "qs3d_project_bind", StringComparison.Ordinal)) mutationResult = BindProject(body);
+                    else if (string.Equals(tool, "qs3d_project_reload", StringComparison.Ordinal)) mutationResult = ReloadProject();
+                    else if (string.Equals(tool, "qs3d_run_command", StringComparison.Ordinal)) mutationResult = RunQs3dCommand(body);
+                    else if (string.Equals(tool, "qs3d_place_single_footing", StringComparison.Ordinal)) mutationResult = PlaceSingleFooting(body);
+                    else throw new InvalidOperationException("Unknown QS3D domain mutation tool: " + tool);
+                    RequireSameDomainDocumentGeneration(document, nativeDatabaseIdentity, tool);
+                    return mutationResult;
                 });
                 RecordSuccess();
                 return result;
@@ -120,6 +142,96 @@ namespace QS3D.BricsCAD.V25
                 RecordFailure(McpToolCapabilityContract.ClassifyFailure(tool, ex));
                 throw;
             }
+        }
+
+        private static string InvokeDomainMutationInCadContext(Func<string> action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var item = new DomainMutationCadContextWorkItem { Action = action };
+            try
+            {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteDomainMutationCadContext, item);
+            }
+            catch (Exception ex)
+            {
+                item.Done.Dispose();
+                throw new InvalidOperationException("Could not queue QS3D domain mutation CAD-context work.", ex);
+            }
+
+            if (!item.Done.Wait(DomainMutationCadContextDispatchTimeoutMilliseconds))
+            {
+                var cancelled = Interlocked.CompareExchange(
+                    ref item.State,
+                    DomainMutationCadContextCancelled,
+                    DomainMutationCadContextQueued) == DomainMutationCadContextQueued;
+                if (cancelled)
+                {
+                    Interlocked.Exchange(ref item.Abandoned, 1);
+                    throw new TimeoutException("Timed out waiting for BricsCAD application context; queued QS3D domain mutation was cancelled before start.");
+                }
+
+                item.Done.Wait();
+            }
+
+            try
+            {
+                if (item.Error != null)
+                    throw new InvalidOperationException("QS3D domain mutation CAD-context work failed.", item.Error);
+                return item.Result;
+            }
+            finally
+            {
+                item.Done.Dispose();
+            }
+        }
+
+        private static void ExecuteDomainMutationCadContext(object state)
+        {
+            var item = (DomainMutationCadContextWorkItem)state;
+            try
+            {
+                if (Interlocked.CompareExchange(
+                    ref item.State,
+                    DomainMutationCadContextRunning,
+                    DomainMutationCadContextQueued) != DomainMutationCadContextQueued)
+                    return;
+                item.Result = item.Action();
+            }
+            catch (Exception ex)
+            {
+                item.Error = ex;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref item.State, DomainMutationCadContextTerminal);
+                try { item.Done.Set(); }
+                finally
+                {
+                    if (Volatile.Read(ref item.Abandoned) != 0)
+                    {
+                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
+                    }
+                }
+            }
+        }
+
+        private static IntPtr RequireLiveNativeDatabaseIdentity(Document document)
+        {
+            if (document == null) throw new InvalidOperationException("QS3D domain mutation requires an active BricsCAD document.");
+            var database = document.Database;
+            if (database == null) throw new InvalidOperationException("QS3D domain mutation requires a live BricsCAD database.");
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero) throw new InvalidOperationException("QS3D domain mutation requires a live native BricsCAD database generation.");
+            return identity;
+        }
+
+        private static void RequireSameDomainDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity, string tool)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(tool + " completed against a document that is no longer active; result publication is suppressed.");
+            var database = document.Database;
+            if (database == null || nativeDatabaseIdentity == IntPtr.Zero || database.UnmanagedObject != nativeDatabaseIdentity)
+                throw new InvalidOperationException(tool + " observed a native BricsCAD database generation change; completion is uncertain and must not be retried automatically.");
         }
 
         private static string BindProject(string body)
