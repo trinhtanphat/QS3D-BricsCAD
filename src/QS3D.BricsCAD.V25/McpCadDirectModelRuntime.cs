@@ -22,6 +22,11 @@ namespace QS3D.BricsCAD.V25
     {
         private const int DbmodPersistentContentMask = 1 | 4 | 32;
         private const double GeometryTolerance = 1e-9;
+        private const int SaveAsCadContextDispatchTimeoutMilliseconds = 8000;
+        private const int SaveAsCadContextQueued = 0;
+        private const int SaveAsCadContextRunning = 1;
+        private const int SaveAsCadContextCancelledBeforeStart = 2;
+        private const int SaveAsCadContextTerminal = 3;
 
         private static readonly HashSet<string> Tools = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -423,6 +428,101 @@ namespace QS3D.BricsCAD.V25
                    + result.DbmodAfterSave.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
+        private sealed class SaveAsCadContextWorkItem
+        {
+            internal Action Action = null!;
+            internal Exception? Error;
+            internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+            internal int State = SaveAsCadContextQueued;
+            internal int Abandoned;
+        }
+
+        private static void InvokeSaveAsMutationInCadContext(Action action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var item = new SaveAsCadContextWorkItem { Action = action };
+            try
+            {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteSaveAsMutationCadContext, item);
+            }
+            catch (Exception ex)
+            {
+                item.Done.Dispose();
+                throw new InvalidOperationException("Could not queue cad_save_as CAD-context work.", ex);
+            }
+
+            if (!item.Done.Wait(SaveAsCadContextDispatchTimeoutMilliseconds))
+            {
+                var cancelled = Interlocked.CompareExchange(ref item.State, SaveAsCadContextCancelledBeforeStart, SaveAsCadContextQueued) == SaveAsCadContextQueued;
+                if (cancelled)
+                {
+                    Interlocked.Exchange(ref item.Abandoned, 1);
+                    throw new TimeoutException("Timed out waiting for BricsCAD application context; queued cad_save_as work was cancelled before start.");
+                }
+
+                item.Done.Wait();
+            }
+
+            try
+            {
+                if (item.Error != null)
+                    throw new InvalidOperationException("cad_save_as CAD-context work failed.", item.Error);
+            }
+            finally
+            {
+                item.Done.Dispose();
+            }
+        }
+
+        private static void ExecuteSaveAsMutationCadContext(object state)
+        {
+            var item = (SaveAsCadContextWorkItem)state;
+            try
+            {
+                if (Interlocked.CompareExchange(ref item.State, SaveAsCadContextRunning, SaveAsCadContextQueued) != SaveAsCadContextQueued)
+                    return;
+                item.Action();
+            }
+            catch (Exception ex)
+            {
+                item.Error = ex;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref item.State, SaveAsCadContextTerminal);
+                try { item.Done.Set(); }
+                finally
+                {
+                    if (Volatile.Read(ref item.Abandoned) != 0)
+                    {
+                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
+                    }
+                }
+            }
+        }
+
+        private static IntPtr RequireLiveNativeDatabaseIdentity(Document document)
+        {
+            if (document == null) throw new InvalidOperationException("cad_save_as requires an active BricsCAD document.");
+            var database = document.Database;
+            if (database == null) throw new InvalidOperationException("cad_save_as requires a live BricsCAD database.");
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero) throw new InvalidOperationException("cad_save_as requires a live native BricsCAD database generation.");
+            return identity;
+        }
+
+        private static void RequireSameSaveAsDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity, string fullPath)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException("The active BricsCAD document changed during cad_save_as; completion is not attributed to the requested document.");
+            var database = document.Database;
+            if (database == null || nativeDatabaseIdentity == IntPtr.Zero || database.UnmanagedObject != nativeDatabaseIdentity)
+                throw new InvalidOperationException("The native BricsCAD database generation changed during cad_save_as; completion is uncertain and must not be retried automatically.");
+            var actual = database.Filename ?? string.Empty;
+            if (!Path.IsPathRooted(actual) || !string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("BricsCAD SaveAs returned but the active database path did not match the requested target.");
+        }
+
         private static string SaveAs(string body)
         {
             var requested = McpTopLevelJson.ExtractString(body, "path");
@@ -435,24 +535,23 @@ namespace QS3D.BricsCAD.V25
             EnsureWritableDirectory(directory);
             EnsureAutomationRunning();
             Document? document = null;
-            McpDiagnosticHub.InvokeInCadContext(() =>
+            var nativeDatabaseIdentity = IntPtr.Zero;
+            InvokeSaveAsMutationInCadContext(() =>
             {
                 EnsureAutomationRunning();
                 document = RequireDocument();
+                nativeDatabaseIdentity = RequireLiveNativeDatabaseIdentity(document);
                 var current = document.Database.Filename ?? string.Empty;
                 if (Path.IsPathRooted(current)
                     && string.Equals(Path.GetFullPath(current), fullPath, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("cad_save_as target is the active drawing path. Use cad_save instead.");
                 RequireIdle();
                 using (document.LockDocument()) document.Database.SaveAs(fullPath, DwgVersion.Current);
-                var actual = document.Database.Filename ?? string.Empty;
-                if (!Path.IsPathRooted(actual)
-                    || !string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("BricsCAD SaveAs returned but the active database path did not match the requested target.");
-                return string.Empty;
+                RequireSameSaveAsDocumentGeneration(document, nativeDatabaseIdentity, fullPath);
             });
             if (document == null)
                 throw new InvalidOperationException("cad_save_as lost its captured BricsCAD document before completion verification.");
+            RequireSameSaveAsDocumentGeneration(document, nativeDatabaseIdentity, fullPath);
             var saveResult = McpNativeCurrentDocumentSave.SaveCurrentDocument(
                 document,
                 fullPath,

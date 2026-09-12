@@ -37,4 +37,13 @@ for token in (
     if token not in text:
         fail("cad_save_as mutation ownership contract missing: " + token)
 
-print("PASS cad_save_as application-context mutation ownership is fail-closed")
+for token in (
+    "nativeDatabaseIdentity = RequireLiveNativeDatabaseIdentity(document)",
+    "RequireSameSaveAsDocumentGeneration(document, nativeDatabaseIdentity, fullPath)",
+    "database.UnmanagedObject != nativeDatabaseIdentity",
+    "completion is uncertain and must not be retried automatically",
+):
+    if token not in save and token not in text:
+        fail("cad_save_as document/database generation affinity contract missing: " + token)
+
+print("PASS cad_save_as application-context mutation ownership and generation affinity are fail-closed")
