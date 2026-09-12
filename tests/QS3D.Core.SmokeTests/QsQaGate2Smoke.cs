@@ -306,6 +306,8 @@ namespace QS3D.Core.SmokeTests
             var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 { "IfcGuid", guid },
+                { "IfcEntity", "IfcWall" },
+                { "QuantityUnit", "m3" },
                 { "IfcPset.Pset_Qto", "present" },
                 { "IfcPset.Pset_Identity", "present" },
                 { "IfcRel.SpatialContainer", "L01" }
