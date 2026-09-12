@@ -1,14 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class QsCubicostLegacyInventoryAggregationSmoke
     {
-        [ModuleInitializer]
         internal static void Run()
         {
             var evidence = new QuantityEvidence("AGG", "aggregation-fixture", "R1", "numeric-regression", 1d);
