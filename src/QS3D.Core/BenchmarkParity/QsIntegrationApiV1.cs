@@ -307,8 +307,6 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (request == null) throw new ArgumentNullException("request");
             if (snapshot == null) throw new ArgumentNullException("snapshot");
-            if (!string.Equals(request.ProjectId, snapshot.Project.ProjectId, StringComparison.OrdinalIgnoreCase))
-                return new QsApiResponse(404, Version, string.Empty, null, "PROJECT_NOT_FOUND");
 
             var endpoint = _catalog.Find(request.Method, request.Resource);
             if (endpoint == null || request.Method != "GET")
@@ -317,6 +315,8 @@ namespace QS3D.Core.BenchmarkParity
                 return new QsApiResponse(401, Version, string.Empty, null, "UNAUTHENTICATED");
             if (!request.Principal.HasScope(endpoint.RequiredScope))
                 return new QsApiResponse(403, Version, string.Empty, null, "FORBIDDEN");
+            if (!string.Equals(request.ProjectId, snapshot.Project.ProjectId, StringComparison.OrdinalIgnoreCase))
+                return new QsApiResponse(404, Version, string.Empty, null, "PROJECT_NOT_FOUND");
 
             var etag = BuildEtag(snapshot.Project.ProjectId, snapshot.Project.CurrentRevision, request.Resource);
             if (endpoint.Cacheable && string.Equals(request.IfNoneMatch, etag, StringComparison.Ordinal))
