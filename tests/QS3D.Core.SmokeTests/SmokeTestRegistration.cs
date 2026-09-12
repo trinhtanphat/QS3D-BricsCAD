@@ -254,6 +254,7 @@ namespace QS3D.Core.SmokeTests
             QsIntelligenceSmoke.Run();
             BenchmarkParitySuiteSmoke.Run();
             CubicostParitySmoke.Run();
+            QsCubicostDownstreamSmoke.Run();
         }
     }
 }
