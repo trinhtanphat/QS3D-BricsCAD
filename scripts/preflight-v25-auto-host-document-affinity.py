@@ -42,8 +42,19 @@ else:
     if single_end < 0:
         single_end = len(text)
     single = text[single_start:single_end]
-    if "nativeDatabaseIdentity" not in single or "IsActiveDocumentGeneration" not in single:
-        errors.append("single-opening CAD-read -> semantic mutation handoff lacks native-generation authority")
+    for needle in [
+        "nativeDatabaseIdentity",
+        "IsActiveDocumentGeneration",
+        "expectedProjectId",
+        "expectedChangeVersion",
+        "currentProject.ChangeVersion != expectedChangeVersion",
+    ]:
+        if needle not in single:
+            errors.append("single-opening generation contract missing: " + needle)
+    service_mutation = single.find("new HostLinkService().LinkOpening")
+    project_generation = single.find("currentProject.ChangeVersion != expectedChangeVersion")
+    if service_mutation < 0 or project_generation < 0 or project_generation > service_mutation:
+        errors.append("single-opening project generation must be revalidated before semantic HostLink mutation")
 
 print("QS3D V25 Auto Host document-generation affinity preflight")
 if errors:
@@ -51,4 +62,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with", len(errors), "error(s).")
     raise SystemExit(1)
-print("PASS: Auto Host CAD-read, semantic mutation, and UI publication are bound to exact document/native DB generation.")
+print("PASS: Auto Host CAD-read, semantic mutation, and UI publication are bound to exact document/native DB/project generation.")
