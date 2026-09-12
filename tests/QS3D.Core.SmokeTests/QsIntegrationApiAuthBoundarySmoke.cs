@@ -1,11 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class QsIntegrationApiAuthBoundarySmoke
     {
+        [ModuleInitializer]
+        internal static void Initialize()
+        {
+            Run();
+        }
+
         internal static void Run()
         {
             var api = new QsIntegrationApiV1();
