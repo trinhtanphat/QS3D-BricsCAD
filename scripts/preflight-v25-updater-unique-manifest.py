@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import re
+import subprocess
 import sys
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGET = ROOT / "scripts" / "update-v25.ps1"
@@ -62,17 +64,52 @@ def validate_source(text: str) -> None:
         fail("V25 updater raw uniqueness helper/admission must precede JSON parsing")
 
 
+def behavioral_probe(text: str) -> None:
+    helper_start = text.find("function Get-JsonPropertyOccurrenceCount")
+    helper_end = text.find("function Convert-ToStrictSemVer", helper_start)
+    if helper_start < 0 or helper_end <= helper_start:
+        fail("V25 updater duplicate-property helper could not be isolated for behavioral verification")
+
+    helper = text[helper_start:helper_end]
+    probe = helper + r'''
+$cases = @(
+    @{ Json='{"product":"QS3D"}'; Name='product'; Expected=1 },
+    @{ Json='{"product":"QS3D","product":"OTHER"}'; Name='product'; Expected=2 },
+    @{ Json='{"target":"BricsCAD V25 x64","TARGET":"OTHER"}'; Name='target'; Expected=2 },
+    @{ Json='{"product":"QS3D","pro\u0064uct":"OTHER"}'; Name='product'; Expected=2 },
+    @{ Json='{"signerThumbprint":"a","SIGNERTHUMBPRINT":"b"}'; Name='signerThumbprint'; Expected=2 },
+    @{ Json='{"productVersion":"1.2.3","product\u0056ersion":"9.9.9"}'; Name='productVersion'; Expected=2 }
+)
+foreach ($case in $cases) {
+    $actual = Get-JsonPropertyOccurrenceCount -JsonText $case.Json -PropertyName $case.Name
+    if ($actual -ne $case.Expected) {
+        throw "V25 updater duplicate-property probe failed for $($case.Name): expected $($case.Expected), got $actual"
+    }
+}
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as tmp:
+        tmp.write(probe)
+        probe_path = Path(tmp.name)
+    try:
+        completed = subprocess.run(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(probe_path)],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    finally:
+        probe_path.unlink(missing_ok=True)
+    if completed.returncode != 0:
+        fail(
+            "behavioral V25 updater duplicate/escaped/case-variant property probe failed: "
+            + (completed.stderr or completed.stdout).strip()
+        )
+
+
 def mutation_regressions(text: str) -> None:
-    # Guard against lexical regressions that would restore parser-before-admission behavior.
     admitted = text
     validate_source(admitted)
 
-    late = admitted.replace(
-        "$manifest = $manifestText | ConvertFrom-Json",
-        "$manifest = $manifestText | ConvertFrom-Json\n        # mutation: parser moved before uniqueness admission",
-        1,
-    )
-    # The synthetic marker above does not actually move code, so explicitly construct a late-order mutant.
     raw = admitted.find("$manifestText = Get-Content -LiteralPath $manifestPath -Raw")
     parse = admitted.find("$manifest = $manifestText | ConvertFrom-Json", raw)
     loop = admitted.find("foreach ($propertyName in @(", raw)
@@ -80,7 +117,13 @@ def mutation_regressions(text: str) -> None:
         loop_end = admitted.find("\n        try", loop)
         if loop_end > loop:
             block = admitted[loop:loop_end]
-            late = admitted[:loop] + admitted[loop_end:parse] + "$manifest = $manifestText | ConvertFrom-Json -ErrorAction Stop\n        " + block + admitted[parse + len("$manifest = $manifestText | ConvertFrom-Json -ErrorAction Stop"):]
+            late = (
+                admitted[:loop]
+                + admitted[loop_end:parse]
+                + "$manifest = $manifestText | ConvertFrom-Json -ErrorAction Stop\n        "
+                + block
+                + admitted[parse + len("$manifest = $manifestText | ConvertFrom-Json -ErrorAction Stop"):]
+            )
             try:
                 validate_source(late)
             except AssertionError:
@@ -109,8 +152,9 @@ def main() -> int:
     text = TARGET.read_text(encoding="utf-8")
     try:
         validate_source(text)
+        behavioral_probe(text)
         mutation_regressions(text)
-    except AssertionError as exc:
+    except (AssertionError, OSError, subprocess.SubprocessError) as exc:
         print(f"ERROR: {exc}")
         return 1
     print("V25 updater manifest uniqueness guard passed")
