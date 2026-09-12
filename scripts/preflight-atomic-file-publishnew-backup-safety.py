@@ -103,11 +103,11 @@ recreate_post_publish = recreate[recreate_move + len("File.Move(tempPath, destin
 # the staged backup and attach any secondary recovery failure to the primary error.
 recreate_required = (
     'RequireSafe(backupPath, "backup");',
-    "catch (Exception publicationFailure) when",
+    "catch (Exception backupSafetyFailure) when",
     "installed = false;",
     'RequireSafe(destinationPath, "destination");',
     "File.Delete(destinationPath);",
-    "RecordRollbackFailure(publicationFailure, rollbackFailure);",
+    "RecordRollbackFailure(backupSafetyFailure, rollbackFailure);",
     "throw;",
 )
 missing = [token for token in recreate_required if token not in recreate_post_publish]
@@ -119,11 +119,11 @@ if missing:
     sys.exit(1)
 
 recreate_safety = recreate_post_publish.find('RequireSafe(backupPath, "backup");')
-recreate_catch = recreate_post_publish.find("catch (Exception publicationFailure) when")
+recreate_catch = recreate_post_publish.find("catch (Exception backupSafetyFailure) when")
 recreate_owner = recreate_post_publish.find("installed = false;", recreate_catch)
 recreate_delete = recreate_post_publish.find("File.Delete(destinationPath);", recreate_owner)
 recreate_evidence = recreate_post_publish.find(
-    "RecordRollbackFailure(publicationFailure, rollbackFailure);", recreate_delete
+    "RecordRollbackFailure(backupSafetyFailure, rollbackFailure);", recreate_delete
 )
 recreate_rethrow = recreate_post_publish.find("throw;", recreate_evidence)
 if (
@@ -148,7 +148,7 @@ if (
     )
     sys.exit(1)
 
-if "throw publicationFailure;" in recreate_post_publish:
+if "throw backupSafetyFailure;" in recreate_post_publish:
     print(
         "ERROR: AtomicFileCommit missing-destination recreation must preserve the "
         "original backup-safety failure stack with bare throw;."
