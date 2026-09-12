@@ -54,6 +54,7 @@ namespace QS3D.Core.BenchmarkParity
                     { "QA2.MISSING_STOREY", QsQaSeverity.Critical },
                     { "QA2.SPATIAL_MISMATCH", QsQaSeverity.Critical },
                     { "QA2.TYPE_ASSIGNMENT_MISMATCH", QsQaSeverity.Critical },
+                    { "QA2.MISSING_IFC_GUID", QsQaSeverity.Critical },
                     { "QA2.DUPLICATE_IFC_GUID", QsQaSeverity.Critical },
                     { "QA2.DUPLICATE_ELEMENT_ID", QsQaSeverity.Critical }
                 },
@@ -179,6 +180,7 @@ namespace QS3D.Core.BenchmarkParity
             {
                 var structuralIdentityConflict =
                     string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(finding.RuleId, "QA2.MISSING_IFC_GUID", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(finding.RuleId, "QA2.DUPLICATE_IFC_GUID", StringComparison.OrdinalIgnoreCase);
                 if (!structuralIdentityConflict && waiverList.Any(x => x.Applies(finding, nowUtc))) waived.Add(finding);
                 else active.Add(finding);
@@ -219,6 +221,14 @@ namespace QS3D.Core.BenchmarkParity
                 AddIf(result, !IsFinitePositive(element.Length) || !IsFinitePositive(element.Width) || !IsFinitePositive(element.Height), profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Finite positive length, width and height are required.");
 
                 var guid = GetIfcGuid(element);
+                AddIf(
+                    result,
+                    guid == null,
+                    profile,
+                    "QA2.MISSING_IFC_GUID",
+                    QsQaSeverity.Critical,
+                    element.Id,
+                    "IFC GUID is required before quantity workflows can rely on model identity.");
                 AddIf(
                     result,
                     guid != null && duplicateIfcGuids.Contains(guid),
