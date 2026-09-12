@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             GroupsAndOrdersEvidenceDeterministically();
             UsesCompensatedSummation();
+            AllowsEmbeddedIdentitySeparatorWithoutCollision();
             RejectsDuplicateEvidenceIdentity();
         }
 
@@ -41,6 +42,19 @@ namespace QS3D.Core.SmokeTests
             }).Single();
 
             Equal(1d, aggregate.Quantity, "compensated quantity");
+        }
+
+        private static void AllowsEmbeddedIdentitySeparatorWithoutCollision()
+        {
+            const string separator = "\u001f";
+            var aggregate = new TakeoffQuantityAggregator2D().Aggregate(new[]
+            {
+                Evidence("M-1", "S-1" + separator + "R1", "R2", "h-1", "TEST", "", "ea", 1d),
+                Evidence("M-1", "S-1", "R1" + separator + "R2", "h-2", "TEST", "", "ea", 2d)
+            }).Single();
+
+            Equal(3d, aggregate.Quantity, "separator-safe quantity");
+            Equal(2, aggregate.EvidenceCount, "separator-safe evidence count");
         }
 
         private static void RejectsDuplicateEvidenceIdentity()
