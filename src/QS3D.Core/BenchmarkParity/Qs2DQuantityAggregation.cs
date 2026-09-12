@@ -28,6 +28,41 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class TakeoffQuantityAggregator2D
     {
+        private sealed class EvidenceIdentityKey : IEquatable<EvidenceIdentityKey>
+        {
+            public EvidenceIdentityKey(string sheetId, string revision, string markupId)
+            {
+                SheetId = sheetId;
+                Revision = revision;
+                MarkupId = markupId;
+            }
+
+            public string SheetId { get; private set; }
+            public string Revision { get; private set; }
+            public string MarkupId { get; private set; }
+
+            public bool Equals(EvidenceIdentityKey? other)
+            {
+                return other != null
+                    && string.Equals(SheetId, other.SheetId, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Revision, other.Revision, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(MarkupId, other.MarkupId, StringComparison.OrdinalIgnoreCase);
+            }
+
+            public override bool Equals(object? obj) { return Equals(obj as EvidenceIdentityKey); }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(SheetId);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Revision);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(MarkupId);
+                    return hash;
+                }
+            }
+        }
+
         private sealed class AggregateKey : IEquatable<AggregateKey>
         {
             public AggregateKey(string classification, string zone, string unit)
@@ -68,11 +103,11 @@ namespace QS3D.Core.BenchmarkParity
             if (evidence == null) throw new ArgumentNullException("evidence");
 
             var materialized = new List<TakeoffQuantityEvidence2D>();
-            var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var identities = new HashSet<EvidenceIdentityKey>();
             foreach (var item in evidence)
             {
                 if (item == null) throw new ArgumentException("Evidence collection contains null.", "evidence");
-                var identity = item.SheetId + "\u001f" + item.Revision + "\u001f" + item.MarkupId;
+                var identity = new EvidenceIdentityKey(item.SheetId, item.Revision, item.MarkupId);
                 if (!identities.Add(identity))
                     throw new InvalidOperationException("Duplicate takeoff evidence identity for sheet/revision/markup: " + item.SheetId + "/" + item.Revision + "/" + item.MarkupId + ".");
                 materialized.Add(item);
