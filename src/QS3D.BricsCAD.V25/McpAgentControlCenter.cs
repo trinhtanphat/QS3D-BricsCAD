@@ -484,7 +484,7 @@ namespace QS3D.BricsCAD.V25
             });
             runtimeKeyHeader.Children.Add(CreateInfoButton(
                 "Thông tin Runtime API key",
-                "Lưu bảo mật trong Windows Credential Manager sau khi xác minh; để trống để dùng key đã lưu hoặc CONTROL_PLANE_API_KEY/OPENAI_API_KEY."));
+                "Runtime API key · lưu bảo mật trong Windows Credential Manager sau khi xác minh; để trống để dùng key đã lưu hoặc CONTROL_PLANE_API_KEY/OPENAI_API_KEY."));
             runtimeKeyHeader.Children.Add(CreateIconButton("\uE77F", "Dán Runtime API key từ clipboard", (_, __) => PasteRuntimeApiKey()));
             actions.Children.Add(runtimeKeyHeader);
 
