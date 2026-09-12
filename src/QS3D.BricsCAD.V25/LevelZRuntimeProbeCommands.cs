@@ -71,6 +71,7 @@ namespace QS3D.BricsCAD.V25
             ZRange? observedFrameRange = null;
             ZRange? observedPanelRange = null;
             var hostBuildStage = string.Empty;
+            var openingStage = string.Empty;
             var rebarStage = string.Empty;
             int? observedBeamRebarCount = null;
             int? observedBeamStirrupElementCount = null;
@@ -180,9 +181,13 @@ namespace QS3D.BricsCAD.V25
                 RequireNear(7d, glassRange.MaximumM, "bounded GlassWall top");
 
                 failureCode = "LEVEL_Z_RUNTIME_OPENING_FAILED";
+                openingStage = "volume_before_read";
                 var wallVolumeBefore = ReadSolidVolume(document, Handles(boundedWall, "GeneratedSolidHandle").Single(), "bounded wall before opening");
+                openingStage = "cut_linked_openings";
                 Require(OpeningBooleanService.CutLinkedOpenings(document, project, new[] { hostOpening.Id }) == 1, "physical opening cut count");
+                openingStage = "volume_after_read";
                 var wallVolumeAfter = ReadSolidVolume(document, Handles(boundedWall, "GeneratedSolidHandle").Single(), "bounded wall after opening");
+                openingStage = "volume_reduction_assert";
                 Require(wallVolumeAfter > 0d && wallVolumeAfter < wallVolumeBefore, "physical opening must reduce host volume");
 
                 failureCode = "LEVEL_Z_RUNTIME_CURTAIN_FRAME_BUILD_FAILED";
@@ -306,6 +311,7 @@ namespace QS3D.BricsCAD.V25
                     observedFrameRange,
                     observedPanelRange,
                     hostBuildStage,
+                    openingStage,
                     rebarStage,
                     observedBeamRebarCount,
                     observedBeamStirrupElementCount,
@@ -541,6 +547,7 @@ namespace QS3D.BricsCAD.V25
             ZRange? observedFrameRange,
             ZRange? observedPanelRange,
             string hostBuildStage,
+            string openingStage,
             string rebarStage,
             int? observedBeamRebarCount,
             int? observedBeamStirrupElementCount,
@@ -570,6 +577,8 @@ namespace QS3D.BricsCAD.V25
                     AddObservedRange(lines, "panel", observedPanelRange);
                     if (string.Equals(failureCode, "LEVEL_Z_RUNTIME_HOST_BUILD_FAILED", StringComparison.Ordinal))
                         lines.Add("host_build_stage=" + RequireHostBuildStage(hostBuildStage));
+                    if (string.Equals(failureCode, "LEVEL_Z_RUNTIME_OPENING_FAILED", StringComparison.Ordinal))
+                        lines.Add("opening_stage=" + RequireOpeningStage(openingStage));
                     if (string.Equals(failureCode, "LEVEL_Z_RUNTIME_REBAR_FAILED", StringComparison.Ordinal))
                     {
                         lines.Add("rebar_stage=" + RequireRebarStage(rebarStage));
@@ -580,6 +589,7 @@ namespace QS3D.BricsCAD.V25
                         AddObservedRange(lines, "stirrup", observedStirrupRange);
                     }
                     if (string.Equals(failureCode, "LEVEL_Z_RUNTIME_HOST_BUILD_FAILED", StringComparison.Ordinal) ||
+                        string.Equals(failureCode, "LEVEL_Z_RUNTIME_OPENING_FAILED", StringComparison.Ordinal) ||
                         string.Equals(failureCode, "LEVEL_Z_RUNTIME_REBAR_FAILED", StringComparison.Ordinal))
                     {
                         lines.Add("exception_type=" + OneLine(error.GetType().FullName ?? error.GetType().Name));
@@ -617,6 +627,20 @@ namespace QS3D.BricsCAD.V25
                     return value;
                 default:
                     return "legacy_wall_build";
+            }
+        }
+
+        private static string RequireOpeningStage(string value)
+        {
+            switch (value)
+            {
+                case "volume_before_read":
+                case "cut_linked_openings":
+                case "volume_after_read":
+                case "volume_reduction_assert":
+                    return value;
+                default:
+                    return "volume_before_read";
             }
         }
 

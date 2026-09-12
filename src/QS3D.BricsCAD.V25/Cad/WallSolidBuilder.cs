@@ -153,12 +153,12 @@ namespace QS3D.BricsCAD.V25.Cad
                     // restored, so a new Solid3d can never survive without matching semantic state.
                     foreach (var update in pending)
                     {
-                        GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category);
                         update.Element.Properties["LengthM"] = update.LengthM.ToString("R", CultureInfo.InvariantCulture);
                         update.Element.Properties["ThicknessM"] = update.ThicknessM.ToString("R", CultureInfo.InvariantCulture);
                         if (update.LegacyHeightM.HasValue)
                             update.Element.Properties["HeightM"] = update.LegacyHeightM.Value.ToString("R", CultureInfo.InvariantCulture);
                         CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedSolid", update.VerticalPlacement);
+                        GeneratedGeometryService.CommitReplacement(project, update.Element, update.PreviousHandle, update.GeneratedHandle, category);
                     }
 
                     if (pending.Count > 0) project.Touch();
