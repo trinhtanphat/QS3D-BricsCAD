@@ -24,8 +24,20 @@ namespace QS3D.Core.BenchmarkParity
         {
             RequiredPsets = Normalize(requiredPsets, "requiredPsets");
             RequiredRelationships = Normalize(requiredRelationships, "requiredRelationships");
-            _severityByRule = new ReadOnlyDictionary<string, QsQaSeverity>(
-                new Dictionary<string, QsQaSeverity>(severityByRule ?? new Dictionary<string, QsQaSeverity>(), StringComparer.OrdinalIgnoreCase));
+
+            if (!IsDefinedSeverity(blockingThreshold))
+                throw new ArgumentOutOfRangeException("blockingThreshold", "QA blocking threshold must be a defined severity.");
+
+            var normalizedSeverityByRule = new Dictionary<string, QsQaSeverity>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in severityByRule ?? new Dictionary<string, QsQaSeverity>())
+            {
+                var ruleId = QsModelElementSnapshot.Require(pair.Key, "severityByRule");
+                if (!IsDefinedSeverity(pair.Value))
+                    throw new ArgumentOutOfRangeException("severityByRule", "QA rule severity must be a defined severity: " + ruleId + ".");
+                normalizedSeverityByRule.Add(ruleId, pair.Value);
+            }
+
+            _severityByRule = new ReadOnlyDictionary<string, QsQaSeverity>(normalizedSeverityByRule);
             BlockingThreshold = blockingThreshold;
         }
 
@@ -48,11 +60,14 @@ namespace QS3D.Core.BenchmarkParity
                 {
                     { "QA2.MISSING_MATERIAL", QsQaSeverity.Error },
                     { "QA2.MISSING_TYPE", QsQaSeverity.Error },
+                    { "QA2.MISSING_CLASSIFICATION", QsQaSeverity.Error },
                     { "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error },
                     { "QA2.MISSING_PSET", QsQaSeverity.Error },
                     { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Critical },
+                    { "QA2.MISSING_STOREY", QsQaSeverity.Critical },
                     { "QA2.SPATIAL_MISMATCH", QsQaSeverity.Critical },
                     { "QA2.TYPE_ASSIGNMENT_MISMATCH", QsQaSeverity.Critical },
+                    { "QA2.MISSING_IFC_GUID", QsQaSeverity.Critical },
                     { "QA2.DUPLICATE_IFC_GUID", QsQaSeverity.Critical },
                     { "QA2.DUPLICATE_ELEMENT_ID", QsQaSeverity.Critical }
                 },
@@ -66,6 +81,20 @@ namespace QS3D.Core.BenchmarkParity
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList());
+        }
+
+        private static bool IsDefinedSeverity(QsQaSeverity severity)
+        {
+            switch (severity)
+            {
+                case QsQaSeverity.Info:
+                case QsQaSeverity.Warning:
+                case QsQaSeverity.Error:
+                case QsQaSeverity.Critical:
+                    return true;
+                default:
+                    return false;
+            }
         }
     }
 
@@ -176,7 +205,10 @@ namespace QS3D.Core.BenchmarkParity
             var waived = new List<QsQaFinding>();
             foreach (var finding in findings)
             {
-                var structuralIdentityConflict = string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase);
+                var structuralIdentityConflict =
+                    string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(finding.RuleId, "QA2.MISSING_IFC_GUID", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(finding.RuleId, "QA2.DUPLICATE_IFC_GUID", StringComparison.OrdinalIgnoreCase);
                 if (!structuralIdentityConflict && waiverList.Any(x => x.Applies(finding, nowUtc))) waived.Add(finding);
                 else active.Add(finding);
             }
@@ -213,9 +245,18 @@ namespace QS3D.Core.BenchmarkParity
                 AddIf(result, duplicateElementIds.Contains(element.Id), profile, "QA2.DUPLICATE_ELEMENT_ID", QsQaSeverity.Critical, element.Id, "Element identity must be unique before QA waivers can be evaluated safely.");
                 AddIf(result, element.Material.Length == 0, profile, "QA2.MISSING_MATERIAL", QsQaSeverity.Error, element.Id, "Material is required.");
                 AddIf(result, element.Type.Length == 0, profile, "QA2.MISSING_TYPE", QsQaSeverity.Error, element.Id, "Type assignment is required.");
-                AddIf(result, element.Length <= 0d || element.Width <= 0d || element.Height <= 0d, profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Positive length, width and height are required.");
+                AddIf(result, element.Classification.Length == 0, profile, "QA2.MISSING_CLASSIFICATION", QsQaSeverity.Error, element.Id, "Classification is required before quantity workflows can run.");
+                AddIf(result, !IsFinitePositive(element.Length) || !IsFinitePositive(element.Width) || !IsFinitePositive(element.Height), profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Finite positive length, width and height are required.");
 
                 var guid = GetIfcGuid(element);
+                AddIf(
+                    result,
+                    guid == null,
+                    profile,
+                    "QA2.MISSING_IFC_GUID",
+                    QsQaSeverity.Critical,
+                    element.Id,
+                    "IFC GUID is required before quantity workflows can rely on model identity.");
                 AddIf(
                     result,
                     guid != null && duplicateIfcGuids.Contains(guid),
@@ -252,10 +293,17 @@ namespace QS3D.Core.BenchmarkParity
                 }
 
                 string spatialContainer;
-                if (element.Storey.Length > 0 && element.Properties.TryGetValue("IfcRel.SpatialContainer", out spatialContainer) && !string.IsNullOrWhiteSpace(spatialContainer))
+                if (element.Properties.TryGetValue("IfcRel.SpatialContainer", out spatialContainer) && !string.IsNullOrWhiteSpace(spatialContainer))
                 {
                     AddIf(result,
-                        !string.Equals(element.Storey, spatialContainer.Trim(), StringComparison.OrdinalIgnoreCase),
+                        element.Storey.Length == 0,
+                        profile,
+                        "QA2.MISSING_STOREY",
+                        QsQaSeverity.Critical,
+                        element.Id,
+                        "Storey identity is required when IFC spatial containment is present.");
+                    AddIf(result,
+                        element.Storey.Length > 0 && !string.Equals(element.Storey, spatialContainer.Trim(), StringComparison.OrdinalIgnoreCase),
                         profile,
                         "QA2.SPATIAL_MISMATCH",
                         QsQaSeverity.Critical,
@@ -287,6 +335,11 @@ namespace QS3D.Core.BenchmarkParity
             string guid;
             if (!element.Properties.TryGetValue("IfcGuid", out guid) || string.IsNullOrWhiteSpace(guid)) return null;
             return guid.Trim();
+        }
+
+        private static bool IsFinitePositive(double value)
+        {
+            return value > 0d && !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
         private static void AddIf(List<QsQaFinding> result, bool condition, QsQaRuleProfile profile, string ruleId, QsQaSeverity fallback, string elementId, string message)

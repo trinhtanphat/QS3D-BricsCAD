@@ -159,11 +159,12 @@ namespace QS3D.Core.BenchmarkParity
             LineId = QsModelElementSnapshot.Require(lineId, "lineId");
             Quantity = QsModelElementSnapshot.Finite(quantity, "quantity");
             UnitRate = QsModelElementSnapshot.Finite(unitRate, "unitRate");
+            Amount = QsModelElementSnapshot.Finite(Quantity * UnitRate, "amount");
         }
         public string LineId { get; private set; }
         public double Quantity { get; private set; }
         public double UnitRate { get; private set; }
-        public double Amount { get { return Quantity * UnitRate; } }
+        public double Amount { get; private set; }
     }
 
     public sealed class QsApiNamedDto
@@ -185,7 +186,11 @@ namespace QS3D.Core.BenchmarkParity
         {
             Revision = QsModelElementSnapshot.Require(revision, "revision");
             SnapshotId = QsModelElementSnapshot.Require(snapshotId, "snapshotId");
-            CreatedUtc = createdUtc.Kind == DateTimeKind.Utc ? createdUtc : createdUtc.ToUniversalTime();
+            CreatedUtc = createdUtc.Kind == DateTimeKind.Utc
+                ? createdUtc
+                : createdUtc.Kind == DateTimeKind.Local
+                    ? createdUtc.ToUniversalTime()
+                    : DateTime.SpecifyKind(createdUtc, DateTimeKind.Utc);
         }
         public string Revision { get; private set; }
         public string SnapshotId { get; private set; }

@@ -21,6 +21,79 @@ def reject(text: str, needle: str, label: str) -> None:
         raise AssertionError(f"forbidden {label}: {needle}")
 
 
+def require_release_ordering(updater: str) -> None:
+    manifest_call = "Invoke-BoundedHttpsDownload -Address $manifestAddress -DestinationPath $manifestPath -MaxBytes 65536 -TimeoutMilliseconds 30000 -Label 'Update manifest'"
+    package_call = "Invoke-BoundedHttpsDownload -Address $packageAddress -DestinationPath $zipPath -MaxBytes $maxBytes -TimeoutMilliseconds 120000 -Label 'Update package'"
+    raw_read_marker = "$manifestText = Get-Content -LiteralPath $manifestPath -Raw"
+    uniqueness_loop_marker = "foreach ($propertyName in @(" 
+    uniqueness_count_marker = "Get-JsonPropertyOccurrenceCount -JsonText $manifestText -PropertyName $propertyName"
+    parse_marker = "$manifest = $manifestText | ConvertFrom-Json"
+
+    helper = updater.find("function Invoke-BoundedHttpsDownload")
+    mutex = updater.find("$updateMutex = Enter-Qs3dUpdateMutex")
+    manifest = updater.find(manifest_call)
+    raw_read = updater.find(raw_read_marker, manifest)
+    uniqueness_loop = updater.find(uniqueness_loop_marker, raw_read)
+    uniqueness_count = updater.find(uniqueness_count_marker, uniqueness_loop)
+    manifest_parse = updater.find(parse_marker, raw_read)
+    snapshot_package = updater.find("Assert-OfficialGitHubPackageSnapshot -PackageAddress $packageAddress")
+    package = updater.find(package_call)
+    held_archive = updater.find("Expand-VerifiedHeldArchive -ZipPath $zipPath")
+    signed_root = updater.find("Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner")
+    installer = updater.find("& $installerScript @arguments")
+    release = updater.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
+    positions = (
+        helper,
+        mutex,
+        manifest,
+        raw_read,
+        uniqueness_loop,
+        uniqueness_count,
+        manifest_parse,
+        snapshot_package,
+        package,
+        held_archive,
+        signed_root,
+        installer,
+        release,
+    )
+    if min(positions) < 0 or not (
+        helper
+        < mutex
+        < manifest
+        < raw_read
+        < uniqueness_loop
+        < uniqueness_count
+        < manifest_parse
+        < snapshot_package
+        < package
+        < held_archive
+        < signed_root
+        < installer
+        < release
+    ):
+        raise AssertionError(
+            "bounded transfer ordering must preserve mutex -> bounded manifest -> raw read -> uniqueness admission -> JSON parse -> release snapshot -> bounded package -> held archive -> signer -> held in-memory installer"
+        )
+
+
+def verify_ordering_regression(updater: str) -> None:
+    raw_read_marker = "$manifestText = Get-Content -LiteralPath $manifestPath -Raw"
+    parse_marker = "$manifest = $manifestText | ConvertFrom-Json"
+    raw_read = updater.find(raw_read_marker)
+    parse = updater.find(parse_marker, raw_read)
+    if raw_read < 0 or parse < 0:
+        raise AssertionError("could not isolate raw-read/parse markers for ordering self-regression")
+
+    insertion = raw_read + len(raw_read_marker)
+    parser_first = updater[:insertion] + "\n        " + parse_marker + updater[insertion:]
+    try:
+        require_release_ordering(parser_first)
+    except AssertionError:
+        return
+    raise AssertionError("bounded-download guard self-test failed: parser-before-uniqueness mutant was accepted")
+
+
 def main() -> int:
     updater = read(UPDATER)
 
@@ -49,24 +122,10 @@ def main() -> int:
 
     reject(updater, "Invoke-WebRequest -Uri $manifestAddress.AbsoluteUri -OutFile $manifestPath", "unbounded manifest OutFile transfer")
     reject(updater, "Invoke-WebRequest -Uri $packageAddress.AbsoluteUri -OutFile $zipPath", "unbounded package OutFile transfer")
+    reject(updater, "$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json", "manifest parse before raw uniqueness admission")
 
-    helper = updater.find("function Invoke-BoundedHttpsDownload")
-    mutex = updater.find("$updateMutex = Enter-Qs3dUpdateMutex")
-    manifest = updater.find(manifest_call)
-    manifest_parse = updater.find("$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json")
-    snapshot_package = updater.find("Assert-OfficialGitHubPackageSnapshot -PackageAddress $packageAddress")
-    package = updater.find(package_call)
-    held_archive = updater.find("Expand-VerifiedHeldArchive -ZipPath $zipPath")
-    signed_root = updater.find("Assert-PackageRoot -Directory $extractRoot -ExpectedSigner $expectedSigner")
-    installer = updater.find("& $installerScript @arguments")
-    release = updater.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
-    positions = (helper, mutex, manifest, manifest_parse, snapshot_package, package, held_archive, signed_root, installer, release)
-    if min(positions) < 0 or not (
-        helper < mutex < manifest < manifest_parse < snapshot_package < package < held_archive < signed_root < installer < release
-    ):
-        raise AssertionError(
-            "bounded transfer ordering must preserve mutex -> manifest -> release snapshot -> package -> held archive -> signer -> held in-memory installer"
-        )
+    require_release_ordering(updater)
+    verify_ordering_regression(updater)
 
     reject(updater, "& $installer @arguments", "pathname installer reopen after held-generation admission")
     reject(updater, "Get-FileHash -LiteralPath $zipPath", "pathname ZIP hash reopen after bounded package download")
@@ -81,7 +140,7 @@ def main() -> int:
 
     print(
         "PASS: final updater manifest/package transfers are HTTPS, timeout/redirect/stream bounded, clean partial files on failure, "
-        "and retain release-snapshot/held-archive/signer/held in-memory install ordering."
+        "and preserve raw uniqueness admission before JSON parse plus release-snapshot/held-archive/signer/held in-memory install ordering."
     )
     return 0
 

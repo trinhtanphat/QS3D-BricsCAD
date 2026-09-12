@@ -152,7 +152,11 @@ namespace QS3D.Core.Persistence
         public ProjectState Load(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
-            var document = LoadDocument(path);
+            return LoadProjectDocument(LoadDocument(path));
+        }
+
+        private static ProjectState LoadProjectDocument(XDocument document)
+        {
             ProjectSchemaMigrator.MigrateToCurrent(document);
             var root = document.Root ?? throw new InvalidDataException("QSDB has no root element.");
             var updatedUtc = Date(root.Attribute("updatedUtc")?.Value);
@@ -265,25 +269,44 @@ namespace QS3D.Core.Persistence
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Project path is required.", nameof(path));
             var fullPath = Path.GetFullPath(path);
             PersistencePathSafety.RequireNonRedirected(fullPath, "project read");
+            string? primaryProjectId = null;
             try
             {
-                return new ProjectLoadResult(Load(fullPath), fullPath, false, string.Empty);
+                var document = LoadDocument(fullPath);
+                primaryProjectId = TryGetCanonicalProjectIdentity(document);
+                return new ProjectLoadResult(LoadProjectDocument(document), fullPath, false, string.Empty);
             }
             catch (Exception primary) when (IsRecoverableDataFailure(primary))
             {
                 var backupPath = fullPath + ".bak";
                 PersistencePathSafety.RequireNonRedirected(backupPath, "project backup read");
                 if (!File.Exists(backupPath)) throw;
+
+                ProjectState project;
                 try
                 {
-                    var project = Load(backupPath);
-                    return new ProjectLoadResult(project, backupPath, true, BackupRecoveryReason);
+                    project = Load(backupPath);
                 }
                 catch (Exception backup) when (IsRecoverableDataFailure(backup))
                 {
                     throw new InvalidDataException("Both the QSDB project and its backup are invalid.", new AggregateException(primary, backup));
                 }
+
+                if (primaryProjectId != null && !string.Equals(project.ProjectId, primaryProjectId, StringComparison.Ordinal))
+                    throw new InvalidDataException("Validated QSDB backup project identity does not match the failed primary project identity.", primary);
+
+                return new ProjectLoadResult(project, backupPath, true, BackupRecoveryReason);
             }
+        }
+
+        private static string? TryGetCanonicalProjectIdentity(XDocument document)
+        {
+            var root = document.Root;
+            if (root == null || !string.Equals(root.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) return null;
+            var projectId = root.Attribute("projectId")?.Value;
+            if (projectId == null || string.IsNullOrWhiteSpace(projectId)) return null;
+            if (!string.Equals(projectId, projectId.Trim(), StringComparison.Ordinal)) return null;
+            return projectId;
         }
 
         private static XDocument Serialize(ProjectState project)

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
@@ -11,11 +12,15 @@ namespace QS3D.Core.SmokeTests
         {
             QaGateBlocksInvalidModel();
             QsQaGate2Smoke.Run();
+            QaGate2RejectsInvalidSeverityProfiles();
+            QaGateRejectsNonFiniteDimensions();
             CalibratedTwoDimensionalTakeoff();
             Qs2DTakeoffWorkflowSmoke.Run();
             QsTakeoffPackageUxSmoke.Run();
             WorkbookLiveLinkRefresh();
             IntegrationRoutes();
+            IntegrationApiRejectsNonFiniteEstimateAmount();
+            IntegrationApiNormalizesRevisionTimeDeterministically();
             QsLiveWorkbookApiSmoke.Run();
             ConcreteAndFormwork();
             IfcWorkbench();
@@ -36,6 +41,90 @@ namespace QS3D.Core.SmokeTests
             var props = new Dictionary<string, string> { { "IfcGuid", "G1" }, { "IfcEntity", "IfcWall" }, { "QuantityUnit", "m3" } };
             var valid = new QsModelElementSnapshot("E2", "Wall", "Concrete", "STR.WALL", "L01", 4d, 0.2d, 3d, props);
             Equal(QsQaGateStatus.Pass, new QsQaGate().Evaluate(new[] { valid }, QsQaProfile.StrictIfcQuantity()).Status, "valid QA gate");
+        }
+
+        private static void QaGate2RejectsInvalidSeverityProfiles()
+        {
+            var rejectedThreshold = false;
+            try
+            {
+                _ = new QsQaRuleProfile(
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    new Dictionary<string, QsQaSeverity>(),
+                    (QsQaSeverity)999);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejectedThreshold = true;
+            }
+            True(rejectedThreshold, "QA2 rejects undefined blocking threshold");
+
+            var rejectedRuleSeverity = false;
+            try
+            {
+                _ = new QsQaRuleProfile(
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    new Dictionary<string, QsQaSeverity>
+                    {
+                        { "QA2.MISSING_MATERIAL", (QsQaSeverity)(-1) }
+                    },
+                    QsQaSeverity.Error);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejectedRuleSeverity = true;
+            }
+            True(rejectedRuleSeverity, "QA2 rejects undefined rule severity");
+
+            var valid = new QsQaRuleProfile(
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                new Dictionary<string, QsQaSeverity>
+                {
+                    { "QA2.MISSING_MATERIAL", QsQaSeverity.Warning }
+                },
+                QsQaSeverity.Critical);
+            Equal(QsQaSeverity.Warning, valid.SeverityFor("QA2.MISSING_MATERIAL", QsQaSeverity.Error), "QA2 valid severity override remains supported");
+            Equal(QsQaSeverity.Critical, valid.BlockingThreshold, "QA2 valid blocking threshold remains supported");
+        }
+
+        private static void QaGateRejectsNonFiniteDimensions()
+        {
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "IfcGuid", "FINITE-DIM-GUID" },
+                { "IfcPset.Pset_Qto", "present" },
+                { "IfcPset.Pset_Identity", "present" },
+                { "IfcRel.SpatialContainer", "L01" },
+                { "IfcRel.TypeAssignment", "Wall" }
+            };
+            var values = new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity };
+
+            for (var i = 0; i < values.Length; i++)
+            {
+                var element = new QsModelElementSnapshot("NF-" + i, "Wall", "Concrete", "A-WALL", "L01", 4d, 0.2d, 3d, properties);
+                SetSnapshotDimensionForDefenseTest(element, "Length", values[i]);
+                var decision = new QsQaGate2().Evaluate(
+                    new[] { element },
+                    QsQaRuleProfile.SolibriQuantityStrict(),
+                    null!,
+                    new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc));
+
+                Equal(QsQaGateStatus.Blocked, decision.Status, "non-finite QA2 dimension blocks");
+                True(decision.ActiveFindings.Any(x => x.RuleId == "QA2.INVALID_DIMENSIONS" && x.ElementId == element.Id), "non-finite QA2 dimension finding");
+                True(!decision.CanTakeoff && !decision.CanBoq && !decision.CanEstimate, "non-finite QA2 dimension hard gate");
+            }
+        }
+
+        private static void SetSnapshotDimensionForDefenseTest(QsModelElementSnapshot element, string propertyName, double value)
+        {
+            var property = typeof(QsModelElementSnapshot).GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public);
+            True(property != null, "snapshot dimension property exists");
+            var setter = property!.GetSetMethod(true);
+            True(setter != null, "snapshot dimension private setter exists");
+            setter!.Invoke(element, new object[] { value });
         }
 
         private static void CalibratedTwoDimensionalTakeoff()
@@ -74,6 +163,34 @@ namespace QS3D.Core.SmokeTests
             True(routes.Any(x => x.Contains("revisions")), "revision route");
             var resource = new QsIntegrationResource("P1", "R2", new List<TakeoffInventoryLine>(), new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc));
             Equal("P1", resource.ProjectId, "integration project id");
+        }
+
+        private static void IntegrationApiRejectsNonFiniteEstimateAmount()
+        {
+            var finite = new QsApiEstimateLineDto("L1", 4d, 2.5d);
+            Near(10d, finite.Amount, 0d, "finite API estimate amount");
+
+            var rejected = false;
+            try
+            {
+                _ = new QsApiEstimateLineDto("L2", double.MaxValue, 2d);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejected = true;
+            }
+            True(rejected, "API estimate amount overflow is rejected before publication");
+        }
+
+        private static void IntegrationApiNormalizesRevisionTimeDeterministically()
+        {
+            var unspecified = new DateTime(2026, 9, 12, 6, 7, 8, DateTimeKind.Unspecified);
+            var revision = new QsApiRevisionDto("R3", "S3", unspecified);
+            Equal(DateTimeKind.Utc, revision.CreatedUtc.Kind, "unspecified revision timestamp kind");
+            Equal(unspecified.Ticks, revision.CreatedUtc.Ticks, "unspecified revision timestamp ticks are host-independent");
+
+            var utc = new DateTime(2026, 9, 12, 6, 7, 8, DateTimeKind.Utc);
+            Equal(utc, new QsApiRevisionDto("R4", "S4", utc).CreatedUtc, "UTC revision timestamp preserved");
         }
 
         private static void ConcreteAndFormwork()
