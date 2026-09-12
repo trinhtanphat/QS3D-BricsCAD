@@ -14,9 +14,9 @@ else:
 
 required = (
     "dispatch_source_ref='refs/remotes/origin/qs3d-v25-dispatch-source'",
-    'git fetch --no-tags origin "+${source_sha}:${dispatch_source_ref}"',
-    'fetched_source="$(git rev-parse "${dispatch_source_ref}^{commit}")"',
-    'if [[ "${fetched_source,,}" != "${source_sha}" ]]; then',
+    'git fetch --no-tags origin "+refs/heads/main:${dispatch_source_ref}"',
+    'fetched_dispatch_main="$(git rev-parse "${dispatch_source_ref}^{commit}")"',
+    'git merge-base --is-ancestor "${source_sha}" "${fetched_dispatch_main}"',
     'git checkout --detach "${source_sha}"',
     'checked_out_source="$(git rev-parse HEAD)"',
     'if [[ "${checked_out_source,,}" != "${source_sha}" ]]; then',
@@ -39,7 +39,7 @@ if workflow:
         < release_workflow_read < version_read < batch_gate
     ):
         errors.append(
-            "dispatcher must bind/detach the worktree to exact source_sha before reading release workflow, committed Version, or executing the batch gate"
+            "dispatcher must fetch protected main, prove admitted source ancestry, detach to source_sha, verify HEAD, then inspect release bytes"
         )
 
     workflow_run_rebind = workflow.find('if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then')
@@ -54,4 +54,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V25 dispatcher proves and detaches to exact admitted source_sha before release inspection and batch-gate execution.")
+print("PASS: V25 dispatcher proves ancestry and detaches to exact admitted source_sha before release inspection and batch-gate execution.")
