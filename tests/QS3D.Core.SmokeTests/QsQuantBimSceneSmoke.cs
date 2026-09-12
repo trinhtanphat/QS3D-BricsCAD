@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class QsQuantBimSceneSmoke
     {
+        [ModuleInitializer]
         internal static void Run()
         {
             var document = new IfcStandaloneDocument("scene.ifc", "R7", new[]
