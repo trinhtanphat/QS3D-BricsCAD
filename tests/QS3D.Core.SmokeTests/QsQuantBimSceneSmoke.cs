@@ -24,7 +24,9 @@ namespace QS3D.Core.SmokeTests
             Equal(IfcViewCommandKind.FocusSelection, scene.Navigation.Last().Kind, "selection navigation");
             Equal(3, scene.Nodes[0].Mesh.Vertices.Count, "resolved mesh vertices");
             Equal(3, scene.Nodes[0].Mesh.TriangleIndices.Count, "resolved mesh indices");
+            Equal(4, scene.Nodes[0].Mesh.ArtifactBytes.Count, "resolved artifact bytes");
 
+            VerifyArtifactBytesAreImmutable();
             RejectUnknownSelection(document);
             RejectMissingGeometry();
             RejectInvalidMesh();
@@ -33,6 +35,38 @@ namespace QS3D.Core.SmokeTests
         private static IfcStandaloneElement Element(string guid, string geometryReference)
         {
             return new IfcStandaloneElement(guid, "IfcWall", guid, "L01", "External", "ARC.WALL", Array.Empty<IfcPropertyNode>(), Array.Empty<IfcQtoItem>(), geometryReference);
+        }
+
+        private static void VerifyArtifactBytesAreImmutable()
+        {
+            var input = new byte[] { 10, 20, 30 };
+            var mesh = new IfcSceneMesh(
+                new[]
+                {
+                    new IfcSceneVertex(0d, 0d, 0d),
+                    new IfcSceneVertex(1d, 0d, 0d),
+                    new IfcSceneVertex(0d, 1d, 0d)
+                },
+                new[] { 0, 1, 2 },
+                input);
+
+            input[0] = 99;
+            Equal((byte)10, mesh.ArtifactBytes[0], "artifact bytes defensive copy");
+
+            var exposed = mesh.ArtifactBytes as IList<byte>;
+            True(exposed != null, "artifact bytes read-only list surface");
+            var rejected = false;
+            try
+            {
+                exposed[0] = 77;
+            }
+            catch (NotSupportedException)
+            {
+                rejected = true;
+            }
+
+            True(rejected, "artifact bytes reject consumer mutation");
+            Equal((byte)10, mesh.ArtifactBytes[0], "artifact bytes remain immutable");
         }
 
         private static void RejectUnknownSelection(IfcStandaloneDocument document)
@@ -90,7 +124,8 @@ namespace QS3D.Core.SmokeTests
                         new IfcSceneVertex(1d, 0d, 0d),
                         new IfcSceneVertex(0d, 1d, 0d)
                     },
-                    new[] { 0, 1, 2 });
+                    new[] { 0, 1, 2 },
+                    new byte[] { 1, 2, 3, 4 });
             }
         }
 
