@@ -62,7 +62,9 @@ if not errors:
 
     # Behavioral probe against the production property-name decoder. PowerShell's
     # object JSON consumer treats case variants as the same logical property and
-    # JSON escapes can spell the same property with different source bytes.
+    # JSON escapes can spell the same property with different source bytes. Only
+    # top-level identity properties belong to the admission contract: nested
+    # diagnostic/extension objects must not create false duplicate identities.
     helper = source[helper_start:assert_start]
     probe = helper + r'''
 $cases = @(
@@ -71,7 +73,10 @@ $cases = @(
     @{ Json='{"sourceCommit":"a","SOURCECOMMIT":"b"}'; Name='sourceCommit'; Expected=2 },
     @{ Json='{"sourceCommit":"a","source\u0043ommit":"b"}'; Name='sourceCommit'; Expected=2 },
     @{ Json='{"productVersion":"x","PRODUCTVERSION":"y"}'; Name='productVersion'; Expected=2 },
-    @{ Json='{"gitCommit":"a","git\u0043ommit":"b"}'; Name='gitCommit'; Expected=2 }
+    @{ Json='{"gitCommit":"a","git\u0043ommit":"b"}'; Name='gitCommit'; Expected=2 },
+    @{ Json='{"sourceCommit":"a","extension":{"sourceCommit":"nested"}}'; Name='sourceCommit'; Expected=1 },
+    @{ Json='{"gitCommit":"a","extension":{"GITCOMMIT":"nested"}}'; Name='gitCommit'; Expected=1 },
+    @{ Json='{"product":"QS3D","items":[{"product":"nested"}]}'; Name='product'; Expected=1 }
 )
 foreach ($case in $cases) {
     $actual = Get-JsonPropertyOccurrenceCount -JsonText $case.Json -PropertyName $case.Name
@@ -94,7 +99,7 @@ foreach ($case in $cases) {
         probe_path.unlink(missing_ok=True)
     if completed.returncode != 0:
         errors.append(
-            "behavioral V25 commercial-draft duplicate/escaped/case-variant property probe failed: "
+            "behavioral V25 commercial-draft duplicate/escaped/case-variant/top-level-scope property probe failed: "
             + (completed.stderr or completed.stdout).strip()
         )
 
@@ -104,4 +109,4 @@ if errors:
         print("ERROR:", error)
     raise SystemExit(f"FAILED with {len(errors)} error(s).")
 
-print("PASS: V25 commercial-draft strict UTF-8 provenance and PACKAGE-METADATA reject duplicate release identity before JSON parsing.")
+print("PASS: V25 commercial-draft strict UTF-8 provenance and PACKAGE-METADATA reject duplicate top-level release identity before JSON parsing without counting nested extension keys.")
