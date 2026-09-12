@@ -114,7 +114,8 @@ def main() -> int:
     required_dispatcher_tokens = (
         PINNED_CHECKOUT_V7,
         "git fetch --force --tags origin",
-        'series_prefix="v0.1.0-preview."',
+        'series_prefix="v${committed_major}.${committed_minor}.${committed_patch}-preview."',
+        '--series-prefix "${series_prefix}"',
         'version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"',
         "committed_product_version=",
         "committed_preview_ordinal=",

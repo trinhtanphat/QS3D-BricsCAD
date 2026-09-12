@@ -10,7 +10,7 @@ required_source = [
     "private static void PublishMissingDestinationWithoutStaleBackup",
     "File.Move(backupPath, staleBackupSafety)",
     "File.Move(tempPath, destinationPath)",
-    "RestorePreviousBackup(staleBackupSafety, backupPath)",
+    "RestorePreviousBackup(staleBackupSafety, backupPath, publicationFailure)",
     "A normal replacement backup represents the immediately previous",
 ]
 for token in required_source:

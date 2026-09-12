@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 UNINSTALL = ROOT / "scripts" / "uninstall-v25-autoload.ps1"
@@ -29,17 +30,37 @@ def main() -> int:
     require(text, "$key.GetValueNames()", "registry value enumeration")
     require(text, "$key.GetValueKind($name).ToString()", "registry value-kind snapshot")
     require(text, "$key.GetSubKeyNames()", "registry child-key enumeration")
+    require(text, "[Array]::Sort($valueNames, [StringComparer]::Ordinal)", "deterministic registry value ordering")
+    require(text, "[Array]::Sort($childNames, [StringComparer]::Ordinal)", "deterministic registry child ordering")
     require(text, "Children = @($children)", "recursive child snapshots")
     require(text, "function Restore-RegistryTreeSnapshot", "registry restore helper")
     require(text, "[Microsoft.Win32.RegistryValueKind][Enum]::Parse", "registry kind restoration")
     require(text, "$key.SetValue([string]$value.Name, $value.Value, $kind)", "registry value restoration")
     require(text, "Restore-RegistryTreeSnapshot -Snapshot $child", "recursive child restoration")
+    require(text, "Refusing registry rollback because DemandLoad path was recreated", "non-destructive foreign-writer rollback refusal")
     require(text, "function Get-DemandLoadTargets", "non-mutating registry target discovery")
+    require(text, "function Get-RegistryRemovalPlan", "registry removal-plan helper")
+    require(text, "function Assert-RegistryPlanEqual", "registry plan revalidation helper")
+    require(text, "function Get-InstallPayloadSnapshot", "payload snapshot helper")
+    require(text, "function Assert-InstallPayloadSnapshotEqual", "payload snapshot revalidation helper")
 
-    require(text, "$registryPlan = @()", "pre-mutation registry plan")
-    require(text, "$PSCmdlet.ShouldProcess", "ShouldProcess preservation")
-    require(text, "$snapshot = Get-RegistryTreeSnapshot -Path $target.AppKey", "approved registry snapshot")
-    require(text, "$stageFiles = $PSCmdlet.ShouldProcess($installFull, 'Remove QS3D installed files')", "approved file staging")
+    require(text, "$registryPlan = @(Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)", "pre-approval registry plan")
+    require(text, "$payloadSnapshot = @(Get-InstallPayloadSnapshot -Directory $installFull)", "pre-approval payload snapshot")
+    require(text, "$freshRegistryPlan = @(Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)", "post-approval registry plan")
+    require(text, "Assert-RegistryPlanEqual -Expected $registryPlan -Actual $freshRegistryPlan", "post-approval registry-plan equality")
+    require(text, "$registryPlan = @($freshRegistryPlan)", "fresh registry-plan promotion")
+    require(text, "$freshInstallFull = Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory -ForceDelete:$Force", "post-approval install-directory identity validation")
+    require(text, "$freshPayloadSnapshot = Get-InstallPayloadSnapshot -Directory $freshInstallFull", "post-approval payload snapshot")
+    require(text, "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual $freshPayloadSnapshot", "post-approval payload equality")
+    require(text, "Assert-InstallPayloadSnapshotEqual -Expected $payloadSnapshot -Actual (Get-InstallPayloadSnapshot -Directory $installFull)", "immediate pre-stage payload revalidation")
+    require(text, "Assert-RegistryTreeSnapshotEqual -Expected $entry.Snapshot -Actual (Get-RegistryTreeSnapshot -Path $entry.Target.AppKey)", "immediate pre-delete registry revalidation")
+
+    approvals = list(re.finditer(r"\$PSCmdlet\s*\.\s*ShouldProcess\s*\(", text, flags=re.IGNORECASE))
+    if len(approvals) != 1:
+        raise AssertionError(f"uninstall must have exactly one transaction-level ShouldProcess decision, found {len(approvals)}")
+    require(text, "if (-not ($PSCmdlet.ShouldProcess($transactionTarget, $transactionAction)))", "single negative transaction admission")
+    require(text, "return", "declined transaction return")
+
     require(text, "('.qs3d-uninstall-' + [Guid]::NewGuid().ToString('N'))", "unique same-parent quarantine")
     require(text, "Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop", "canonical install staging")
     require(text, "$removedSnapshots += $entry.Snapshot", "rollback tracking before registry mutation")
@@ -90,8 +111,11 @@ def main() -> int:
     identity_pos = text.find("Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory")
     identity_files_pos = text.find("$metadataPath = Join-Path $installFull 'PACKAGE-METADATA.json'")
     identity_dll_pos = text.find("[Reflection.AssemblyName]::GetAssemblyName($identityPath).Version")
-    plan_pos = text.find("$registryPlan = @()")
-    snapshot_pos = text.find("$snapshot = Get-RegistryTreeSnapshot -Path $target.AppKey")
+    plan_pos = text.find("$registryPlan = @(Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)")
+    payload_snapshot_pos = text.find("$payloadSnapshot = @(Get-InstallPayloadSnapshot -Directory $installFull)")
+    approval_pos = approvals[0].start()
+    fresh_plan_pos = text.find("$freshRegistryPlan = @(Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)")
+    fresh_payload_pos = text.find("$freshPayloadSnapshot = Get-InstallPayloadSnapshot -Directory $freshInstallFull")
     stage_pos = text.find("Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop")
     tracked_pos = text.find("$removedSnapshots += $entry.Snapshot")
     remove_registry_pos = text.find("Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop")
@@ -101,25 +125,37 @@ def main() -> int:
     cleanup_pos = text.find("Remove-Item -LiteralPath $quarantine -Recurse -Force -ErrorAction Stop")
     release_pos = text.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
     positions = (
-        lock_pos, identity_pos, identity_files_pos, identity_dll_pos, plan_pos, snapshot_pos, stage_pos, tracked_pos,
-        remove_registry_pos, rollback_file_pos, rollback_registry_pos, rethrow_pos,
-        cleanup_pos, release_pos,
+        lock_pos, identity_pos, identity_files_pos, identity_dll_pos, plan_pos, payload_snapshot_pos,
+        approval_pos, fresh_plan_pos, fresh_payload_pos, stage_pos, tracked_pos, remove_registry_pos,
+        rollback_file_pos, rollback_registry_pos, rethrow_pos, cleanup_pos, release_pos,
     )
     if min(positions) < 0 or not (
-        identity_files_pos < identity_dll_pos < lock_pos < identity_pos < plan_pos < snapshot_pos < stage_pos < tracked_pos < remove_registry_pos < cleanup_pos < release_pos
+        identity_files_pos < identity_dll_pos < lock_pos < identity_pos < plan_pos < approval_pos < fresh_plan_pos < stage_pos < tracked_pos < remove_registry_pos < cleanup_pos < release_pos
     ):
-        raise AssertionError("uninstall identity definition -> lock/validate -> plan+snapshot -> quarantine stage -> registry mutation -> post-commit cleanup -> release ordering is required")
+        raise AssertionError("uninstall identity definition -> lock/validate -> plan/snapshot -> single approval -> revalidation -> quarantine stage -> registry mutation -> post-commit cleanup -> release ordering is required")
+    if payload_snapshot_pos > approval_pos:
+        raise AssertionError("payload snapshot must be captured before transaction approval")
+    if fresh_payload_pos > stage_pos:
+        raise AssertionError("fresh payload snapshot must be captured before quarantine staging")
     if not (remove_registry_pos < rollback_file_pos < rollback_registry_pos < rethrow_pos):
         raise AssertionError("failure path must restore canonical files before registry snapshots and then rethrow the original failure")
 
-    require(text, "if (-not $KeepFiles)", "KeepFiles preservation")
+    # Regression checks: the superseded independently-approved topology must stay rejected.
+    # The exact-one check plus exact transaction-target call above rejects both legacy
+    # per-target and separate file confirmations without matching across helper scopes.
+    if "$registryPlan = @()" in text:
+        raise AssertionError("legacy mutable registry-plan accumulator must not return")
+    if "$stageFiles = $PSCmdlet.ShouldProcess($installFull, 'Remove QS3D installed files')" in text:
+        raise AssertionError("file removal must not have an independent ShouldProcess decision")
+
+    require(text, "if (-not $KeepFiles", "KeepFiles preservation")
     require(text, "if (Get-Process -Name bricscad -ErrorAction SilentlyContinue)", "all-BricsCAD closed precondition")
     require(text, "$UpdateMutexPrefix = 'Global\\QS3D-BricsCAD-V25-Update-'", "shared update mutex")
     if "Stop-Process" in text or "taskkill" in text or ".Kill(" in text:
         raise AssertionError("uninstaller must never force-terminate BricsCAD/processes")
 
     print(
-        "PASS: uninstall keeps package/DLL ownership fail closed even under -Force, uses force only for intentional custom-path scope, stages verified files before registry mutation, rolls back pre-commit failures, and treats post-commit quarantine deletion as residue cleanup."
+        "PASS: uninstall uses one transaction-level ShouldProcess decision, revalidates payload and registry generations after approval and immediately before mutation, keeps package/DLL ownership fail closed, and preserves rollback semantics."
     )
     return 0
 

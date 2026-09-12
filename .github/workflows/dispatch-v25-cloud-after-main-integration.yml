@@ -145,7 +145,40 @@ jobs:
             fi
           done
 
-          series_prefix="v0.1.0-preview."
+          version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
+          mapfile -t committed_versions < <(
+            sed -nE 's|^[[:space:]]*<Version>([^<]+)</Version>[[:space:]]*$|\1|p' "${version_project}"
+          )
+          if (( ${#committed_versions[@]} != 1 )); then
+            echo "Protected-main V25 project must contain exactly one committed Version value; found ${#committed_versions[@]}." >&2
+            exit 1
+          fi
+          committed_product_version="${committed_versions[0]}"
+          if [[ ! "${committed_product_version}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-preview\.([1-9][0-9]*)$ ]]; then
+            echo "Protected-main V25 ProductVersion is not a canonical automatic preview identity: ${committed_product_version}" >&2
+            exit 1
+          fi
+          committed_major="${BASH_REMATCH[1]}"
+          committed_minor="${BASH_REMATCH[2]}"
+          committed_patch="${BASH_REMATCH[3]}"
+          committed_preview_text="${BASH_REMATCH[4]}"
+          for committed_component in "${committed_major}" "${committed_minor}" "${committed_patch}"; do
+            if [[ "${committed_component}" =~ ^0[0-9]+$ ]]; then
+              echo "Protected-main V25 ProductVersion contains a non-canonical numeric component: ${committed_product_version}" >&2
+              exit 1
+            fi
+          done
+          if (( ${#committed_preview_text} > 5 )); then
+            echo "Committed preview ordinal exceeds the FileVersion 0..65535 range: ${committed_product_version}" >&2
+            exit 1
+          fi
+          committed_preview_ordinal=$((10#${committed_preview_text}))
+          if (( committed_preview_ordinal > 65535 )); then
+            echo "Committed preview ordinal exceeds the FileVersion 0..65535 range: ${committed_product_version}" >&2
+            exit 1
+          fi
+          series_prefix="v${committed_major}.${committed_minor}.${committed_patch}-preview."
+
           published_preview_tag=""
           published_preview_ordinal=0
           set +e
@@ -164,10 +197,14 @@ jobs:
             if [[ "${release_draft}" != "false" || -z "${release_published_at}" ]]; then
               continue
             fi
-            if [[ ! "${release_tag}" =~ ^v0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
+            if [[ ! "${release_tag}" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)-preview\.([1-9][0-9]*)$ ]]; then
               continue
             fi
-            ordinal_text="${BASH_REMATCH[1]}"
+            release_series_prefix="v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}-preview."
+            ordinal_text="${BASH_REMATCH[4]}"
+            if [[ "${release_series_prefix}" != "${series_prefix}" ]]; then
+              continue
+            fi
             if (( ${#ordinal_text} > 5 )); then
               echo "Published preview ordinal exceeds the FileVersion 0..65535 range: ${release_tag}" >&2
               exit 1
@@ -188,6 +225,7 @@ jobs:
             scripts/v25-release-batch-gate.py
             --source-sha "${source_sha}"
             --minimum-changes "${MINIMUM_RELEASE_CHANGES}"
+            --series-prefix "${series_prefix}"
             --previous-published-tag "${published_preview_tag}"
             --require-ready
           )
@@ -204,29 +242,6 @@ jobs:
             exit "${gate_status}"
           fi
 
-          version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"
-          mapfile -t committed_versions < <(
-            sed -nE 's|^[[:space:]]*<Version>([^<]+)</Version>[[:space:]]*$|\1|p' "${version_project}"
-          )
-          if (( ${#committed_versions[@]} != 1 )); then
-            echo "Protected-main V25 project must contain exactly one committed Version value; found ${#committed_versions[@]}." >&2
-            exit 1
-          fi
-          committed_product_version="${committed_versions[0]}"
-          if [[ ! "${committed_product_version}" =~ ^0\.1\.0-preview\.([1-9][0-9]*)$ ]]; then
-            echo "Protected-main V25 ProductVersion is not a canonical automatic preview identity: ${committed_product_version}" >&2
-            exit 1
-          fi
-          committed_preview_text="${BASH_REMATCH[1]}"
-          if (( ${#committed_preview_text} > 5 )); then
-            echo "Committed preview ordinal exceeds the FileVersion 0..65535 range: ${committed_product_version}" >&2
-            exit 1
-          fi
-          committed_preview_ordinal=$((10#${committed_preview_text}))
-          if (( committed_preview_ordinal > 65535 )); then
-            echo "Committed preview ordinal exceeds the FileVersion 0..65535 range: ${committed_product_version}" >&2
-            exit 1
-          fi
           tag="${series_prefix}${committed_preview_ordinal}"
 
           if (( committed_preview_ordinal <= published_preview_ordinal )); then

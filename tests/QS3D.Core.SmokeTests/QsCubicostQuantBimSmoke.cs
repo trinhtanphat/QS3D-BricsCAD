@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using QS3D.Core.BenchmarkParity;
 
@@ -11,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             CubicostReviewAndEvidence();
             QuantBimStandaloneWorkflow();
+            QuantBimIfcStepIngestion();
         }
 
         private static void CubicostReviewAndEvidence()
@@ -100,6 +102,64 @@ namespace QS3D.Core.SmokeTests
                 mismatchedQuantityRejected = true;
             }
             True(mismatchedQuantityRejected, "quantity owner mismatch fails closed");
+        }
+
+        private static void QuantBimIfcStepIngestion()
+        {
+            const string step = "ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n" +
+                "#10=IFCWALL('G1',$,'Wall-01',$,$,$,$,$);\n" +
+                "#20=IFCBUILDINGSTOREY('S1',$,'L01',$,$,$,$,$,$,.ELEMENT.,0.);\n" +
+                "#21=IFCRELCONTAINEDINSPATIALSTRUCTURE('R-SPATIAL',$,$,$,(#10),#20);\n" +
+                "#30=IFCWALLTYPE('T1',$,'External',$,$,$,$,$,$,.NOTDEFINED.);\n" +
+                "#31=IFCRELDEFINESBYTYPE('R-TYPE',$,$,$,(#10),#30);\n" +
+                "#40=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);\n" +
+                "#41=IFCPROPERTYSET('P1',$,'Pset_WallCommon',$,(#40));\n" +
+                "#42=IFCRELDEFINESBYPROPERTIES('R-PSET',$,$,$,(#10),#41);\n" +
+                "#50=IFCQUANTITYAREA('NetSideArea',$,$,12.0,$);\n" +
+                "#51=IFCQUANTITYVOLUME('NetVolume',$,$,2.4,$);\n" +
+                "#52=IFCELEMENTQUANTITY('Q1',$,'BaseQuantities',$,$,(#50,#51));\n" +
+                "#53=IFCRELDEFINESBYPROPERTIES('R-QTO',$,$,$,(#10),#52);\n" +
+                "#60=IFCCLASSIFICATIONREFERENCE($,'ARC.WALL','Wall',$);\n" +
+                "#61=IFCRELASSOCIATESCLASSIFICATION('R-CLASS',$,$,$,(#10),#60);\nENDSEC;\nEND-ISO-10303-21;\n";
+
+            var source = new IfcStepStandaloneSource();
+            var document = source.Parse("minimal-qto.ifc", step);
+            Equal(1, document.Elements.Count, "STEP product count");
+            True(document.Revision.StartsWith("IFCSTEP-", StringComparison.Ordinal), "STEP deterministic revision");
+            var wall = document.Elements.Single();
+            Equal("G1", wall.Guid, "STEP GlobalId");
+            Equal("IfcWall", wall.Entity, "STEP entity");
+            Equal("L01", wall.Storey, "STEP storey relationship");
+            Equal("External", wall.Type, "STEP type relationship");
+            Equal("ARC.WALL", wall.Classification, "STEP classification relationship");
+            Equal("ifc-step://#10", wall.GeometryReference, "STEP source evidence reference");
+            True(wall.Properties.Any(x => x.Name == "Pset_WallCommon.IsExternal" && x.Value == "TRUE"), "STEP property set");
+            Near(12d, wall.Quantities.Single(x => x.QuantityName == "NetSideArea").Quantity, 1e-12, "STEP area quantity");
+            Near(2.4d, wall.Quantities.Single(x => x.QuantityName == "NetVolume").Quantity, 1e-12, "STEP volume quantity");
+
+            var workbench = new QuantBimStandaloneWorkbench(source);
+            var tempPath = Path.Combine(Path.GetTempPath(), "qs3d-quantbim-" + Guid.NewGuid().ToString("N") + ".ifc");
+            try
+            {
+                File.WriteAllText(tempPath, step);
+                var opened = workbench.Open(tempPath);
+                Equal("G1", opened.Elements.Single().Guid, "standalone file-open IFC ingestion");
+            }
+            finally
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+            }
+
+            var duplicateRejected = false;
+            try
+            {
+                source.Parse("duplicate.ifc", step.Replace("#20=IFCBUILDINGSTOREY", "#10=IFCBUILDINGSTOREY"));
+            }
+            catch (InvalidDataException)
+            {
+                duplicateRejected = true;
+            }
+            True(duplicateRejected, "duplicate STEP identity fails closed");
         }
 
         private sealed class FakeIfcSource : IIfcStandaloneSource
