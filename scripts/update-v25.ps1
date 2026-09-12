@@ -362,6 +362,22 @@ function Require-ManifestProperty {
     return $property.Value
 }
 
+function Get-JsonPropertyOccurrenceCount {
+    param([string]$JsonText, [string]$PropertyName)
+
+    $count = 0
+    $propertyPattern = '"(?:\\["\\/bfnrt]|\\u[0-9A-Fa-f]{4}|[^"\\\x00-\x1F])*"\s*:'
+    foreach ($match in [Text.RegularExpressions.Regex]::Matches($JsonText, $propertyPattern)) {
+        $colon = $match.Value.LastIndexOf(':')
+        if ($colon -le 0) { continue }
+        $encodedName = $match.Value.Substring(0, $colon).Trim()
+        try { $decodedName = [string]($encodedName | ConvertFrom-Json -ErrorAction Stop) }
+        catch { continue }
+        if ([string]::Equals($decodedName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) { $count++ }
+    }
+    return $count
+}
+
 function Convert-ToStrictSemVer {
     param([string]$Value, [string]$Label)
 
@@ -981,7 +997,23 @@ try {
         $manifestFile = Get-Item -LiteralPath $manifestPath
         if ($manifestFile.Length -le 0 -or $manifestFile.Length -gt 65536) { throw 'Update manifest must be between 1 byte and 64 KiB.' }
 
-        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $manifestText = Get-Content -LiteralPath $manifestPath -Raw
+        foreach ($propertyName in @(
+            'schemaVersion',
+            'product',
+            'target',
+            'productVersion',
+            'version',
+            'packageUri',
+            'sha256',
+            'signerThumbprint'
+        )) {
+            if ((Get-JsonPropertyOccurrenceCount -JsonText $manifestText -PropertyName $propertyName) -ne 1) {
+                throw "Update manifest must contain exactly one '$propertyName' property."
+            }
+        }
+        try { $manifest = $manifestText | ConvertFrom-Json -ErrorAction Stop }
+        catch { throw "Update manifest JSON is invalid: $($_.Exception.Message)" }
         $schemaVersion = [int](Require-ManifestProperty -Manifest $manifest -Name 'schemaVersion')
         if ($schemaVersion -ne 2) { throw "Unsupported update manifest schemaVersion: $schemaVersion. Secure auto-update requires schemaVersion 2 with productVersion binding." }
         if ([string](Require-ManifestProperty -Manifest $manifest -Name 'product') -ne 'QS3D') { throw 'Update manifest product must be QS3D.' }
