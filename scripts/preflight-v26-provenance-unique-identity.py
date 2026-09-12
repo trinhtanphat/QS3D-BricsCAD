@@ -139,6 +139,10 @@ def run_windows_duplicate_behavior() -> None:
             duplicate = valid[:-1] + f',"{field}":{encoded_value}' + "}"
             invoke(f"duplicate {field}", duplicate, False)
 
+        escaped_product = json.dumps(provenance["product"], separators=(",", ":"))
+        escaped_duplicate = valid[:-1] + f',"pro\\u0064uct":{escaped_product}' + "}"
+        invoke("escaped-equivalent duplicate product", escaped_duplicate, False)
+
 
 run_windows_duplicate_behavior()
 print("PASS V26 provenance release-critical identity fields are duplicate-sensitive before JSON parsing")
