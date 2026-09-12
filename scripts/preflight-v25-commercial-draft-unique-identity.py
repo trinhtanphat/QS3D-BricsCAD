@@ -32,6 +32,12 @@ for token in required_tokens:
     if token not in source:
         errors.append("V25 commercial-draft unique-identity contract missing token: " + token)
 
+strict_reader = "[Text.UTF8Encoding]::new($false, $true), $false, 4096, $true)"
+if source.count(strict_reader) != 2:
+    errors.append(
+        "V25 commercial-draft held text and ZIP metadata readers must both disable BOM auto-detection while using strict UTF-8"
+    )
+
 if not errors:
     helper_start = source.index("function Get-JsonPropertyOccurrenceCount")
     assert_start = source.index("function Assert-JsonPropertyCounts", helper_start)
@@ -98,4 +104,4 @@ if errors:
         print("ERROR:", error)
     raise SystemExit(f"FAILED with {len(errors)} error(s).")
 
-print("PASS: V25 commercial-draft provenance and PACKAGE-METADATA reject duplicate release identity before JSON parsing.")
+print("PASS: V25 commercial-draft strict UTF-8 provenance and PACKAGE-METADATA reject duplicate release identity before JSON parsing.")
