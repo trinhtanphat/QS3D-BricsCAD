@@ -133,7 +133,7 @@ function Get-JsonPropertyOccurrenceCount([string]$JsonText, [string]$PropertyNam
         $encodedName = $match.Value.Substring(0, $colon).Trim()
         try { $decodedName = [string]($encodedName | ConvertFrom-Json -ErrorAction Stop) }
         catch { continue }
-        if ([string]::Equals($decodedName, $PropertyName, [StringComparison]::Ordinal)) { $count++ }
+        if ([string]::Equals($decodedName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) { $count++ }
     }
     return $count
 }
