@@ -58,6 +58,74 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class CubicostReviewedQuantityDownstreamBridge
     {
+        private static readonly StringComparer SemanticComparer = StringComparer.OrdinalIgnoreCase;
+
+        private readonly struct InventoryGroupKey : IEquatable<InventoryGroupKey>
+        {
+            public InventoryGroupKey(string classification, string unit)
+            {
+                Classification = classification;
+                Unit = unit;
+            }
+
+            public string Classification { get; }
+            public string Unit { get; }
+
+            public bool Equals(InventoryGroupKey other)
+            {
+                return SemanticComparer.Equals(Classification, other.Classification) && SemanticComparer.Equals(Unit, other.Unit);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is InventoryGroupKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    return (SemanticComparer.GetHashCode(Classification) * 397) ^ SemanticComparer.GetHashCode(Unit);
+                }
+            }
+        }
+
+        private readonly struct DownstreamLineKey : IEquatable<DownstreamLineKey>
+        {
+            public DownstreamLineKey(string componentId, string classification, string unit)
+            {
+                ComponentId = componentId;
+                Classification = classification;
+                Unit = unit;
+            }
+
+            public string ComponentId { get; }
+            public string Classification { get; }
+            public string Unit { get; }
+
+            public bool Equals(DownstreamLineKey other)
+            {
+                return SemanticComparer.Equals(ComponentId, other.ComponentId)
+                    && SemanticComparer.Equals(Classification, other.Classification)
+                    && SemanticComparer.Equals(Unit, other.Unit);
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is DownstreamLineKey other && Equals(other);
+            }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = SemanticComparer.GetHashCode(ComponentId);
+                    hash = (hash * 397) ^ SemanticComparer.GetHashCode(Classification);
+                    return (hash * 397) ^ SemanticComparer.GetHashCode(Unit);
+                }
+            }
+        }
+
         public IReadOnlyList<CubicostDownstreamLine> Admit(IEnumerable<CubicostQuantityLine> lines, IEnumerable<CubicostDownstreamBinding> bindings, bool allowProposed)
         {
             if (lines == null) throw new ArgumentNullException("lines");
@@ -87,7 +155,7 @@ namespace QS3D.Core.BenchmarkParity
                 admitted.Add(new CubicostDownstreamLine(line.ComponentId, line.Classification, line.Classification + ".FORMWORK", binding.FormworkFormulaId, "m2", line.FormworkArea, line.ReviewStatus, line.Evidence));
             }
 
-            return new ReadOnlyCollection<CubicostDownstreamLine>(admitted.OrderBy(x => x.InventoryClassification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.ComponentId, StringComparer.OrdinalIgnoreCase).ToList());
+            return new ReadOnlyCollection<CubicostDownstreamLine>(admitted.OrderBy(x => x.InventoryClassification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.InventoryClassification, StringComparer.Ordinal).ThenBy(x => x.ComponentId, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.ComponentId, StringComparer.Ordinal).ToList());
         }
 
         public IReadOnlyList<TakeoffInventoryLine> BuildInventory(IEnumerable<CubicostDownstreamLine> admitted)
@@ -96,9 +164,16 @@ namespace QS3D.Core.BenchmarkParity
             var snapshot = admitted.ToList();
             ValidateAdmitted(snapshot);
             return new ReadOnlyCollection<TakeoffInventoryLine>(snapshot
-                .GroupBy(x => x.InventoryClassification + "\u001f" + x.Unit, StringComparer.OrdinalIgnoreCase)
-                .Select(g => new TakeoffInventoryLine(g.First().InventoryClassification, g.First().Unit, g.Sum(x => x.Quantity), g.Select(x => x.ComponentId).Distinct(StringComparer.OrdinalIgnoreCase).Count()))
-                .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase).ToList());
+                .GroupBy(x => new InventoryGroupKey(x.InventoryClassification, x.Unit))
+                .Select(g =>
+                {
+                    var classification = g.Select(x => x.InventoryClassification).OrderBy(x => x, StringComparer.Ordinal).First();
+                    var unit = g.Select(x => x.Unit).OrderBy(x => x, StringComparer.Ordinal).First();
+                    var quantity = CompensatedSum(g.Select(x => x.Quantity), classification + "/" + unit);
+                    var count = g.Select(x => x.ComponentId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+                    return new TakeoffInventoryLine(classification, unit, quantity, count);
+                })
+                .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Classification, StringComparer.Ordinal).ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Unit, StringComparer.Ordinal).ToList());
         }
 
         public IReadOnlyList<CubicostCommercialHandoff> BuildCommercialHandoffs(IEnumerable<CubicostDownstreamLine> admitted)
@@ -107,20 +182,40 @@ namespace QS3D.Core.BenchmarkParity
             var snapshot = admitted.ToList();
             ValidateAdmitted(snapshot);
             var destinations = new[] { "Estimate", "Tender", "Procurement" };
-            return new ReadOnlyCollection<CubicostCommercialHandoff>(destinations.SelectMany(destination => snapshot.Select(line => new CubicostCommercialHandoff(destination, line))).OrderBy(x => x.Destination, StringComparer.Ordinal).ThenBy(x => x.Line.InventoryClassification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Line.ComponentId, StringComparer.OrdinalIgnoreCase).ToList());
+            return new ReadOnlyCollection<CubicostCommercialHandoff>(destinations.SelectMany(destination => snapshot.Select(line => new CubicostCommercialHandoff(destination, line))).OrderBy(x => x.Destination, StringComparer.Ordinal).ThenBy(x => x.Line.InventoryClassification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Line.InventoryClassification, StringComparer.Ordinal).ThenBy(x => x.Line.ComponentId, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Line.ComponentId, StringComparer.Ordinal).ToList());
         }
 
         private static void ValidateAdmitted(IEnumerable<CubicostDownstreamLine> lines)
         {
-            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var keys = new HashSet<DownstreamLineKey>();
             foreach (var line in lines)
             {
                 if (line == null) throw new ArgumentException("Downstream collection contains null.", "lines");
                 if (line.ReviewStatus != ComponentRecognitionStatus.Accepted && line.ReviewStatus != ComponentRecognitionStatus.Corrected) throw new InvalidOperationException("Only accepted/corrected Cubicost quantities may be published downstream.");
                 ValidateQuantity(line.Quantity, line.ComponentId, line.Unit);
-                var key = line.ComponentId + "\u001f" + line.InventoryClassification + "\u001f" + line.Unit;
+                var key = new DownstreamLineKey(line.ComponentId, line.InventoryClassification, line.Unit);
                 if (!keys.Add(key)) throw new InvalidOperationException("Duplicate Cubicost downstream line: " + line.ComponentId + "/" + line.InventoryClassification + ".");
             }
+        }
+
+        private static double CompensatedSum(IEnumerable<double> values, string label)
+        {
+            var sum = 0d;
+            var compensation = 0d;
+            foreach (var value in values)
+            {
+                if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException("Invalid Cubicost inventory quantity for " + label + ".");
+                var next = sum + value;
+                if (double.IsNaN(next) || double.IsInfinity(next)) throw new InvalidOperationException("Cubicost inventory quantity overflow for " + label + ".");
+                var correction = Math.Abs(sum) >= Math.Abs(value) ? (sum - next) + value : (value - next) + sum;
+                compensation += correction;
+                if (double.IsNaN(compensation) || double.IsInfinity(compensation)) throw new InvalidOperationException("Cubicost inventory compensation overflow for " + label + ".");
+                sum = next;
+            }
+
+            var result = sum + compensation;
+            if (double.IsNaN(result) || double.IsInfinity(result)) throw new InvalidOperationException("Cubicost inventory quantity overflow for " + label + ".");
+            return result == 0d ? 0d : result;
         }
 
         private static void ValidateQuantity(double quantity, string componentId, string kind)
