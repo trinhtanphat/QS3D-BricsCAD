@@ -195,6 +195,7 @@ namespace QS3D.BricsCAD.V25.Cad
                             {
                                 cutter.SetDatabaseDefaults(document.Database);
                                 cutter.CreateBox(cutterWidth, cutterDepth, cutterHeight);
+                                cutter.TransformBy(Matrix3d.Displacement(new Vector3d(-cutterWidth / 2d, -cutterDepth / 2d, -cutterHeight / 2d)));
                                 cutter.TransformBy(Matrix3d.Rotation(item.Angle, Vector3d.ZAxis, Point3d.Origin));
                                 cutter.TransformBy(Matrix3d.Displacement(new Vector3d(item.Target.X, item.Target.Y, item.Target.Z)));
                                 hostSolid.BooleanOperation(BooleanOperationType.BoolSubtract, cutter);
