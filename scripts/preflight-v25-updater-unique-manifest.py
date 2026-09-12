@@ -77,12 +77,12 @@ def behavioral_probe(text: str) -> None:
     helper = text[helper_start:helper_end]
     probe = helper + r'''
 $cases = @(
-    @{ Json='{"product":"QS3D"}'; Name='product'; Expected=1 },
-    @{ Json='{"product":"QS3D","product":"OTHER"}'; Name='product'; Expected=2 },
-    @{ Json='{"target":"BricsCAD V25 x64","TARGET":"OTHER"}'; Name='target'; Expected=2 },
-    @{ Json='{"product":"QS3D","pro\u0064uct":"OTHER"}'; Name='product'; Expected=2 },
-    @{ Json='{"signerThumbprint":"a","SIGNERTHUMBPRINT":"b"}'; Name='signerThumbprint'; Expected=2 },
-    @{ Json='{"productVersion":"1.2.3","product\u0056ersion":"9.9.9"}'; Name='productVersion'; Expected=2 }
+    @{ Json='{"product":"QS3D"}'.Replace('\',''); Name='product'; Expected=1 },
+    @{ Json='{"product":"QS3D","product":"OTHER"}'.Replace('\',''); Name='product'; Expected=2 },
+    @{ Json='{"target":"BricsCAD V25 x64","TARGET":"OTHER"}'.Replace('\',''); Name='target'; Expected=2 },
+    @{ Json='{"product":"QS3D","pro\u0064uct":"OTHER"}'.Replace('\"','"'); Name='product'; Expected=2 },
+    @{ Json='{"signerThumbprint":"a","SIGNERTHUMBPRINT":"b"}'.Replace('\',''); Name='signerThumbprint'; Expected=2 },
+    @{ Json='{"productVersion":"1.2.3","product\u0056ersion":"9.9.9"}'.Replace('\"','"'); Name='productVersion'; Expected=2 }
 )
 foreach ($case in $cases) {
     $actual = Get-JsonPropertyOccurrenceCount -JsonText $case.Json -PropertyName $case.Name
