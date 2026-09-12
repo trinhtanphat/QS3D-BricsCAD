@@ -334,7 +334,7 @@ namespace QS3D.BricsCAD.V25
                    + ",\"currentAction\":\"" + Escape(Bound(currentAction, 1200)) + "\""
                    + ",\"actionId\":\"" + Escape(Bound(McpAgentExperience.LastActionId, 128)) + "\""
                    + ",\"nextStep\":\"" + Escape(Bound(nextStep, 1200)) + "\""
-                   + ",\"lastError\":\"" + Escape(Bound(McpAgentExperience.LastError, 1200)) + "\""
+                   + ",\"lastError\":\"" + Escape(McpPublicTextSanitizer.Sanitize(McpAgentExperience.LastError)) + "\""
                    + ",\"terminalState\":\"" + Escape(Bound(McpAgentExperience.LastTerminalState, 64)) + "\""
                    + ",\"durationMs\":" + duration.ToString(CultureInfo.InvariantCulture)
                    + ",\"updatedUtc\":\"" + updated.ToString("o", CultureInfo.InvariantCulture) + "\"}";
