@@ -31,7 +31,7 @@ namespace QS3D.Core.Audit
         public string Actor { get => _actor; set => SetText(ref _actor, value); }
         public string CorrelationId { get => _correlationId; set => SetText(ref _correlationId, value); }
 
-        internal event Action? PersistenceMutationRequested;
+        internal event System.Action? PersistenceMutationRequested;
 
         private void SetText(ref string field, string value)
         {
