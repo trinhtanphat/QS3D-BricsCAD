@@ -16,8 +16,10 @@ namespace QS3D.Core.SmokeTests
             ProjectQuantityRuleRevisionLifecycleSmoke.Run();
             AuditEventStructuralMutationsAdvanceExactlyOnce();
             AuditEventNoOpMutationsDoNotAdvance();
+            AuditEventRejectedMutationsDoNotAdvance();
             AuditEventPropertyMutationsAdvanceExactlyOnce();
             AuditEventPropertyNoOpsDoNotAdvance();
+            AuditEventOwnershipTracksOnlyCurrentMembers();
             AuditTrailMutationsAdvanceExactlyOnce();
             AuditEventRevisionOverflowFailsBeforeMutation();
             AuditEventPropertyRevisionOverflowFailsBeforeMutation();
@@ -147,6 +149,26 @@ namespace QS3D.Core.SmokeTests
             Equal(emptyVersion, project.ChangeVersion, "audit clear-empty");
         }
 
+        private static void AuditEventRejectedMutationsDoNotAdvance()
+        {
+            var project = Project();
+            var first = Audit("one");
+            project.AuditEvents.Add(first);
+            var version = project.ChangeVersion;
+            var count = project.AuditEvents.Count;
+
+            Throws<ArgumentNullException>(() => project.AuditEvents.Add(null!));
+            AssertAuditUnchanged(project, version, count, first, "audit null Add");
+            Throws<ArgumentNullException>(() => project.AuditEvents.Insert(0, null!));
+            AssertAuditUnchanged(project, version, count, first, "audit null Insert");
+            Throws<ArgumentOutOfRangeException>(() => project.AuditEvents.Insert(2, Audit("out-of-range-insert")));
+            AssertAuditUnchanged(project, version, count, first, "audit out-of-range Insert");
+            Throws<ArgumentOutOfRangeException>(() => project.AuditEvents.RemoveAt(1));
+            AssertAuditUnchanged(project, version, count, first, "audit out-of-range RemoveAt");
+            Throws<ArgumentOutOfRangeException>(() => project.AuditEvents[1] = Audit("out-of-range-set"));
+            AssertAuditUnchanged(project, version, count, first, "audit out-of-range index replacement");
+        }
+
         private static void AuditEventPropertyMutationsAdvanceExactlyOnce()
         {
             var project = Project();
@@ -175,6 +197,29 @@ namespace QS3D.Core.SmokeTests
             item.Actor = item.Actor;
             item.CorrelationId = item.CorrelationId;
             Equal(version, project.ChangeVersion, "audit property no-op assignments");
+        }
+
+        private static void AuditEventOwnershipTracksOnlyCurrentMembers()
+        {
+            var project = Project();
+            var first = Audit("first");
+            var second = Audit("second");
+            project.AuditEvents.Add(first);
+
+            AssertAdvance(project, () => project.AuditEvents[0] = second, "audit ownership replacement");
+            var afterReplacement = project.ChangeVersion;
+            first.Action = "detached";
+            Equal(afterReplacement, project.ChangeVersion, "detached audit event mutation");
+            AssertAdvance(project, () => second.Action = "owned", "owned replacement mutation");
+
+            AssertAdvance(project, () => project.AuditEvents.Add(second), "duplicate audit reference add");
+            AssertAdvance(project, () => second.Detail = "still-single-subscription", "duplicate audit reference mutation");
+            AssertAdvance(project, () => project.AuditEvents.RemoveAt(0), "remove one duplicate audit reference");
+            AssertAdvance(project, () => second.Actor = "still-owned", "remaining duplicate audit reference mutation");
+            AssertAdvance(project, () => project.AuditEvents.RemoveAt(0), "remove last duplicate audit reference");
+            var afterDetach = project.ChangeVersion;
+            second.CorrelationId = "detached";
+            Equal(afterDetach, project.ChangeVersion, "last-reference detach");
         }
 
         private static void AuditTrailMutationsAdvanceExactlyOnce()
@@ -219,6 +264,13 @@ namespace QS3D.Core.SmokeTests
             Equal(version, project.ChangeVersion, operation + " revision");
             Equal(count, project.Elements.Count, operation + " count");
             if (!ReferenceEquals(first, project.Elements[0])) throw new Exception(operation + ": original element changed.");
+        }
+
+        private static void AssertAuditUnchanged(ProjectState project, long version, int count, AuditEvent first, string operation)
+        {
+            Equal(version, project.ChangeVersion, operation + " revision");
+            Equal(count, project.AuditEvents.Count, operation + " count");
+            if (!ReferenceEquals(first, project.AuditEvents[0])) throw new Exception(operation + ": original audit event changed.");
         }
 
         private static void Throws<TException>(Action action) where TException : Exception
