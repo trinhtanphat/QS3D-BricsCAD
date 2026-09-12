@@ -170,7 +170,8 @@ for token in (
     "PACKAGE-METADATA.json",
     "QS3D.BricsCAD.V25.dll",
     "BricsCAD V25 x64",
-    "$registryPlan = @()",
+    "Get-RegistryRemovalPlan",
+    "Assert-RegistryPlanEqual",
     "Get-RegistryTreeSnapshot",
     "Restore-RegistryTreeSnapshot",
     ".qs3d-uninstall-",
@@ -296,14 +297,15 @@ if min(install_snapshot, install_swap, install_registry, install_catch, install_
     errors.append("installer must snapshot before payload/registry mutation and rollback registry/payload before rethrow")
 
 uninstall_identity = uninstaller.find("Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory")
-uninstall_plan = uninstaller.find("$registryPlan = @()")
+uninstall_plan = uninstaller.find("$registryPlan = @(Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)")
+uninstall_revalidate = uninstaller.find("Assert-RegistryPlanEqual -Expected $registryPlan -Actual $freshRegistryPlan", uninstall_plan)
 uninstall_quarantine = uninstaller.find("Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop")
 uninstall_registry = uninstaller.find("Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop")
 uninstall_restore_files = uninstaller.find("Move-Item -LiteralPath $quarantine -Destination $installFull -ErrorAction Stop")
 uninstall_restore_registry = uninstaller.find("Restore-RegistryTreeSnapshot -Snapshot $removedSnapshots[$index]")
-if min(uninstall_identity, uninstall_plan, uninstall_quarantine, uninstall_registry, uninstall_restore_files, uninstall_restore_registry) < 0:
-    errors.append("uninstaller must validate identity, snapshot plan, quarantine files and provide file/registry rollback")
-elif not (uninstall_identity < uninstall_plan < uninstall_quarantine < uninstall_registry < uninstall_restore_files < uninstall_restore_registry):
+if min(uninstall_identity, uninstall_plan, uninstall_revalidate, uninstall_quarantine, uninstall_registry, uninstall_restore_files, uninstall_restore_registry) < 0:
+    errors.append("uninstaller must validate identity, build and revalidate the registry plan, quarantine files and provide file/registry rollback")
+elif not (uninstall_identity < uninstall_plan < uninstall_revalidate < uninstall_quarantine < uninstall_registry < uninstall_restore_files < uninstall_restore_registry):
     errors.append("uninstaller transaction ordering must validate/snapshot before mutation and restore files before registry on failure")
 
 if errors:

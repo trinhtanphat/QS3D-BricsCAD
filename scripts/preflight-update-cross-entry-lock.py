@@ -76,15 +76,16 @@ def main() -> int:
     uninstall_cad = uninstall.find("if (Get-Process -Name bricscad -ErrorAction SilentlyContinue)")
     uninstall_lock = uninstall.find("$updateMutex = Enter-Qs3dUpdateMutex")
     uninstall_identity = uninstall.find("Assert-InstallDirectorySafeToRemove -Directory $InstallDirectory")
-    uninstall_plan = uninstall.find("$registryPlan = @()")
+    uninstall_plan = uninstall.find("$registryPlan = @(Get-RegistryRemovalPlan -RequestedVersions $VersionKeys -RequestedLanguages $LanguageKeys)")
+    uninstall_revalidate = uninstall.find("Assert-RegistryPlanEqual -Expected $registryPlan -Actual $freshRegistryPlan", uninstall_plan)
     uninstall_stage = uninstall.find("Move-Item -LiteralPath $installFull -Destination $quarantine -ErrorAction Stop")
     uninstall_registry_remove = uninstall.find("Remove-Item -LiteralPath $entry.Target.AppKey -Recurse -Force -ErrorAction Stop")
     uninstall_cleanup = uninstall.find("Remove-Item -LiteralPath $quarantine -Recurse -Force -ErrorAction Stop")
     uninstall_release = uninstall.rfind("Exit-Qs3dUpdateMutex -Mutex $updateMutex")
-    if min(uninstall_cad, uninstall_lock, uninstall_identity, uninstall_plan, uninstall_stage, uninstall_registry_remove, uninstall_cleanup, uninstall_release) < 0 or not (
-        uninstall_cad < uninstall_lock < uninstall_identity < uninstall_plan < uninstall_stage < uninstall_registry_remove < uninstall_cleanup < uninstall_release
+    if min(uninstall_cad, uninstall_lock, uninstall_identity, uninstall_plan, uninstall_revalidate, uninstall_stage, uninstall_registry_remove, uninstall_cleanup, uninstall_release) < 0 or not (
+        uninstall_cad < uninstall_lock < uninstall_identity < uninstall_plan < uninstall_revalidate < uninstall_stage < uninstall_registry_remove < uninstall_cleanup < uninstall_release
     ):
-        raise AssertionError("uninstaller must refuse live CAD, acquire cross-entry lock, plan/snapshot state, quarantine files, remove registry state, and hold ownership through cleanup")
+        raise AssertionError("uninstaller must refuse live CAD, acquire cross-entry lock, plan and revalidate registry state after approval, quarantine files, remove registry state, and hold ownership through cleanup")
 
     for text, label in ((update, "secure updater"), (install, "installer"), (uninstall, "uninstaller")):
         if "Stop-Process" in text or "taskkill" in text or ".Kill(" in text:

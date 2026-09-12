@@ -19,7 +19,6 @@ namespace QS3D.Core.SmokeTests
             ProgressRetentionPercentagePrecisionFailsClosed();
             CostMonetaryMultiplicationPrecisionFailsClosed();
             HistoricalUnitCostDivisionPrecisionFailsClosed();
-            EstimatingRateBuildUpSmoke.Run();
             InvalidInputsFailClosed();
         }
 

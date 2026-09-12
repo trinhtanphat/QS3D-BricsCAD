@@ -34,6 +34,8 @@ namespace QS3D.Core.SmokeTests
                 CommercialCostControlSmoke.Run();
                 BeamCoreFormworkRegeneratorSmoke.Run();
                 ProjectQuantityCanonicalTraversalSmoke.Run();
+                AtomicFileCommitRollbackFailureSmoke.Run();
+                QsLiveWorkbookApiSmoke.Run();
 
                 var legacyMain = typeof(Program).GetMethod(
                     "Main",

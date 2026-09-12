@@ -505,7 +505,7 @@ for path, text in workflow_sources:
             "github.actor != 'github-actions[bot]'", "github.event.workflow_run.conclusion == 'success'",
             "github.event.workflow_run.head_branch == 'main'", "gh workflow run release-v25-cloud.yml", "--ref main",
             'source_sha="${GITHUB_SHA,,}"', 'source_sha="${current_main,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
-            "git fetch --force --tags origin", 'series_prefix="v0.1.0-preview."',
+            "git fetch --force --tags origin", 'series_prefix="v${committed_major}.${committed_minor}.${committed_patch}-preview."', '--series-prefix "${series_prefix}"',
             "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", "committed_product_version=",
             "committed_preview_ordinal=", 'tag="${series_prefix}${committed_preview_ordinal}"',
             "Refusing to reserve or dispatch an uncommitted preview tag", "ordinal > 65535",
@@ -555,8 +555,8 @@ for path, text in workflow_sources:
             "Update with rebase", "Update with main", "HTTP (409|422)",
         ), path.name)
         for forbidden in (
-            "workflow_dispatch", "workflow_run", "pull_request_target", "contents: write", "actions: write", "issues: write",
-            "gh pr merge", "git push", "git reset", "--force", "gh workflow run", "gh release", "github.token",
+            "workflow_dispatch", "workflow_run", "pull_request_target", "contents: write", "issues: write",
+            "gh pr merge", "git push", "git reset", "--force", "gh workflow run", "gh release",
         ):
             if forbidden in text:
                 errors.append(f"{path.name}: hybrid coordinator contains forbidden token: {forbidden}")
@@ -566,8 +566,10 @@ for path, text in workflow_sources:
         expected_jobs = {"arm-native-automerge", "refresh-branches"}
         if {name for name, _ in job_blocks} != expected_jobs:
             errors.append(f"{path.name}: coordinator jobs must be exactly {sorted(expected_jobs)}")
-        arm_block = next(("\n".join(block) for name, block in job_blocks if name == "arm-native-automerge"), "")
-        refresh_block = next(("\n".join(block) for name, block in job_blocks if name == "refresh-branches"), "")
+        arm_lines = next((block for name, block in job_blocks if name == "arm-native-automerge"), [])
+        refresh_lines = next((block for name, block in job_blocks if name == "refresh-branches"), [])
+        arm_block = "\n".join(arm_lines)
+        refresh_block = "\n".join(refresh_lines)
         require_tokens(
             arm_block,
             ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "update_method=merge"),
@@ -578,6 +580,17 @@ for path, text in workflow_sources:
             ("github.event_name == 'push'", "github.ref == 'refs/heads/main'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "update_method=merge"),
             f"{path.name}/refresh-branches",
         )
+        if normalize_expression(extract_job_if_expression(arm_lines)) != "github.event_name == 'pull_request'":
+            errors.append(f"{path.name}/arm-native-automerge: job must be pull_request-only")
+        if normalize_expression(extract_job_if_expression(refresh_lines)) != "github.event_name == 'push' && github.ref == 'refs/heads/main'":
+            errors.append(f"{path.name}/refresh-branches: Actions-write job must be push-only on protected main")
+        if "actions: write" in arm_block or "github.token" in arm_block or "ACTIONS_TOKEN:" in arm_block:
+            errors.append(f"{path.name}/arm-native-automerge: PR job must not receive Actions cancellation authority")
+        require_tokens(refresh_block, ("actions: write", "ACTIONS_TOKEN: ${{ github.token }}"), f"{path.name}/refresh-branches cancellation authority")
+        if text.count("actions: write") != 1:
+            errors.append(f"{path.name}: coordinator must grant actions: write exactly once, only to refresh-branches")
+        if text.count("github.token") != 1 or text.count("ACTIONS_TOKEN:") != 1:
+            errors.append(f"{path.name}: coordinator must expose github.token exactly once as ACTIONS_TOKEN in refresh-branches")
 
     else:
         if trigger_names != {"workflow_dispatch"}:

@@ -27,6 +27,8 @@ namespace QS3D.Core.SmokeTests
             P3BimEditingModelingEvidenceRules();
             P4RecognitionEvidenceRules();
             P5RebarEvidenceRules();
+            P6SpecialCategoryEvidenceRules();
+            P7ReviewDocumentationEvidenceRules();
         }
 
         private static ParityFeatureRecord Record(string id, ParityEvidenceStage stage) =>
@@ -134,6 +136,44 @@ namespace QS3D.Core.SmokeTests
             Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
             if (manifest.CatalogComplete)
                 throw new InvalidOperationException("P5 must not mark the parity catalog complete.");
+        }
+        private static void P6SpecialCategoryEvidenceRules()
+        {
+            var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
+            var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
+            var wired = new[] { "room", "room.finish", "earthwork", "stair", "railing", "curtain", "door-opening", "grid" };
+            foreach (var id in wired)
+            {
+                var record = manifest.GetRequired(new FeatureId(id));
+                Equal(id, record.WorkflowKey);
+                Equal(ParityApplicability.Applicable, record.Applicability);
+                Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
+            }
+            var referenceOnly = new[] { "pile-cap", "pile-cap.rebar", "pile.drop-to-cap", "steel-detail", "copy-to-level", "blinding-concrete", "opening-to-slab" };
+            foreach (var id in referenceOnly)
+            {
+                var record = manifest.GetRequired(new FeatureId(id));
+                Equal(ParityEvidenceStage.ReferenceCaptured, record.EvidenceStage);
+            }
+            if (manifest.CatalogComplete)
+                throw new InvalidOperationException("P6 must not mark the parity catalog complete.");
+        }
+        private static void P7ReviewDocumentationEvidenceRules()
+        {
+            var path = Path.Combine("docs", "BLT3D-PARITY-MANIFEST.tsv");
+            var manifest = ParityManifestParser.Parse(File.ReadAllLines(path));
+            foreach (var id in new[] { "view", "quantity", "revision" })
+            {
+                var record = manifest.GetRequired(new FeatureId(id));
+                Equal(id, record.WorkflowKey);
+                Equal(ParityApplicability.Applicable, record.Applicability);
+                Equal(ParityEvidenceStage.CommandWired, record.EvidenceStage);
+            }
+            var drawingManager = manifest.GetRequired(new FeatureId("drawing-manager"));
+            Equal(ParityApplicability.Applicable, drawingManager.Applicability);
+            Equal(ParityEvidenceStage.ReferenceCaptured, drawingManager.EvidenceStage);
+            if (manifest.CatalogComplete)
+                throw new InvalidOperationException("P7 must not mark the parity catalog complete.");
         }
         private static void RepositoryManifestBlocksPrematureClosure()
         {

@@ -513,7 +513,7 @@ namespace QS3D.Core.Domain
             Floors = new CatalogOwnershipList<FloorDefinition>(AttachFloor, DetachFloor, Touch);
             Families = new CatalogOwnershipList<ProjectFamily>(AttachFamily, DetachFamily, Touch);
             Elements = new StructuralRevisionList<ProjectElement>(Touch);
-            QuantityRules = new List<QuantityRule>();
+            QuantityRules = new StructuralRevisionList<QuantityRule>(Touch);
             Metadata = new ProjectMetadataDictionary();
             MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(this, Metadata);
             AuditEvents = new List<AuditEvent>();

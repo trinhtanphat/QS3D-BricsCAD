@@ -13,9 +13,24 @@ draw	Draw	BLT3D / VE	draw	Applicable	CommandWired	-	-
 tool.editing	Tool	BLT3D / TOOL	tool.editing	Applicable	CommandWired	-	-
 modeling	Modeling	BLT3D / MODELING	modeling	Applicable	CommandWired	-	-
 rebar	Rebar	BLT3D / COT THEP	rebar	Applicable	CommandWired	-	-
-view	View	BLT3D / XEM	view	Applicable	ReferenceCaptured	-	-
-quantity	Quantity	BLT3D / DINH LUONG	quantity	Applicable	ReferenceCaptured	-	-
-revision	Revision	BLT3D / BAN SUA DOI	revision	Applicable	ReferenceCaptured	-	-
+room	SpecialCategories	BLT3D / RoomAttachedPanel	room	Applicable	CommandWired	-	-
+room.finish	Finishes	BLT3D / RoomFinishLayerOrderWindow + RoomFinishProgressWindow	room.finish	Applicable	CommandWired	-	-
+earthwork	Earthwork	BLT3D / ExcavationInputDialog	earthwork	Applicable	CommandWired	-	-
+stair	SpecialCategories	BLT3D / StairInputDialog	stair	Applicable	CommandWired	-	-
+railing	SpecialCategories	BLT3D / MainWindow ribbon / Railing	railing	Applicable	CommandWired	-	-
+curtain	SpecialCategories	BLT3D / MainWindow ribbon / GlassWall-Curtain	curtain	Applicable	CommandWired	-	-
+door-opening	SpecialCategories	BLT3D / MainWindow ribbon / Door-Opening	door-opening	Applicable	CommandWired	-	-
+grid	SpecialCategories	BLT3D / GridSystemDialog	grid	Applicable	CommandWired	-	-
+pile-cap	SpecialCategories	BLT3D / PileCapInputDialog	pile-cap	Applicable	ReferenceCaptured	-	-
+pile-cap.rebar	SpecialCategories	BLT3D / PileCapRebarDialog	pile-cap.rebar	Applicable	ReferenceCaptured	-	-
+pile.drop-to-cap	SpecialCategories	BLT3D / PileDropToCapWindow	pile.drop-to-cap	Applicable	ReferenceCaptured	-	-
+steel-detail	SpecialCategories	BLT3D / SteelDetailWizard	steel-detail	Applicable	ReferenceCaptured	-	-
+copy-to-level	SpecialCategories	BLT3D / MainWindow / CopyToLevelCommand	copy-to-level	Applicable	ReferenceCaptured	-	-
+blinding-concrete	SpecialCategories	BLT3D / BlindingConcreteWindow	blinding-concrete	Applicable	ReferenceCaptured	-	-
+opening-to-slab	SpecialCategories	BLT3D / OpeningToSlabWindow	opening-to-slab	Applicable	ReferenceCaptured	-	-
+view	View	BLT3D / XEM	view	Applicable	CommandWired	-	-
+quantity	Quantity	BLT3D / DINH LUONG	quantity	Applicable	CommandWired	-	-
+revision	Revision	BLT3D / BAN SUA DOI	revision	Applicable	CommandWired	-	-
 drawing-manager	DrawingManager	BLT3D / Drawing Manager	drawing-manager	Applicable	ReferenceCaptured	-	-
 ifc	Interoperability	BLT3D / IFC	ifc	Applicable	ReferenceCaptured	-	-
 ai.luna	AI	BLT3D / LUNA AI	ai.luna	Applicable	ReferenceCaptured	-	-

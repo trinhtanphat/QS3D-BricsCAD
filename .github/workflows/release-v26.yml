@@ -274,6 +274,7 @@ jobs:
       RELEASE_RUN_RUNTIME: ${{ inputs.run_runtime }}
       V26_RELEASE_REQUEST_PRERELEASE: ${{ inputs.prerelease }}
       V26_RELEASE_REQUEST_SIGN_PACKAGE: ${{ inputs.sign_package }}
+      QS3D_SIGNING_CERT_THUMBPRINT: ${{ vars.QS3D_SIGNING_CERT_THUMBPRINT }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -303,6 +304,11 @@ jobs:
             if (-not (Test-Path -LiteralPath $updateManifest -PathType Leaf)) {
               throw 'Signed V26 qualification candidate is missing its update manifest.'
             }
+            if ($env:QS3D_SIGNING_CERT_THUMBPRINT -cnotmatch '^[0-9A-Fa-f]{40}$') {
+              throw 'QS3D_SIGNING_CERT_THUMBPRINT must remain an exact 40-hex release signer at publication admission.'
+            }
+            $expectedPackageUri = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$env:RELEASE_TAG/QS3D-BricsCAD-V26.zip"
+            $expectedSignerThumbprint = $env:QS3D_SIGNING_CERT_THUMBPRINT
             $candidateIdentity = & .\scripts\assert-v26-candidate-identity.ps1 `
               -PackageZip $zip `
               -ChecksumPath $checksum `
@@ -310,6 +316,9 @@ jobs:
               -UpdateManifestPath $updateManifest `
               -ExpectedSourceCommit $env:GITHUB_SHA `
               -ExpectedReleaseTag $env:RELEASE_TAG `
+              -ExpectedPackageUri $expectedPackageUri `
+              -ExpectedSignerThumbprint $expectedSignerThumbprint `
+              -ExpectedManifestSchemaVersion 2 `
               -AdmittedScript '.\scripts\publish-v26-release.ps1'
           }
           else {

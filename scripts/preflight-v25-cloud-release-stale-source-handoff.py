@@ -106,26 +106,26 @@ def read_version_project_text() -> str:
     return committed.stdout
 
 
-# A stale source is a successful no-op only before the first durable release
-# mutation. Guard executable mutation calls, not generic `$body` literals.
-stale_block, stale_start, stale_end = slice_block(
-    release,
-    "if ($preMutationReleaseDriftStatus -eq 1) {",
-    "if ($preMutationReleaseDriftStatus -ne 0) {",
-    "pre-mutation stale-source branch",
-)
+# An admitted release stays pinned to exact SOURCE_SHA. Protected main may
+# advance while build/package verification runs; ancestry is revalidated at
+# each durable release boundary, but release-relevant drift does not turn a
+# successful release workflow into a no-op.
+publish = release[release.find("      - name: Publish GitHub prerelease"):]
 for token, label in (
-    ("V25_RELEASE_SUPERSEDED source_sha=", "superseded audit marker"),
-    ("::notice title=V25 release source superseded::", "superseded Actions notice"),
-    ("successful no-op before the first persistent release mutation", "successful no-op summary"),
-    ("preview ordinal ownership is not reassigned", "immutable ordinal summary"),
-    ("exit 0", "successful stale no-op exit"),
+    ("git merge-base --is-ancestor $env:SOURCE_SHA $preMutationMain", "pre-mutation source ancestry"),
+    ("git merge-base --is-ancestor $env:SOURCE_SHA $preMutationPublishMain", "moved pre-mutation source ancestry"),
+    ("git merge-base --is-ancestor $env:SOURCE_SHA $finalMain", "final source ancestry"),
+    ("git merge-base --is-ancestor $env:SOURCE_SHA $publishMain", "moved final source ancestry"),
+    ("$publishedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri", "final publication PATCH"),
 ):
-    require(stale_block, token, label)
-for token in ("throw ", "Invoke-RestMethod -Method Post", "upload-v25-held-release-asset.ps1", "Invoke-RestMethod -Method Patch"):
-    forbid(stale_block, token, "persistent/failing operation inside stale no-op")
-if stale_block.find("V25_RELEASE_SUPERSEDED source_sha=") >= stale_block.find("exit 0") >= 0:
-    errors.append("superseded audit marker must precede the successful stale exit")
+    require(publish, token, label)
+for token in (
+    "V25_RELEASE_SUPERSEDED source_sha=$env:SOURCE_SHA",
+    "successful no-op before the first persistent release mutation",
+    "$preMutationReleaseRelevantPaths",
+    "$finalReleaseRelevantPaths",
+):
+    forbid(publish, token, "green-without-release/stale-drift suppression")
 
 release_mutations = [
     '$release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases"',
@@ -136,8 +136,6 @@ release_mutation_positions = [release.find(token) for token in release_mutations
 for token, pos in zip(release_mutations, release_mutation_positions):
     if pos < 0:
         errors.append(f"missing guarded release mutation: {token}")
-    elif stale_end >= 0 and pos <= stale_end:
-        errors.append(f"stale no-op does not precede guarded release mutation: {token}")
 if all(pos >= 0 for pos in release_mutation_positions) and release_mutation_positions != sorted(release_mutation_positions):
     errors.append("release mutation order changed: draft create -> held asset upload -> publish PATCH is required")
 
@@ -263,15 +261,19 @@ try:
             else:
                 values[name] = matches[0]
     version = values.get("Version", "")
-    match = re.fullmatch(r"0\.1\.0-preview\.([1-9][0-9]*)", version)
+    match = re.fullmatch(
+        r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-preview\.([1-9][0-9]*)",
+        version,
+    )
     if not match:
         errors.append(f"V25 Version is not a canonical preview identity: {version!r}")
     else:
-        ordinal = int(match.group(1))
-        if ordinal <= 10307:
-            errors.append(f"V25 preview ordinal must advance beyond burned 10307; found {ordinal}")
-        if values.get("FileVersion") != f"0.1.0.{ordinal}":
-            errors.append("V25 FileVersion is not bound to the committed preview ordinal")
+        major, minor, patch = (int(match.group(index)) for index in (1, 2, 3))
+        ordinal = int(match.group(4))
+        if (major, minor, patch) == (0, 1, 0) and ordinal <= 10308:
+            errors.append(f"V25 0.1.0 preview ordinal must advance beyond burned 10308; found {ordinal}")
+        if values.get("FileVersion") != f"{major}.{minor}.{patch}.{ordinal}":
+            errors.append("V25 FileVersion is not bound to the committed preview series and ordinal")
         if values.get("InformationalVersion") != version:
             errors.append("V25 InformationalVersion is not bound to Version")
 except (ET.ParseError, OSError) as exc:
@@ -283,4 +285,4 @@ if errors:
         print(f" - {error}", file=sys.stderr)
     raise SystemExit(1)
 
-print("PASS: stale V25 release no-ops before release mutation; dispatcher preserves immutable ordinal ownership, authenticated retry, final-main admission, and ordered durable side effects")
+print("PASS: V25 release stays pinned to exact ancestor source across main advancement; dispatcher preserves immutable ordinal ownership and ordered durable side effects")

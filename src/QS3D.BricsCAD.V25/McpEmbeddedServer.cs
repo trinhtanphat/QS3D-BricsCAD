@@ -33,6 +33,7 @@ namespace QS3D.BricsCAD.V25
         private const int CadWorkRunning = 1;
         private const int CadWorkCancelledBeforeStart = 2;
         private const int MaxConcurrentClients = 16;
+        private const int MaxPublicErrorCharacters = 512;
         private const int MaxSessions = 128;
         private const string ProtocolVersion = "2025-06-18";
         private const string LegacyProtocolVersion = "2025-03-26";
@@ -190,7 +191,7 @@ namespace QS3D.BricsCAD.V25
                         }
                         catch (HttpProtocolException ex)
                         {
-                            WriteResponse(stream, ex.StatusCode, ex.Reason, "{\"error\":\"" + JsonEscape(ex.Message) + "\"}", null);
+                            WriteResponse(stream, ex.StatusCode, ex.Reason, "{\"error\":\"" + JsonEscape(SanitizePublicError(ex.Message)) + "\"}", null);
                         }
                     }
                 }
@@ -621,7 +622,7 @@ namespace QS3D.BricsCAD.V25
                 if (TrySendEscapeFallback())
                 {
                     Audit("cad_agent_stop", "foreground ESC fallback after cad-context failure");
-                    return ToolSuccess("{\"stopped\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"" + JsonEscape(ex.Message) + "\"}");
+                    return ToolSuccess("{\"stopped\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"" + JsonEscape(SanitizePublicError(ex.Message)) + "\"}");
                 }
                 return ToolError("Automation stopped, but both CAD-context and foreground ESC delivery failed: " + ex.Message);
             }
@@ -653,7 +654,7 @@ namespace QS3D.BricsCAD.V25
                 if (TrySendEscapeFallback())
                 {
                     Audit("cad_cancel_command", "escapeCount=2; delivery=foreground-fallback");
-                    return ToolSuccess("{\"accepted\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"" + JsonEscape(ex.Message) + "\"}");
+                    return ToolSuccess("{\"accepted\":true,\"escapeCount\":2,\"delivery\":\"foreground-fallback\",\"cadContextError\":\"" + JsonEscape(SanitizePublicError(ex.Message)) + "\"}");
                 }
                 return ToolError("Could not deliver ESC through CAD context or foreground fallback: " + ex.Message);
             }
@@ -1484,15 +1485,38 @@ namespace QS3D.BricsCAD.V25
             return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(text) + "\"}],\"isError\":false}";
         }
 
+        private static string SanitizePublicError(string message)
+        {
+            var value = string.IsNullOrWhiteSpace(message) ? "MCP request failed." : message;
+            value = Regex.Replace(value, @"(?i)(Authorization\s*:\s*(?:Bearer|Basic)\s+)[^\s,;]+", "$1[REDACTED]");
+            value = Regex.Replace(value, @"(?i)\b(api[-_]?key|access[-_]?token|auth[-_]?token|secret|password)\b\s*[:=]\s*[^\s,;]+", "$1=[REDACTED]");
+            value = Regex.Replace(value, @"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*", "Bearer [REDACTED]");
+            value = Regex.Replace(value, @"(?i)(?:[A-Z]:\\|\\\\)[^\r\n\t]+", "[PATH]");
+            value = Regex.Replace(value, @"(?i)(?:/home/|/Users/|/tmp/|/var/tmp/)[^\r\n\t]+", "[PATH]");
+            var clean = new StringBuilder(Math.Min(value.Length, MaxPublicErrorCharacters));
+            foreach (var ch in value)
+            {
+                if (clean.Length >= MaxPublicErrorCharacters) break;
+                if (char.IsControl(ch))
+                {
+                    if (ch == '\r' || ch == '\n' || ch == '\t') clean.Append(' ');
+                    continue;
+                }
+                clean.Append(ch);
+            }
+            var bounded = clean.ToString().Trim();
+            return bounded.Length == 0 ? "MCP request failed." : bounded;
+        }
+
         private static string ToolError(string message)
         {
-            return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(message ?? "MCP tool failed.") + "\"}],\"isError\":true}";
+            return "{\"content\":[{\"type\":\"text\",\"text\":\"" + JsonEscape(SanitizePublicError(message ?? "MCP tool failed.")) + "\"}],\"isError\":true}";
         }
 
         private static string JsonRpcError(string id, int code, string message)
         {
             return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"error\":{\"code\":" + code.ToString(CultureInfo.InvariantCulture)
-                   + ",\"message\":\"" + JsonEscape(message) + "\"}}";
+                   + ",\"message\":\"" + JsonEscape(SanitizePublicError(message)) + "\"}}";
         }
 
         private static string ExtractString(string json, string property)
@@ -1644,7 +1668,7 @@ namespace QS3D.BricsCAD.V25
                     return builder.Append("]}").ToString();
                 }
             }
-            catch (Exception ex) { return "{\"entries\":[],\"error\":\"" + JsonEscape(ex.Message) + "\"}"; }
+            catch (Exception ex) { return "{\"entries\":[],\"error\":\"" + JsonEscape(SanitizePublicError(ex.Message)) + "\"}"; }
         }
 
         private static void WriteResponse(NetworkStream stream, int statusCode, string reason, string body, IDictionary<string, string>? extraHeaders)

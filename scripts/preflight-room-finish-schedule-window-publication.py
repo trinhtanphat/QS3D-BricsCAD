@@ -6,47 +6,64 @@ SOURCE = ROOT / "src" / "QS3D.BricsCAD.V25" / "RoomFinishScheduleWindowCommands.
 text = SOURCE.read_text(encoding="utf-8")
 
 required = [
-    'private static RoomFinishScheduleWindow? _window;',
-    'private static Document? _publishedDocument;',
-    'private static IntPtr _publishedNativeDatabaseIdentity;',
-    'var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);',
-    'if (!PreparePublishedWindow(document, nativeDatabaseIdentity))',
-    'if (_window != null)',
-    'window.Closed += (_, __) => ReleasePublishedWindow(window);',
-    'Application.ShowModelessWindow(IntPtr.Zero, window, true);',
-    'if (!window.IsLoaded) return;',
-    '_publishedDocument = document;',
-    '_publishedNativeDatabaseIdentity = nativeDatabaseIdentity;',
-    '_window = window;',
-    'ReferenceEquals(_publishedDocument, requestedDocument)',
-    '_publishedNativeDatabaseIdentity == requestedNativeDatabaseIdentity',
-    'published.Close();',
-    'if (published.IsLoaded)',
-    'if (!ReferenceEquals(_window, window)) return;',
-    '_publishedNativeDatabaseIdentity = IntPtr.Zero;',
-    'var identity = database.UnmanagedObject;',
-    'if (identity == IntPtr.Zero)',
+    "private static PublishedWindow? _pending;",
+    "private static PublishedWindow? _published;",
+    "private readonly WeakReference<Document> _document;",
+    "NativeDatabaseIdentity = nativeDatabaseIdentity;",
+    "ReferenceEquals(ownedDocument, document)",
+    "nativeDatabaseIdentity == NativeDatabaseIdentity",
+    "nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+    "if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;",
+    "var pending = _pending;",
+    "if (pending != null && !TryCloseOwner(pending)) return;",
+    "var published = _published;",
+    "published.Window.IsLoaded && published.Matches(document, nativeDatabaseIdentity)",
+    "if (!TryCloseOwner(published)) return;",
+    "var releaseOwner = owner;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(releaseOwner);",
+    "_pending = owner;",
+    "Application.ShowModelessWindow(IntPtr.Zero, window, true);",
+    "if (!window.IsLoaded)",
+    "if (!ReferenceEquals(_pending, owner))",
+    "_pending = null;",
+    "_published = owner;",
+    "try { owner.Window.Close(); } catch { return false; }",
+    "if (owner.Window.IsLoaded) return false;",
+    "ReleaseOwnedWindow(owner);",
+    "if (ReferenceEquals(_pending, owner)) _pending = null;",
+    "if (ReferenceEquals(_published, owner)) _published = null;",
+    "ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)",
+    "database.UnmanagedObject == nativeDatabaseIdentity",
 ]
-
 missing = [needle for needle in required if needle not in text]
 if missing:
-    raise SystemExit("Room Finish Schedule publication guard missing contract tokens: " + "; ".join(missing))
+    raise SystemExit("Room Finish Schedule publication guard missing behavioral contract tokens: " + "; ".join(missing))
 
-show = text.index('Application.ShowModelessWindow(IntPtr.Zero, window, true);')
-loaded = text.index('if (!window.IsLoaded) return;', show)
-publish_doc = text.index('_publishedDocument = document;', loaded)
-publish_native = text.index('_publishedNativeDatabaseIdentity = nativeDatabaseIdentity;', publish_doc)
-publish_window = text.index('_window = window;', publish_native)
-if not (show < loaded < publish_doc < publish_native < publish_window):
-    raise SystemExit("Room Finish Schedule must publish only after ShowModelessWindow and IsLoaded admission")
+show = text.index("Application.ShowModelessWindow(IntPtr.Zero, window, true);")
+post_show_generation = text.index("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", show)
+loaded = text.index("if (!window.IsLoaded)", post_show_generation)
+exact_owner = text.index("if (!ReferenceEquals(_pending, owner))", loaded)
+clear_pending = text.index("_pending = null;", exact_owner)
+publish = text.index("_published = owner;", clear_pending)
+if not (show < post_show_generation < loaded < exact_owner < clear_pending < publish):
+    raise SystemExit("Room Finish Schedule must revalidate generation and exact pending owner before publication")
 
-close_call = text.index('published.Close();')
-close_check = text.index('if (published.IsLoaded)', close_call)
-release_after_close = text.index('ReleasePublishedWindow(published);', close_check)
+pending_assign = text.index("_pending = owner;")
+if pending_assign > show:
+    raise SystemExit("Room Finish Schedule must root pending ownership before host publication")
+
+close_call = text.index("try { owner.Window.Close(); } catch { return false; }")
+close_check = text.index("if (owner.Window.IsLoaded) return false;", close_call)
+release_after_close = text.index("ReleaseOwnedWindow(owner);", close_check)
 if not (close_call < close_check < release_after_close):
-    raise SystemExit("Room Finish Schedule replacement must require terminal close before release")
+    raise SystemExit("Room Finish Schedule replacement must retain ownership until terminal close")
 
-if 'new RoomFinishScheduleWindow(document), true' in text:
-    raise SystemExit("Room Finish Schedule must not directly publish an untracked transient window")
+for forbidden in [
+    "private static RoomFinishScheduleWindow? _window;",
+    "window.Closed += (_, __) => ReleaseOwnedWindow(owner);",
+    "new RoomFinishScheduleWindow(document), true",
+]:
+    if forbidden in text:
+        raise SystemExit("Room Finish Schedule publication guard found superseded/unsafe topology: " + forbidden)
 
-print("PASS Room Finish Schedule modeless publication lifecycle")
+print("PASS Room Finish Schedule generation-bound pending-first modeless publication lifecycle")
