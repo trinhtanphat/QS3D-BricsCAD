@@ -1,7 +1,10 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using QS3D.Core.Domain;
 
 namespace QS3D.Core.Persistence
@@ -231,100 +234,104 @@ namespace QS3D.Core.Persistence
 
         private sealed class ElementSemanticState
         {
-            private readonly ElementCategory _category;
-            private readonly string _familyId;
-            private readonly string _floorId;
-            private readonly string _zoneId;
-            private readonly string _drawingFingerprint;
-            private readonly string[] _sourceHandles;
-            private readonly string[] _dependsOn;
-            private readonly KeyValuePair<string, string>[] _properties;
-            private readonly KeyValuePair<string, double>[] _quantities;
+            private readonly byte[] _signature;
 
-            private ElementSemanticState(
-                ElementCategory category,
-                string familyId,
-                string floorId,
-                string zoneId,
-                string drawingFingerprint,
-                string[] sourceHandles,
-                string[] dependsOn,
-                KeyValuePair<string, string>[] properties,
-                KeyValuePair<string, double>[] quantities)
+            private ElementSemanticState(byte[] signature)
             {
-                _category = category;
-                _familyId = familyId;
-                _floorId = floorId;
-                _zoneId = zoneId;
-                _drawingFingerprint = drawingFingerprint;
-                _sourceHandles = sourceHandles;
-                _dependsOn = dependsOn;
-                _properties = properties;
-                _quantities = quantities;
+                _signature = signature ?? throw new ArgumentNullException(nameof(signature));
             }
 
-            public static ElementSemanticState Capture(ProjectElement element)
-            {
-                if (element == null) throw new ArgumentNullException(nameof(element));
-
-                return new ElementSemanticState(
-                    element.Category,
-                    element.FamilyId,
-                    element.FloorId,
-                    element.ZoneId,
-                    element.DrawingFingerprint,
-                    CaptureSequence(element.SourceHandles, "source handles"),
-                    CaptureSequence(element.DependsOn, "dependencies"),
-                    CaptureMap(element.Properties, "properties"),
-                    CaptureMap(element.Quantities, "quantities"));
-            }
+            public static ElementSemanticState Capture(ProjectElement element) =>
+                new ElementSemanticState(ComputeSignature(element));
 
             public bool Matches(ProjectElement element)
             {
-                if (element == null) return false;
-                if (element.Category != _category ||
-                    !string.Equals(element.FamilyId, _familyId, StringComparison.Ordinal) ||
-                    !string.Equals(element.FloorId, _floorId, StringComparison.Ordinal) ||
-                    !string.Equals(element.ZoneId, _zoneId, StringComparison.Ordinal) ||
-                    !string.Equals(element.DrawingFingerprint, _drawingFingerprint, StringComparison.Ordinal))
+                byte[] candidate;
+                try
+                {
+                    candidate = ComputeSignature(element);
+                }
+                catch (InvalidOperationException)
+                {
                     return false;
+                }
 
-                return SequenceMatches(element.SourceHandles, _sourceHandles) &&
-                       SequenceMatches(element.DependsOn, _dependsOn) &&
-                       MapMatches(element.Properties, _properties, StringComparer.Ordinal) &&
-                       MapMatches(element.Quantities, _quantities, EqualityComparer<double>.Default);
+                if (candidate.Length != _signature.Length) return false;
+                for (var i = 0; i < _signature.Length; i++)
+                {
+                    if (candidate[i] != _signature[i]) return false;
+                }
+                return true;
             }
 
-            private static string[] CaptureSequence(IList<string> values, string label)
+            private static byte[] ComputeSignature(ProjectElement element)
+            {
+                if (element == null) throw new ArgumentNullException(nameof(element));
+
+                using var hash = SHA256.Create();
+                using var crypto = new CryptoStream(Stream.Null, hash, CryptoStreamMode.Write);
+                using var writer = new BinaryWriter(crypto, Encoding.UTF8, leaveOpen: true);
+
+                writer.Write((int)element.Category);
+                writer.Write(element.FamilyId ?? string.Empty);
+                writer.Write(element.FloorId ?? string.Empty);
+                writer.Write(element.ZoneId ?? string.Empty);
+                writer.Write(element.DrawingFingerprint ?? string.Empty);
+                WriteSequence(writer, element.SourceHandles, "source handles");
+                WriteSequence(writer, element.DependsOn, "dependencies");
+                WriteMap(writer, element.Properties, "properties", (output, value) => output.Write(value ?? string.Empty));
+                WriteMap(writer, element.Quantities, "quantities", (output, value) => output.Write(value));
+
+                writer.Flush();
+                crypto.FlushFinalBlock();
+                var signature = hash.Hash;
+                if (signature == null || signature.Length == 0)
+                    throw new InvalidOperationException("Persistence checkpoint could not finalize the element semantic signature.");
+                return (byte[])signature.Clone();
+            }
+
+            private static void WriteSequence(BinaryWriter writer, IList<string> values, string label)
             {
                 if (values == null) throw new InvalidOperationException("Persistence checkpoint element " + label + " collection is missing.");
                 var expected = RequireSupportedNestedCount(values.Count, label);
-                var snapshot = new List<string>(expected);
+                writer.Write(expected);
+                var observed = 0;
                 foreach (var value in values)
                 {
-                    if (snapshot.Count >= expected)
+                    if (observed >= expected)
                         throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
-                    snapshot.Add(value);
+                    writer.Write(value ?? string.Empty);
+                    observed++;
                 }
-                if (snapshot.Count != expected || values.Count != expected)
+                if (observed != expected || values.Count != expected)
                     throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
-                return snapshot.ToArray();
             }
 
-            private static KeyValuePair<TKey, TValue>[] CaptureMap<TKey, TValue>(IDictionary<TKey, TValue> values, string label)
+            private static void WriteMap<TValue>(
+                BinaryWriter writer,
+                IDictionary<string, TValue> values,
+                string label,
+                Action<BinaryWriter, TValue> writeValue)
             {
                 if (values == null) throw new InvalidOperationException("Persistence checkpoint element " + label + " collection is missing.");
                 var expected = RequireSupportedNestedCount(values.Count, label);
-                var snapshot = new List<KeyValuePair<TKey, TValue>>(expected);
-                foreach (var value in values)
+                var snapshot = new List<KeyValuePair<string, TValue>>(expected);
+                foreach (var pair in values)
                 {
                     if (snapshot.Count >= expected)
                         throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
-                    snapshot.Add(value);
+                    snapshot.Add(pair);
                 }
                 if (snapshot.Count != expected || values.Count != expected)
                     throw new InvalidOperationException("Persistence checkpoint element " + label + " count changed during capture.");
-                return snapshot.ToArray();
+
+                snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key));
+                writer.Write(expected);
+                foreach (var pair in snapshot)
+                {
+                    writer.Write(pair.Key ?? string.Empty);
+                    writeValue(writer, pair.Value);
+                }
             }
 
             private static int RequireSupportedNestedCount(int count, string label)
@@ -335,30 +342,6 @@ namespace QS3D.Core.Persistence
                     throw new InvalidOperationException(
                         "Persistence checkpoint element " + label + " collection exceeds the supported " + MaximumElementCount + " entry limit.");
                 return count;
-            }
-
-            private static bool SequenceMatches(IList<string> values, IReadOnlyList<string> expected)
-            {
-                if (values == null || values.Count != expected.Count) return false;
-                for (var i = 0; i < expected.Count; i++)
-                {
-                    if (!string.Equals(values[i], expected[i], StringComparison.Ordinal)) return false;
-                }
-                return values.Count == expected.Count;
-            }
-
-            private static bool MapMatches<TValue>(
-                IDictionary<string, TValue> values,
-                IReadOnlyList<KeyValuePair<string, TValue>> expected,
-                IEqualityComparer<TValue> valueComparer)
-            {
-                if (values == null || values.Count != expected.Count) return false;
-                foreach (var pair in expected)
-                {
-                    if (!values.TryGetValue(pair.Key, out var actual) || !valueComparer.Equals(actual, pair.Value))
-                        return false;
-                }
-                return values.Count == expected.Count;
             }
         }
     }
