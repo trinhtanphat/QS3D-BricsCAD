@@ -117,12 +117,13 @@ namespace QS3D.Core.BenchmarkParity
             Kind = kind;
             Previous = previous;
             Current = current;
+            QuantityDelta = QsModelElementSnapshot.Finite((Current == null ? 0d : Current.Quantity) - (Previous == null ? 0d : Previous.Quantity), "quantityDelta");
         }
         public string MarkupId { get; private set; }
         public RevisionMarkupChangeKind Kind { get; private set; }
         public TakeoffQuantityEvidence2D? Previous { get; private set; }
         public TakeoffQuantityEvidence2D? Current { get; private set; }
-        public double QuantityDelta { get { return (Current == null ? 0d : Current.Quantity) - (Previous == null ? 0d : Previous.Quantity); } }
+        public double QuantityDelta { get; private set; }
     }
 
     public sealed class DrawingRevisionComparer2D
