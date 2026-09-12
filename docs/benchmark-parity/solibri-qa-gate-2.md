@@ -16,6 +16,8 @@
 
 Rule severities are configurable per rule. A profile also carries a blocking threshold, allowing project-specific QA policies without changing the analysis engine. `QA2.TYPE_ASSIGNMENT_MISMATCH` is Critical in the strict profile and can be overridden like the other rule severities.
 
+Duplicate IFC GUID analysis is conflict-set based: every element sharing the same non-empty normalized GUID receives its own `QA2.DUPLICATE_IFC_GUID` finding. Normalization trims surrounding whitespace and compares case-insensitively. This preserves element-level auditability and prevents input-order-dependent hard-gate results.
+
 ## Property/relationship adapter contract
 
 Until IFC adapters expose richer typed relationship objects, snapshots provide normalized evidence through the existing case-insensitive property bag:
@@ -30,6 +32,8 @@ Adapters should populate these keys from the authoritative IFC source. `IfcRel.S
 ## Waivers / exceptions
 
 `QsQaWaiver` is explicit and auditable: rule id, element id, reason, approver, approval UTC timestamp and optional expiry. A waiver applies only to the exact rule + element pair and only while unexpired. Waived findings are retained separately in the gate decision instead of being deleted.
+
+For duplicate IFC GUIDs, waivers remain intentionally element-scoped. Waiving one participant does not release the collision because the other participants retain their own active findings. A host that intentionally accepts a temporary duplicate condition must explicitly waive every conflicting element, preserving a complete audit trail; alternatively, correcting the IFC identities removes the conflict findings normally.
 
 ## Hard gate
 
@@ -61,8 +65,10 @@ The earlier `QsQaGate` / `QsQaProfile` API remains available for existing benchm
 
 Existing `QsIntelligencePipeline.Run(...)` overloads also remain source/binary compatible as a legacy path. Hosts migrating to the Solibri-parity production gate should switch to `RunWithQaGate2(...)` as soon as they can supply authoritative QA snapshots. The compatibility overloads intentionally do not fabricate IFC evidence or silently change existing behavior.
 
+The duplicate-GUID hardening changes only finding completeness: callers that previously observed one finding for a duplicate pair now observe one finding per conflicting element. Rule id, severity customization, waiver schema, gate API and workflow behavior are unchanged. Consumers should treat findings as element-scoped audit records rather than assuming a single representative finding per GUID collision.
+
 ## Smoke coverage
 
-`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid and expired waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
+`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid and expired waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It additionally verifies that duplicate-GUID findings cover the complete conflict set, case/whitespace normalization is stable, a one-sided duplicate waiver remains blocked, and explicit waivers for every participant remain auditable. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
 
 The registered `QsIntelligenceSmoke` additionally verifies the production integration: a blocking relationship failure prevents downstream Intelligence execution, an explicit valid waiver releases the gate while remaining auditable, and a warning-level profile permits BOQ execution with `PassWithWarnings`.
