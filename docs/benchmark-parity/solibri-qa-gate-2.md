@@ -31,7 +31,7 @@ Adapters should populate these keys from the authoritative IFC source. `IfcRel.S
 
 ## Waivers / exceptions
 
-`QsQaWaiver` is explicit and auditable: rule id, element id, reason, approver, approval UTC timestamp and optional expiry. A waiver applies only to the exact rule + element pair and only while unexpired. Waived findings are retained separately in the gate decision instead of being deleted.
+`QsQaWaiver` is explicit and auditable: rule id, element id, reason, approver, approval UTC timestamp and optional expiry. A waiver applies only to the exact rule + element pair while the evaluation timestamp is within its effective window: at or after `ApprovedUtc`, and at or before `ExpiresUtc` when an expiry exists. A future-dated approval is therefore not active early. Waived findings are retained separately in the gate decision instead of being deleted.
 
 For duplicate IFC GUIDs, waivers remain intentionally element-scoped. Waiving one participant does not release the collision because the other participants retain their own active findings. A host that intentionally accepts a temporary duplicate condition must explicitly waive every conflicting element, preserving a complete audit trail; alternatively, correcting the IFC identities removes the conflict findings normally.
 
@@ -67,8 +67,10 @@ Existing `QsIntelligencePipeline.Run(...)` overloads also remain source/binary c
 
 The duplicate-GUID hardening changes only finding completeness: callers that previously observed one finding for a duplicate pair now observe one finding per conflicting element. Rule id, severity customization, waiver schema, gate API and workflow behavior are unchanged. Consumers should treat findings as element-scoped audit records rather than assuming a single representative finding per GUID collision.
 
+The waiver effective-window hardening does not change the waiver schema or method signatures. It corrects applicability so `ApprovedUtc` is an actual lower bound, matching `ExpiresUtc` as the optional upper bound. Integrations that intentionally schedule future exceptions should continue storing them normally; those exceptions simply remain inactive until their approval timestamp.
+
 ## Smoke coverage
 
-`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid and expired waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It additionally verifies that duplicate-GUID findings cover the complete conflict set, case/whitespace normalization is stable, a one-sided duplicate waiver remains blocked, and explicit waivers for every participant remain auditable. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
+`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid, expired and future-dated waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It verifies that future-dated waivers keep findings active until approval and become effective at the approval timestamp. It additionally verifies that duplicate-GUID findings cover the complete conflict set, case/whitespace normalization is stable, a one-sided duplicate waiver remains blocked, and explicit waivers for every participant remain auditable. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
 
 The registered `QsIntelligenceSmoke` additionally verifies the production integration: a blocking relationship failure prevents downstream Intelligence execution, an explicit valid waiver releases the gate while remaining auditable, and a warning-level profile permits BOQ execution with `PassWithWarnings`.
