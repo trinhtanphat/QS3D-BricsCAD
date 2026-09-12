@@ -285,6 +285,8 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Auto Host single-opening mutation requires the exact DWG/database generation that started authoring to remain active.");
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject) || !ReferenceEquals(currentProject, project))
                 throw new InvalidOperationException("Auto Host single-opening mutation requires the exact canonical project authorized by the authoring command.");
+            var expectedProjectId = project.ProjectId;
+            var expectedChangeVersion = project.ChangeVersion;
 
             var opening = project.FindElement(openingId) ??
                 throw new InvalidOperationException("Opening element not found: " + openingId);
@@ -309,6 +311,9 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Auto Host single-opening mutation refused a stale DWG/database generation after CAD evaluation.");
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out currentProject) || !ReferenceEquals(currentProject, project))
                 throw new InvalidOperationException("Auto Host single-opening mutation refused a stale canonical project after CAD evaluation.");
+            if (!string.Equals(currentProject.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase) ||
+                currentProject.ChangeVersion != expectedChangeVersion)
+                throw new InvalidOperationException("Auto Host single-opening mutation refused an in-place project generation change after CAD evaluation.");
 
             if (match.Status == OpeningHostMatchStatus.Ambiguous)
                 throw new InvalidOperationException(
