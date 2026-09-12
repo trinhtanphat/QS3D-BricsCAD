@@ -49,6 +49,16 @@ namespace QS3D.Core.SmokeTests
             Expect(deltas.Single(x => x.MarkupId == "M2").Kind == RevisionMarkupChangeKind.Removed, "removed markup");
             Expect(deltas.Single(x => x.MarkupId == "M3").Kind == RevisionMarkupChangeKind.Added, "added markup");
 
+            var extremeOld = new TakeoffSheetResult2D(oldSheet, new[]
+            {
+                new TakeoffQuantityEvidence2D("M-EXTREME", "A101", "R1", "drawings/A101-r1.pdf", "pdf:M-EXTREME", "WALL", "ZONE-A", "Takeoff-Wall", double.MaxValue, "m")
+            });
+            var extremeNew = new TakeoffSheetResult2D(newSheet, new[]
+            {
+                new TakeoffQuantityEvidence2D("M-EXTREME", "A101", "R2", "drawings/A101-r2.pdf", "pdf:M-EXTREME", "WALL", "ZONE-A", "Takeoff-Wall", -double.MaxValue, "m")
+            });
+            ExpectThrows<ArgumentOutOfRangeException>(() => new DrawingRevisionComparer2D().Compare(extremeOld, extremeNew), "non-finite revision quantity delta rejection");
+
             var workflow = new AutodeskTakeoffWorkflow();
             var inventory = workflow.BuildInventoryAndEstimate(
                 newResult.Evidence,
