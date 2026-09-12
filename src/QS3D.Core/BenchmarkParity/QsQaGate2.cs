@@ -205,10 +205,7 @@ namespace QS3D.Core.BenchmarkParity
             var waived = new List<QsQaFinding>();
             foreach (var finding in findings)
             {
-                var structuralIdentityConflict =
-                    string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(finding.RuleId, "QA2.MISSING_IFC_GUID", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(finding.RuleId, "QA2.DUPLICATE_IFC_GUID", StringComparison.OrdinalIgnoreCase);
+                var structuralIdentityConflict = IsStructuralIdentityRule(finding.RuleId);
                 if (!structuralIdentityConflict && waiverList.Any(x => x.Applies(finding, nowUtc))) waived.Add(finding);
                 else active.Add(finding);
             }
@@ -342,9 +339,20 @@ namespace QS3D.Core.BenchmarkParity
             return value > 0d && !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
+        private static bool IsStructuralIdentityRule(string ruleId)
+        {
+            return string.Equals(ruleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(ruleId, "QA2.MISSING_IFC_GUID", StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(ruleId, "QA2.DUPLICATE_IFC_GUID", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static void AddIf(List<QsQaFinding> result, bool condition, QsQaRuleProfile profile, string ruleId, QsQaSeverity fallback, string elementId, string message)
         {
-            if (condition) result.Add(new QsQaFinding(ruleId, profile.SeverityFor(ruleId, fallback), elementId, message));
+            if (!condition) return;
+            var severity = IsStructuralIdentityRule(ruleId)
+                ? QsQaSeverity.Critical
+                : profile.SeverityFor(ruleId, fallback);
+            result.Add(new QsQaFinding(ruleId, severity, elementId, message));
         }
 
         private static int Rank(QsQaSeverity severity)
