@@ -1,11 +1,18 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using QS3D.Core.Cost;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class EstimatingRateBuildUpSmoke
     {
+        [ModuleInitializer]
+        internal static void RegisterAndRun()
+        {
+            Run();
+        }
+
         internal static void Run()
         {
             CanonicalArithmeticAndProvenance();
