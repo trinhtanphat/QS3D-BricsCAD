@@ -136,7 +136,9 @@ namespace QS3D.BricsCAD.V25.Reporting
                 }
                 else
                 {
-                    deductionArea = Math.Min(face.GrossArea, allowedRows.Sum(x => x.Area));
+                    var deductionAccumulator = new QuantityReportMath.FiniteAccumulator();
+                    foreach (var row in allowedRows) deductionAccumulator.Add(row.Area, "Beam formwork deduction area");
+                    deductionArea = Math.Min(face.GrossArea, deductionAccumulator.Value("Beam formwork deduction area"));
                     diagnostics.Add(face.FaceId + ": Beam deductions were rule-filtered; net uses enabled face-clipped regions only.");
                 }
 
@@ -192,12 +194,17 @@ namespace QS3D.BricsCAD.V25.Reporting
             if (geometry == null) throw new ArgumentNullException(nameof(geometry));
             if (element.Category != ElementCategory.Beam) return;
 
-            var side = geometry.FormworkFaces
-                .Where(x => string.Equals(x.FaceType, "Side", StringComparison.Ordinal))
-                .Sum(x => x.NetArea);
-            var bottom = geometry.FormworkFaces
-                .Where(x => string.Equals(x.FaceType, "Bottom", StringComparison.Ordinal))
-                .Sum(x => x.NetArea);
+            var sideAccumulator = new QuantityReportMath.FiniteAccumulator();
+            var bottomAccumulator = new QuantityReportMath.FiniteAccumulator();
+            foreach (var face in geometry.FormworkFaces)
+            {
+                if (string.Equals(face.FaceType, "Side", StringComparison.Ordinal))
+                    sideAccumulator.Add(face.NetArea, "Beam formwork side area");
+                else if (string.Equals(face.FaceType, "Bottom", StringComparison.Ordinal))
+                    bottomAccumulator.Add(face.NetArea, "Beam formwork bottom area");
+            }
+            var side = sideAccumulator.Value("Beam formwork side area");
+            var bottom = bottomAccumulator.Value("Beam formwork bottom area");
             element.SetQuantity("SideAreaM2", side);
             element.SetQuantity("BottomAreaM2", bottom);
             element.SetQuantity("TopAreaM2", 0d);
