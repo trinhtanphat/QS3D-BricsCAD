@@ -326,19 +326,77 @@ namespace QS3D.BricsCAD.V25
                 InsertAfter(panel, openLogs, restart);
             }
 
-            var status = FindTaggedTextBlock(panel, OpenAiStatusTag);
+            var status = FindTaggedButton(panel, OpenAiStatusTag);
             if (status == null)
             {
-                status = new TextBlock
-                {
-                    Tag = OpenAiStatusTag,
-                    TextWrapping = TextWrapping.Wrap,
-                    FontSize = 11,
-                    Margin = new Thickness(0, 1, 0, 8)
-                };
+                status = CreateDiagnosticInfoButton(anchor);
                 InsertAfter(panel, restart, status);
             }
-            status.Text = BuildOpenAiStatusText();
+            UpdateDiagnosticInfo(status, BuildOpenAiStatusText());
+        }
+
+        private static Button CreateDiagnosticInfoButton(Button anchor)
+        {
+            var button = new Button
+            {
+                Content = "i",
+                Tag = OpenAiStatusTag,
+                Width = 28,
+                Height = 28,
+                MinWidth = 28,
+                MinHeight = 28,
+                Padding = new Thickness(0),
+                Margin = new Thickness(0, 1, 0, 8),
+                FontFamily = new FontFamily("Segoe UI"),
+                FontStyle = FontStyles.Italic,
+                FontWeight = FontWeights.Bold,
+                FontSize = 12,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Style = anchor.Style
+            };
+            button.SetValue(ToolTipService.InitialShowDelayProperty, 180);
+            button.SetValue(ToolTipService.ShowDurationProperty, 30000);
+            button.GotKeyboardFocus += (_, __) =>
+            {
+                var tooltip = button.ToolTip as ToolTip;
+                if (tooltip != null) tooltip.IsOpen = true;
+            };
+            button.LostKeyboardFocus += (_, __) =>
+            {
+                var tooltip = button.ToolTip as ToolTip;
+                if (tooltip != null) tooltip.IsOpen = false;
+            };
+            button.Unloaded += (_, __) =>
+            {
+                var tooltip = button.ToolTip as ToolTip;
+                if (tooltip != null) tooltip.IsOpen = false;
+            };
+            return button;
+        }
+
+        private static void UpdateDiagnosticInfo(Button button, string information)
+        {
+            var tooltip = button.ToolTip as ToolTip;
+            var text = tooltip != null ? tooltip.Content as TextBlock : null;
+            if (tooltip == null || text == null)
+            {
+                text = new TextBlock
+                {
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = 460,
+                    LineHeight = 18,
+                    Margin = new Thickness(2)
+                };
+                tooltip = new ToolTip
+                {
+                    Content = text,
+                    MaxWidth = 500,
+                    Padding = new Thickness(9, 7, 9, 7)
+                };
+                button.ToolTip = tooltip;
+            }
+            text.Text = information ?? string.Empty;
         }
 
         private static string BuildOpenAiStatusText()

@@ -4,14 +4,19 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 CENTER = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpAgentControlCenter.cs"
+PERSISTENT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpPersistentAgentCenterAugmenter.cs"
+TRANSPORT = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpTransportAgentCenterAugmenter.cs"
 
 
 def main() -> int:
-    if not CENTER.is_file():
-        print("ERROR: missing", CENTER.relative_to(ROOT))
-        return 1
+    for path in (CENTER, PERSISTENT, TRANSPORT):
+        if not path.is_file():
+            print("ERROR: missing", path.relative_to(ROOT))
+            return 1
 
     text = CENTER.read_text(encoding="utf-8")
+    persistent = PERSISTENT.read_text(encoding="utf-8")
+    transport = TRANSPORT.read_text(encoding="utf-8")
     errors: list[str] = []
 
     command_start = text.find("public sealed class McpAgentControlCenterCommands")
@@ -84,6 +89,18 @@ def main() -> int:
         "registration acknowledgement is distinct": "Đây là xác nhận cài đặt, chưa phải bằng chứng traffic",
         "Quick Tunnel polling cadence": "TimeSpan.FromMilliseconds(1500)",
         "Quick Tunnel bounded poll cap": "_quickUrlPollTicks >= 20",
+        "centered Agent Center heading": "HorizontalAlignment = HorizontalAlignment.Center",
+        "local info-button component": "CreateInfoButton(",
+        "keyboard-focus tooltip support": "GotKeyboardFocus",
+        "compact onboarding information heading": "CreateInformationHeading(",
+        "runtime API-key paste affordance": "PasteRuntimeApiKey",
+        "copyable local endpoint row": 'CreateCopyableStatusRow("Local endpoint"',
+        "copyable public MCP row": 'CreateCopyableStatusRow("Public MCP"',
+        "plain connection-status card": "string.Empty,\n                _statusRows), 1);",
+        "connection description promoted to heading info": "descriptionAsInfo",
+        "constrained copy-value grid": "var valueGrid = new Grid",
+        "copy-value star column": "valueGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });",
+        "copy-icon auto column": "valueGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });",
     }
     for label, token in required.items():
         haystack = command_block if label == "modeless Agent Center command" else text
@@ -146,6 +163,22 @@ def main() -> int:
     for label, token in forbidden.items():
         if token in text:
             errors.append(f"Agent Center UI contains forbidden {label}: {token}")
+
+    augmenter_required = {
+        "short Runtime API-key label": (persistent, 'textBlock.Text = "Runtime API key";'),
+        "diagnostics info affordance": (transport, "CreateDiagnosticInfoButton("),
+    }
+    for label, (haystack, token) in augmenter_required.items():
+        if token not in haystack:
+            errors.append(f"Agent Center augmenter missing {label}: {token}")
+
+    augmenter_forbidden = {
+        "Runtime API-key copy affordance": (text, "CopyRuntimeApiKey"),
+        "inline transport diagnostics body": (transport, "status.Text = BuildOpenAiStatusText();"),
+    }
+    for label, (haystack, token) in augmenter_forbidden.items():
+        if token in haystack:
+            errors.append(f"Agent Center augmenter contains forbidden {label}: {token}")
 
     if errors:
         for error in errors:

@@ -103,7 +103,7 @@ namespace QS3D.BricsCAD.V25
             var textBlock = root as TextBlock;
             if (textBlock != null && (textBlock.Text ?? string.Empty).StartsWith(RuntimeKeyLabelPrefix, StringComparison.Ordinal))
             {
-                textBlock.Text = "Runtime API key · lưu an toàn trong Windows Credential Manager cho user hiện tại; để trống nếu saved/environment key đã có";
+                textBlock.Text = "Runtime API key";
             }
 
             var panel = root as Panel;
