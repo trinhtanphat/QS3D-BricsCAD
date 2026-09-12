@@ -186,7 +186,11 @@ namespace QS3D.Core.BenchmarkParity
         {
             Revision = QsModelElementSnapshot.Require(revision, "revision");
             SnapshotId = QsModelElementSnapshot.Require(snapshotId, "snapshotId");
-            CreatedUtc = createdUtc.Kind == DateTimeKind.Utc ? createdUtc : createdUtc.ToUniversalTime();
+            CreatedUtc = createdUtc.Kind == DateTimeKind.Utc
+                ? createdUtc
+                : createdUtc.Kind == DateTimeKind.Local
+                    ? createdUtc.ToUniversalTime()
+                    : DateTime.SpecifyKind(createdUtc, DateTimeKind.Utc);
         }
         public string Revision { get; private set; }
         public string SnapshotId { get; private set; }
