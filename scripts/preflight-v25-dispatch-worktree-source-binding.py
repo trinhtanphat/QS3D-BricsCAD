@@ -28,18 +28,30 @@ for token in required:
 if workflow:
     source_guard = workflow.find('if [[ ! "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then')
     source_fetch = workflow.find("dispatch_source_ref='refs/remotes/origin/qs3d-v25-dispatch-source'", source_guard)
-    source_checkout = workflow.find('git checkout --detach "${source_sha}"', source_fetch)
-    head_guard = workflow.find('checked_out_source="$(git rev-parse HEAD)"', source_checkout)
-    release_workflow_read = workflow.find("release_workflow='.github/workflows/release-v25-cloud.yml'", head_guard)
-    version_read = workflow.find('version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"', head_guard)
-    batch_gate = workflow.find("scripts/v25-release-batch-gate.py", head_guard)
-    indexes = (source_guard, source_fetch, source_checkout, head_guard, release_workflow_read, version_read, batch_gate)
+    source_ancestry = workflow.find('git merge-base --is-ancestor "${source_sha}" "${fetched_dispatch_main}"', source_fetch)
+    source_checkout = workflow.find('git checkout --detach "${source_sha}"', source_ancestry)
+    head_capture = workflow.find('checked_out_source="$(git rev-parse HEAD)"', source_checkout)
+    head_compare = workflow.find('if [[ "${checked_out_source,,}" != "${source_sha}" ]]; then', head_capture)
+    release_workflow_read = workflow.find("release_workflow='.github/workflows/release-v25-cloud.yml'", head_compare)
+    version_read = workflow.find('version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"', head_compare)
+    batch_gate = workflow.find("scripts/v25-release-batch-gate.py", head_compare)
+    indexes = (
+        source_guard,
+        source_fetch,
+        source_ancestry,
+        source_checkout,
+        head_capture,
+        head_compare,
+        release_workflow_read,
+        version_read,
+        batch_gate,
+    )
     if min(indexes) < 0 or not (
-        source_guard < source_fetch < source_checkout < head_guard
-        < release_workflow_read < version_read < batch_gate
+        source_guard < source_fetch < source_ancestry < source_checkout
+        < head_capture < head_compare < release_workflow_read < version_read < batch_gate
     ):
         errors.append(
-            "dispatcher must fetch protected main, prove admitted source ancestry, detach to source_sha, verify HEAD, then inspect release bytes"
+            "dispatcher must fetch protected main, prove admitted source ancestry, detach to source_sha, verify HEAD equality, then inspect release bytes"
         )
 
     workflow_run_rebind = workflow.find('if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then')
