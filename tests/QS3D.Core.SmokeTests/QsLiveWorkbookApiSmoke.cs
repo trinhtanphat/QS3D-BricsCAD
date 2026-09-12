@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             DeterministicWorkbookCascade();
+            StaleDependencyPropagates();
             ConflictAndCycleHandling();
             NonFiniteCascadeIsContained();
             CollisionSafeWorkbookIdentity();
@@ -54,6 +55,36 @@ namespace QS3D.Core.SmokeTests
             var next = b1.ToNextBinding();
             var fresh = new LiveWorkbookRefreshEngine2().Refresh(new[] { next }, sources, "R2").Results.Single();
             Equal(LiveWorkbookFreshness.Fresh, fresh.Freshness, "accepted refresh becomes fresh");
+        }
+
+        private static void StaleDependencyPropagates()
+        {
+            var sources = new[]
+            {
+                new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.BimElement, "OLD", "R1", 7d, "ifc://model/OLD"),
+                new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.DrawingHandle, "CUR", "R2", 2d, "drawing://A101/CUR")
+            };
+            var bindings = new[]
+            {
+                new LiveWorkbookBinding("S1", "WB", "BOQ", "E10", "L1", LiveWorkbookSourceKind.BimElement, "OLD", "R1", new string[0], 1d, 0d, 7d),
+                new LiveWorkbookBinding("S2", "WB", "BOQ", "E11", "L2", LiveWorkbookSourceKind.BimElement, string.Empty, string.Empty, new[] { "S1" }, 1d, 0d, 7d),
+                new LiveWorkbookBinding("S3", "WB", "BOQ", "E12", "L3", LiveWorkbookSourceKind.DrawingHandle, "CUR", "R2", new[] { "S2" }, 1d, 0d, 9d)
+            };
+
+            var batch = new LiveWorkbookRefreshEngine2().Refresh(bindings, sources, "R2");
+            var source = batch.Results.Single(x => x.Binding.BindingId == "S1");
+            var calculated = batch.Results.Single(x => x.Binding.BindingId == "S2");
+            var mixed = batch.Results.Single(x => x.Binding.BindingId == "S3");
+
+            Equal(LiveWorkbookFreshness.Stale, source.Freshness, "direct stale source");
+            Equal(LiveWorkbookFreshness.Stale, calculated.Freshness, "calculated binding inherits stale dependency");
+            Equal(LiveWorkbookFreshness.Stale, mixed.Freshness, "current direct source does not mask stale dependency");
+            Near(7d, calculated.Value, "stale calculated value remains usable");
+            Near(9d, mixed.Value, "stale mixed cascade remains deterministic");
+            True(calculated.Message.IndexOf("S1", StringComparison.OrdinalIgnoreCase) >= 0, "calculated stale message identifies upstream");
+            True(mixed.Message.IndexOf("S2", StringComparison.OrdinalIgnoreCase) >= 0, "transitive stale message identifies immediate upstream");
+            True(!batch.HasBlockingFailure, "stale dependency remains usable");
+            True(batch.HasStaleData, "transitive stale contributes to batch indicator");
         }
 
         private static void ConflictAndCycleHandling()

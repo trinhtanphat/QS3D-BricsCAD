@@ -219,6 +219,7 @@ namespace QS3D.Core.BenchmarkParity
                     results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Upstream binding is not usable: " + failedDependency.Binding.BindingId + ".");
                     continue;
                 }
+                var staleDependency = binding.DependsOnBindingIds.Select(x => results[x]).FirstOrDefault(x => x.Freshness == LiveWorkbookFreshness.Stale);
 
                 var sourceValue = 0d;
                 var sourceRevision = string.Empty;
@@ -259,10 +260,18 @@ namespace QS3D.Core.BenchmarkParity
                     results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh arithmetic produced a non-finite value.");
                     continue;
                 }
-                var isStale = binding.SourceId.Length > 0 && !string.Equals(sourceRevision, currentRevision, StringComparison.OrdinalIgnoreCase);
+                var directSourceStale = binding.SourceId.Length > 0 && !string.Equals(sourceRevision, currentRevision, StringComparison.OrdinalIgnoreCase);
+                var isStale = directSourceStale || staleDependency != null;
                 var changed = Math.Abs(value - binding.LastValue) >= Epsilon || (binding.SourceId.Length > 0 && !string.Equals(binding.SourceRevision, sourceRevision, StringComparison.OrdinalIgnoreCase));
                 var freshness = isStale ? LiveWorkbookFreshness.Stale : changed ? LiveWorkbookFreshness.Refreshed : LiveWorkbookFreshness.Fresh;
-                results[id] = new LiveWorkbookRefreshResult(binding, freshness, binding.LastValue, value, sourceRevision, evidence, trace, isStale ? "Source revision is not current." : changed ? "Binding refreshed deterministically." : "Binding is current.");
+                var message = directSourceStale
+                    ? "Source revision is not current."
+                    : staleDependency != null
+                        ? "Upstream binding is stale: " + staleDependency.Binding.BindingId + "."
+                        : changed
+                            ? "Binding refreshed deterministically."
+                            : "Binding is current.";
+                results[id] = new LiveWorkbookRefreshResult(binding, freshness, binding.LastValue, value, sourceRevision, evidence, trace, message);
             }
 
             foreach (var unresolved in distinctBindings.Keys.Where(x => !results.ContainsKey(x)).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
