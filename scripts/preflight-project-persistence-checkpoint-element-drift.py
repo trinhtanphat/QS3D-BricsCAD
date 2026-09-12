@@ -38,24 +38,32 @@ if state_start < 0:
     fail("bounded element semantic checkpoint state was not found")
 state = source[state_start:]
 required_state_tokens = (
-    "ElementCategory _category",
-    "string _familyId",
-    "string _floorId",
-    "string _zoneId",
-    "string _drawingFingerprint",
-    "string[] _sourceHandles",
-    "string[] _dependsOn",
-    "KeyValuePair<string, string>[] _properties",
-    "KeyValuePair<string, double>[] _quantities",
-    "CaptureSequence(element.SourceHandles",
-    "CaptureSequence(element.DependsOn",
-    "CaptureMap(element.Properties",
-    "CaptureMap(element.Quantities",
+    "byte[] _signature",
+    "SHA256.Create()",
+    "new BinaryWriter(crypto, Encoding.UTF8, leaveOpen: true)",
+    "writer.Write((int)element.Category)",
+    "writer.Write(element.FamilyId",
+    "writer.Write(element.FloorId",
+    "writer.Write(element.ZoneId",
+    "writer.Write(element.DrawingFingerprint",
+    'WriteSequence(writer, element.SourceHandles, "source handles")',
+    'WriteSequence(writer, element.DependsOn, "dependencies")',
+    'WriteMap(writer, element.Properties, "properties"',
+    'WriteMap(writer, element.Quantities, "quantities"',
+    "snapshot.Sort((left, right) => StringComparer.OrdinalIgnoreCase.Compare(left.Key, right.Key))",
     "RequireSupportedNestedCount",
 )
 for token in required_state_tokens:
     if token not in state:
-        fail("element semantic checkpoint state is incomplete: missing " + token)
+        fail("element semantic checkpoint signature is incomplete: missing " + token)
+
+signature_start = state.find("private static byte[] ComputeSignature(ProjectElement element)")
+signature_end = state.find("private static void WriteSequence", signature_start)
+if signature_start < 0 or signature_end < 0:
+    fail("element semantic signature source boundary was not found")
+signature = state[signature_start:signature_end]
+if "element.Dirty" in signature or "element.UpdatedUtc" in signature:
+    fail("element persistence-only Dirty/UpdatedUtc state must not participate in the semantic restore fence")
 
 persistence_start = source.find("private sealed class ElementPersistenceState")
 persistence_end = state_start
