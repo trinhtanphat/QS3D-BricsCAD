@@ -17,6 +17,8 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try
             {
                 // Capture PICKFIRST once before binding the canonical project. The same
@@ -25,47 +27,100 @@ namespace QS3D.BricsCAD.V25
                 var selectedIds = CadSelectionGuard.ReadImpliedSelection(document);
                 if (selectedIds.Length == 0)
                 {
-                    Report(document, SelectionGuidance);
+                    Report(document, nativeDatabaseIdentity, SelectionGuidance);
                     return;
                 }
 
                 var project = ExistingProjectMutationContext.Require(document, "Column Tie 3D");
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 var count = ColumnTieSolidBuilder.BuildSelected(document, project, selectedIds);
                 var message = count == 0
                     ? SelectionGuidance
                     : "Tie 3D: đã tạo/cập nhật " + count + " đai cột.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message);
             }
             catch (Exception)
             {
-                Report(document, OperationFailure);
+                Report(document, nativeDatabaseIdentity, OperationFailure);
             }
         }
 
-        private static void FinalizeUi(Document document, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try
+            {
+                RefreshModelTree(document, nativeDatabaseIdentity);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                document.Editor.Regen();
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                TrySetPaletteStatus(document, nativeDatabaseIdentity, message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                document.Editor.WriteMessage("\nQS3D " + message);
+            }
+            catch (Exception ex)
+            {
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message + " " + UiSyncWarning + " (" + ex.GetType().Name + ").");
+            }
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
             try
             {
-                PaletteCoordinator.RefreshProject();
-                document.Editor.Regen();
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                return document.Database.UnmanagedObject;
             }
-            catch (Exception)
+            catch
             {
-                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning);
+                return IntPtr.Zero;
             }
         }
 
-        private static void Report(Document document, string message)
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
         {
+            if (nativeDatabaseIdentity == IntPtr.Zero ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                return false;
+
+            try
+            {
+                return document.Database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException("Column Tie 3D document generation changed before geometry mutation.");
+        }
+
+        private static void RefreshModelTree(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            PaletteCoordinator.RefreshProject();
+        }
+
+        private static void TrySetPaletteStatus(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { PaletteCoordinator.SetStatus(message); }
             catch { }
-            TryWriteMessage(document, "\nQS3D " + message);
         }
 
-        private static void TryWriteMessage(Document document, string message)
+        private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
+            TrySetPaletteStatus(document, nativeDatabaseIdentity, message);
+            TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message);
+        }
+
+        private static void TryWriteMessage(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { document.Editor.WriteMessage(message); }
             catch { }
         }

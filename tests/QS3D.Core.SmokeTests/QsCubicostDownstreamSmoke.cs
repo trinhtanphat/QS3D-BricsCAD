@@ -11,6 +11,7 @@ namespace QS3D.Core.SmokeTests
         {
             AcceptedAndCorrectedEvidenceFlowsDeterministically();
             UnreviewedAndMissingMappingsFailClosed();
+            InventorySemanticKeysAndNumericTotalsStayExact();
         }
 
         private static void AcceptedAndCorrectedEvidenceFlowsDeterministically()
@@ -65,6 +66,40 @@ namespace QS3D.Core.SmokeTests
             var accepted = new CubicostQuantityLine("A1", "STR.SLAB", "L01", 3d, 8d, ComponentRecognitionStatus.Accepted, evidence);
             Throws<InvalidOperationException>(() => bridge.Admit(new[] { accepted }, Array.Empty<CubicostDownstreamBinding>(), false), "missing classification/formula mapping");
             Throws<InvalidOperationException>(() => bridge.Admit(new[] { accepted, accepted }, new[] { new CubicostDownstreamBinding("STR.SLAB", "F1", "F2") }, false), "duplicate component identity");
+        }
+
+        private static void InventorySemanticKeysAndNumericTotalsStayExact()
+        {
+            var evidence = new QuantityEvidence("N", "model.ifc#numeric", "R9", "ifc-geometry", 1d);
+            var bridge = new CubicostReviewedQuantityDownstreamBridge();
+            var highDynamicRange = new[]
+            {
+                new CubicostDownstreamLine("N1", "SRC", "STR.NUMERIC", "F.NUM", "m3", 1e16, ComponentRecognitionStatus.Accepted, evidence),
+                new CubicostDownstreamLine("N2", "SRC", "STR.NUMERIC", "F.NUM", "m3", 1d, ComponentRecognitionStatus.Accepted, evidence),
+                new CubicostDownstreamLine("N3", "SRC", "STR.NUMERIC", "F.NUM", "m3", 1d, ComponentRecognitionStatus.Accepted, evidence)
+            };
+            var numericInventory = bridge.BuildInventory(highDynamicRange);
+            Equal(1, numericInventory.Count, "numeric inventory group count");
+            Near(1e16 + 2d, numericInventory[0].Quantity, 0d, "high dynamic range inventory quantity");
+            Equal(3, numericInventory[0].SourceCount, "numeric inventory component count");
+
+            const string separator = "\u001f";
+            var groupingCollision = new[]
+            {
+                new CubicostDownstreamLine("G1", "SRC", "A" + separator + "B", "F1", "C", 2d, ComponentRecognitionStatus.Accepted, evidence),
+                new CubicostDownstreamLine("G2", "SRC", "A", "F2", "B" + separator + "C", 3d, ComponentRecognitionStatus.Accepted, evidence)
+            };
+            var grouped = bridge.BuildInventory(groupingCollision);
+            Equal(2, grouped.Count, "embedded separator must not alias inventory grouping identity");
+
+            var validationCollision = new[]
+            {
+                new CubicostDownstreamLine("A" + separator + "B", "SRC", "C", "F3", "D", 4d, ComponentRecognitionStatus.Accepted, evidence),
+                new CubicostDownstreamLine("A", "SRC", "B" + separator + "C", "F4", "D", 5d, ComponentRecognitionStatus.Accepted, evidence)
+            };
+            var commercial = bridge.BuildCommercialHandoffs(validationCollision);
+            Equal(6, commercial.Count, "embedded separator must not alias downstream validation identity");
+            True(commercial.All(x => ReferenceEquals(evidence, x.Line.Evidence)), "hostile-token evidence preserved");
         }
 
         private static void Equal<T>(T expected, T actual, string label)
