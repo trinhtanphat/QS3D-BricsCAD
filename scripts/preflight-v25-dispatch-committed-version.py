@@ -18,6 +18,8 @@ def main() -> int:
         'version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"',
         "committed_product_version=",
         "committed_preview_ordinal=",
+        'series_prefix="v${committed_major}.${committed_minor}.${committed_patch}-preview."',
+        '--series-prefix "${series_prefix}"',
         'tag="${series_prefix}${committed_preview_ordinal}"',
         "protected main ProductVersion must be advanced before automatic preview dispatch",
         "Refusing to reserve or dispatch an uncommitted preview tag",
@@ -58,6 +60,7 @@ def main() -> int:
         '-f release_tag="${preview}"',
         "Next free preview candidate (diagnostic only)",
         "done < <(gh api --paginate",
+        'series_prefix="v0.1.0-preview."',
     ):
         if forbidden in source:
             failures.append(

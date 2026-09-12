@@ -505,7 +505,7 @@ for path, text in workflow_sources:
             "github.actor != 'github-actions[bot]'", "github.event.workflow_run.conclusion == 'success'",
             "github.event.workflow_run.head_branch == 'main'", "gh workflow run release-v25-cloud.yml", "--ref main",
             'source_sha="${GITHUB_SHA,,}"', 'source_sha="${current_main,,}"', '-f source_sha="${source_sha}"', "confirm_release=RELEASE",
-            "git fetch --force --tags origin", 'series_prefix="v0.1.0-preview."',
+            "git fetch --force --tags origin", 'series_prefix="v${committed_major}.${committed_minor}.${committed_patch}-preview."', '--series-prefix "${series_prefix}"',
             "src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj", "committed_product_version=",
             "committed_preview_ordinal=", 'tag="${series_prefix}${committed_preview_ordinal}"',
             "Refusing to reserve or dispatch an uncommitted preview tag", "ordinal > 65535",

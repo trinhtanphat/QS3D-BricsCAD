@@ -261,15 +261,19 @@ try:
             else:
                 values[name] = matches[0]
     version = values.get("Version", "")
-    match = re.fullmatch(r"0\.1\.0-preview\.([1-9][0-9]*)", version)
+    match = re.fullmatch(
+        r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-preview\.([1-9][0-9]*)",
+        version,
+    )
     if not match:
         errors.append(f"V25 Version is not a canonical preview identity: {version!r}")
     else:
-        ordinal = int(match.group(1))
-        if ordinal <= 10307:
-            errors.append(f"V25 preview ordinal must advance beyond burned 10307; found {ordinal}")
-        if values.get("FileVersion") != f"0.1.0.{ordinal}":
-            errors.append("V25 FileVersion is not bound to the committed preview ordinal")
+        major, minor, patch = (int(match.group(index)) for index in (1, 2, 3))
+        ordinal = int(match.group(4))
+        if (major, minor, patch) == (0, 1, 0) and ordinal <= 10308:
+            errors.append(f"V25 0.1.0 preview ordinal must advance beyond burned 10308; found {ordinal}")
+        if values.get("FileVersion") != f"{major}.{minor}.{patch}.{ordinal}":
+            errors.append("V25 FileVersion is not bound to the committed preview series and ordinal")
         if values.get("InformationalVersion") != version:
             errors.append("V25 InformationalVersion is not bound to Version")
 except (ET.ParseError, OSError) as exc:
