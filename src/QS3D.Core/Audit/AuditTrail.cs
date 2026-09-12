@@ -7,12 +7,38 @@ namespace QS3D.Core.Audit
 {
     public sealed class AuditEvent
     {
-        public DateTime Utc { get; set; }
-        public string Action { get; set; } = string.Empty;
-        public string ElementId { get; set; } = string.Empty;
-        public string Detail { get; set; } = string.Empty;
-        public string Actor { get; set; } = string.Empty;
-        public string CorrelationId { get; set; } = string.Empty;
+        private DateTime _utc;
+        private string _action = string.Empty;
+        private string _elementId = string.Empty;
+        private string _detail = string.Empty;
+        private string _actor = string.Empty;
+        private string _correlationId = string.Empty;
+
+        public DateTime Utc
+        {
+            get => _utc;
+            set
+            {
+                if (_utc == value) return;
+                PersistenceMutationRequested?.Invoke();
+                _utc = value;
+            }
+        }
+
+        public string Action { get => _action; set => SetText(ref _action, value); }
+        public string ElementId { get => _elementId; set => SetText(ref _elementId, value); }
+        public string Detail { get => _detail; set => SetText(ref _detail, value); }
+        public string Actor { get => _actor; set => SetText(ref _actor, value); }
+        public string CorrelationId { get => _correlationId; set => SetText(ref _correlationId, value); }
+
+        internal event Action? PersistenceMutationRequested;
+
+        private void SetText(ref string field, string value)
+        {
+            if (string.Equals(field, value, StringComparison.Ordinal)) return;
+            PersistenceMutationRequested?.Invoke();
+            field = value;
+        }
     }
 
     public sealed class AuditTrail
