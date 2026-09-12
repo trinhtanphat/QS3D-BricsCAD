@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
@@ -13,6 +14,8 @@ namespace QS3D.Core.SmokeTests
             BuildsReadyMixedSourcePackage();
             ComparesPackageDrawingRevisions();
             PreservesHighDynamicRangePackageQuantityDelta();
+            AdmitsPdfAndRasterSheetPayloads();
+            RejectsMalformedSheetPayloads();
         }
 
         private static void BlocksStaleDrawingRevision()
@@ -109,6 +112,50 @@ namespace QS3D.Core.SmokeTests
             var comparison = new AutodeskTakeoffPackageRevisionComparer().Compare(oldPackage, new[] { Build("C", "R1", 1e16) }, newPackage, new[] { Build("A", "R2", 1e16), Build("B", "R2", 1d) });
             Near(1d, comparison.QuantityDelta, 0d, "high dynamic range revision quantity delta");
         }
+
+        private static void AdmitsPdfAndRasterSheetPayloads()
+        {
+            var ingestor = new Qs2DSheetIngestor();
+            var calibration = new DrawingCalibration(100d, 10d, "m");
+            var pdf = Encoding.ASCII.GetBytes("%PDF-1.7\nfixture-a");
+            var pdf2 = Encoding.ASCII.GetBytes("%PDF-1.7\nfixture-b");
+            var first = ingestor.IngestPdf("A401", "Plan", "A401.pdf", "R3", calibration, pdf, 2);
+            var second = ingestor.IngestPdf("A401", "Plan", "A401.pdf", "R3", calibration, pdf2, 2);
+            Equal(DrawingSheetSourceKind.Pdf, first.Sheet.SourceKind, "pdf source kind");
+            Equal(2, first.PdfPageNumber, "pdf page number");
+            Equal(64, first.SourceSha256.Length, "pdf fingerprint length");
+            True(!string.Equals(first.SourceSha256, second.SourceSha256, StringComparison.Ordinal), "content drift changes fingerprint");
+
+            var png = new byte[24] { 137,80,78,71,13,10,26,10, 0,0,0,13, 73,72,68,82, 0,0,0,32, 0,0,0,16 };
+            var raster = ingestor.IngestRaster("A402", "Detail", "A402.png", "R1", calibration, png);
+            Equal((RasterSheetFormat?)RasterSheetFormat.Png, raster.RasterFormat, "png format");
+            Equal(32, raster.PixelWidth, "png width");
+            Equal(16, raster.PixelHeight, "png height");
+
+            var jpeg = new byte[] { 0xFF,0xD8,0xFF,0xC0,0x00,0x11,0x08,0x00,0x10,0x00,0x20,0x03,0x01,0x11,0x00,0x02,0x11,0x00,0x03,0x11,0x00 };
+            var photo = ingestor.IngestRaster("A403", "Photo", "A403.jpg", "R1", calibration, jpeg);
+            Equal((RasterSheetFormat?)RasterSheetFormat.Jpeg, photo.RasterFormat, "jpeg format");
+            Equal(32, photo.PixelWidth, "jpeg width");
+            Equal(16, photo.PixelHeight, "jpeg height");
+
+            var evidence = new CalibratedTakeoffEngine2D().Extract(first.Sheet, new[]
+            {
+                new TakeoffMarkup2D("M-PDF", "A401", TakeoffMeasurementKind.Length, 100d, "ARC.WALL", "L03", "A-WALL", "PDF-M1")
+            });
+            Near(10d, evidence.Evidence[0].Quantity, 1e-12, "ingested pdf calibrated quantity");
+            Equal("A401.pdf", evidence.Evidence[0].SourceReference, "ingested pdf evidence source");
+        }
+
+        private static void RejectsMalformedSheetPayloads()
+        {
+            var ingestor = new Qs2DSheetIngestor();
+            var calibration = new DrawingCalibration(1d, 1d, "m");
+            Throws<ArgumentException>(() => ingestor.IngestPdf("A", "Plan", "a.pdf", "R1", calibration, new byte[0], 1), "empty pdf");
+            Throws<ArgumentOutOfRangeException>(() => ingestor.IngestPdf("A", "Plan", "a.pdf", "R1", calibration, Encoding.ASCII.GetBytes("%PDF-1.7"), 0), "invalid page");
+            Throws<InvalidOperationException>(() => ingestor.IngestPdf("A", "Plan", "a.pdf", "R1", calibration, Encoding.ASCII.GetBytes("not-pdf"), 1), "bad pdf signature");
+            Throws<InvalidOperationException>(() => ingestor.IngestRaster("A", "Plan", "a.png", "R1", calibration, Encoding.ASCII.GetBytes("not-image")), "bad raster signature");
+        }
+
         private static void Equal<T>(T expected, T actual, string label)
         {
             if (!EqualityComparer<T>.Default.Equals(expected, actual))
@@ -124,6 +171,14 @@ namespace QS3D.Core.SmokeTests
         private static void True(bool value, string label)
         {
             if (!value) throw new InvalidOperationException(label + ": expected true.");
+        }
+
+        private static void Throws<T>(Action action, string label) where T : Exception
+        {
+            try { action(); }
+            catch (T) { return; }
+            catch (Exception ex) { throw new InvalidOperationException(label + ": expected " + typeof(T).Name + ", actual " + ex.GetType().Name + "."); }
+            throw new InvalidOperationException(label + ": expected " + typeof(T).Name + ".");
         }
     }
 }
