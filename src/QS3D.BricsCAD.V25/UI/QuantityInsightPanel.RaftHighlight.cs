@@ -35,7 +35,8 @@ namespace QS3D.BricsCAD.V25.UI
         private static readonly bool _raftQuantityHighlightHandlersRegistered = RegisterRaftQuantityHighlightHandlers();
         private readonly List<Solid3d> _raftQuantityIncludedTransients = new List<Solid3d>();
         private IntegerCollection? _raftQuantityIncludedViewports;
-        private bool _raftQuantityHighlightDocumentEventsAttached;
+        private bool _raftQuantityHighlightDocumentToBeDeactivatedAttached;
+        private bool _raftQuantityHighlightDocumentBecameCurrentAttached;
 
         private static bool RegisterRaftQuantityHighlightHandlers()
         {
@@ -455,20 +456,40 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void AttachRaftQuantityDocumentEvents()
         {
-            if (_raftQuantityHighlightDocumentEventsAttached) return;
             var documents = BcadApplication.DocumentManager;
-            documents.DocumentToBeDeactivated += OnRaftQuantityDocumentSwitch;
-            documents.DocumentBecameCurrent += OnRaftQuantityDocumentSwitch;
-            _raftQuantityHighlightDocumentEventsAttached = true;
+            if (!_raftQuantityHighlightDocumentToBeDeactivatedAttached)
+            {
+                documents.DocumentToBeDeactivated += OnRaftQuantityDocumentSwitch;
+                _raftQuantityHighlightDocumentToBeDeactivatedAttached = true;
+            }
+            if (!_raftQuantityHighlightDocumentBecameCurrentAttached)
+            {
+                documents.DocumentBecameCurrent += OnRaftQuantityDocumentSwitch;
+                _raftQuantityHighlightDocumentBecameCurrentAttached = true;
+            }
         }
 
         private void DetachRaftQuantityDocumentEvents()
         {
-            if (!_raftQuantityHighlightDocumentEventsAttached) return;
             var documents = BcadApplication.DocumentManager;
-            documents.DocumentToBeDeactivated -= OnRaftQuantityDocumentSwitch;
-            documents.DocumentBecameCurrent -= OnRaftQuantityDocumentSwitch;
-            _raftQuantityHighlightDocumentEventsAttached = false;
+            if (_raftQuantityHighlightDocumentToBeDeactivatedAttached)
+            {
+                try
+                {
+                    documents.DocumentToBeDeactivated -= OnRaftQuantityDocumentSwitch;
+                    _raftQuantityHighlightDocumentToBeDeactivatedAttached = false;
+                }
+                catch (Exception ex) when (RaftQuantityRecoverable(ex)) { }
+            }
+            if (_raftQuantityHighlightDocumentBecameCurrentAttached)
+            {
+                try
+                {
+                    documents.DocumentBecameCurrent -= OnRaftQuantityDocumentSwitch;
+                    _raftQuantityHighlightDocumentBecameCurrentAttached = false;
+                }
+                catch (Exception ex) when (RaftQuantityRecoverable(ex)) { }
+            }
         }
 
         private void OnRaftQuantityDocumentSwitch(object sender, DocumentCollectionEventArgs e)
