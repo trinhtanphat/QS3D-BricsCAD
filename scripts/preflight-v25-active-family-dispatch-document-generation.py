@@ -11,7 +11,7 @@ required = [
     "private static IntPtr GetNativeDatabaseIdentity(Document document)",
     "private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)",
     "private static void RequireActiveDocumentGeneration(",
-    "document.Database" if False else "database.UnmanagedObject == nativeDatabaseIdentity",
+    "database.UnmanagedObject == nativeDatabaseIdentity",
     "RequireCurrentDispatchSnapshot(\n                    document,\n                    nativeDatabaseIdentity,",
     "Report(document, nativeDatabaseIdentity,",
 ]
