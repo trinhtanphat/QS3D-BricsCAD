@@ -29,6 +29,7 @@ namespace QS3D.Core.SmokeTests
             P4RecognitionBinding();
             P5RebarBinding();
             P6SpecialCategoryBindings();
+            P7ReviewDocumentationBindings();
         }
 
         private static void P2ShellProjectBindings()
@@ -115,6 +116,21 @@ namespace QS3D.Core.SmokeTests
                 AssertBinding(registry, id, ParityWorkflowKind.SemanticMutation,
                     ParityWorkflowSurface.Ui, mutation);
             }
+        }
+        private static void P7ReviewDocumentationBindings()
+        {
+            var registry = ParityReviewDocumentationCatalog.CreateRegistry();
+            if (registry.Bindings.Count != 3)
+                throw new InvalidOperationException("P7 review/documentation catalog must contain exactly three bindings.");
+
+            AssertBinding(registry, "view", ParityWorkflowKind.ReadOnly,
+                ParityWorkflowSurface.Ui, ParityWorkflowRequirement.ActiveDocument);
+            AssertBinding(registry, "quantity", ParityWorkflowKind.ReadOnly,
+                ParityWorkflowSurface.Ui, ParityWorkflowRequirement.ActiveDocument);
+            AssertBinding(registry, "revision", ParityWorkflowKind.ReadOnly,
+                ParityWorkflowSurface.Ui, ParityWorkflowRequirement.ActiveDocument | ParityWorkflowRequirement.Project);
+            if (registry.TryGet(new FeatureId("drawing-manager"), out _))
+                throw new InvalidOperationException("P7 must keep Drawing Manager unbound until a canonical QS3D workflow exists.");
         }
         private static void AssertBinding(ParityWorkflowRegistry registry, string id,
             ParityWorkflowKind kind, ParityWorkflowSurface surfaces, ParityWorkflowRequirement requirements)
