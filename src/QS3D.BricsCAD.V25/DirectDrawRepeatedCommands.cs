@@ -63,7 +63,8 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch (Exception)
                 {
-                    Report(document, nativeDatabaseIdentity, label + ": không thể hoàn tất thao tác. Vui lòng thử lại.");
+                    if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                        Report(document, label + ": không thể hoàn tất thao tác. Vui lòng thử lại.");
                 }
             }
             catch (Exception)
@@ -537,11 +538,16 @@ namespace QS3D.BricsCAD.V25
             catch { }
         }
 
+        private static void Report(Document document, string message)
+        {
+            try { DirectDrawUiFailureReporter.ReportMessage(document, message); }
+            catch { }
+        }
+
         private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
             if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-            try { DirectDrawUiFailureReporter.ReportMessage(document, message); }
-            catch { }
+            Report(document, message);
         }
 
         private sealed class RepeatedDefaults
