@@ -185,7 +185,13 @@ namespace QS3D.Core.BenchmarkParity
     {
         private sealed class WorkflowRow
         {
-            public WorkflowRow(string classification, string zone, string unit, double quantity) { Classification = classification; Zone = zone ?? string.Empty; Unit = unit; Quantity = quantity; }
+            public WorkflowRow(string classification, string zone, string unit, double quantity)
+            {
+                Classification = QsModelElementSnapshot.Require(classification, "classification");
+                Zone = QsModelElementSnapshot.Optional(zone);
+                Unit = QsModelElementSnapshot.Require(unit, "unit");
+                Quantity = QsModelElementSnapshot.Finite(quantity, "quantity");
+            }
             public string Classification { get; private set; }
             public string Zone { get; private set; }
             public string Unit { get; private set; }
@@ -222,20 +228,44 @@ namespace QS3D.Core.BenchmarkParity
             if (formula == null) throw new ArgumentNullException("formula");
             if (rateProvider == null) throw new ArgumentNullException("rateProvider");
             var rows = new List<WorkflowRow>();
-            rows.AddRange(drawingEvidence.Select(x => new WorkflowRow(x.Classification, x.Zone, x.Unit, x.Quantity)));
-            rows.AddRange(bimQuantities.Select(x => new WorkflowRow(QsModelElementSnapshot.Require(x.Classification, "classification"), x.Storey, x.Unit, x.Quantity)));
+            foreach (var evidence in drawingEvidence)
+            {
+                if (evidence == null) throw new ArgumentException("Drawing evidence collection contains null.", "drawingEvidence");
+                rows.Add(new WorkflowRow(evidence.Classification, evidence.Zone, evidence.Unit, evidence.Quantity));
+            }
+            foreach (var quantity in bimQuantities)
+            {
+                if (quantity == null) throw new ArgumentException("BIM quantity collection contains null.", "bimQuantities");
+                rows.Add(new WorkflowRow(quantity.Classification, quantity.Storey, quantity.Unit, quantity.Quantity));
+            }
             return rows
                 .GroupBy(x => new WorkflowKey(x.Classification, x.Zone, x.Unit))
                 .Select(g =>
                 {
-                    var measured = g.Sum(x => x.Quantity);
+                    var measured = CompensatedSum(g.Select(x => x.Quantity));
                     var adjusted = QsModelElementSnapshot.Finite(formula(g.Key.Classification, measured), "formulaQuantity");
                     var rate = QsModelElementSnapshot.Finite(rateProvider(g.Key.Classification, g.Key.Unit), "unitRate");
                     return new TakeoffWorkflowLine(g.Key.Classification, g.Key.Zone, g.Key.Unit, measured, adjusted, rate, g.Count());
                 })
                 .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Zone, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase)
                 .ToList();
+        }
+
+        private static double CompensatedSum(IEnumerable<double> values)
+        {
+            var sum = 0d;
+            var compensation = 0d;
+            foreach (var value in values)
+            {
+                var next = sum + value;
+                compensation += Math.Abs(sum) >= Math.Abs(value)
+                    ? (sum - next) + value
+                    : (value - next) + sum;
+                sum = next;
+            }
+            return QsModelElementSnapshot.Finite(sum + compensation, "measuredQuantity");
         }
     }
 }
