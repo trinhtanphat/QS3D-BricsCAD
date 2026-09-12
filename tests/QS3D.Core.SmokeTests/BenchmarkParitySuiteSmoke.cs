@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             QsTakeoffPackageUxSmoke.Run();
             WorkbookLiveLinkRefresh();
             IntegrationRoutes();
+            QsLiveWorkbookApiSmoke.Run();
             ConcreteAndFormwork();
             IfcWorkbench();
             QsCubicostQuantBimSmoke.Run();

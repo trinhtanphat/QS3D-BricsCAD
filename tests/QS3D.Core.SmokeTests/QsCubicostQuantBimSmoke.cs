@@ -107,6 +107,7 @@ namespace QS3D.Core.SmokeTests
         private static void QuantBimIfcStepIngestion()
         {
             const string step = "ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n" +
+                "#1=IFCPROJECT('P1',$,'Unit project',$,$,$,$,$,#90);\n" +
                 "#10=IFCWALL('G1',$,'Wall-01',$,$,$,$,$);\n" +
                 "#20=IFCBUILDINGSTOREY('S1',$,'L01',$,$,$,$,$,$,.ELEMENT.,0.);\n" +
                 "#21=IFCRELCONTAINEDINSPATIALSTRUCTURE('R-SPATIAL',$,$,$,(#10),#20);\n" +
@@ -115,12 +116,21 @@ namespace QS3D.Core.SmokeTests
                 "#40=IFCPROPERTYSINGLEVALUE('IsExternal',$,IFCBOOLEAN(.T.),$);\n" +
                 "#41=IFCPROPERTYSET('P1',$,'Pset_WallCommon',$,(#40));\n" +
                 "#42=IFCRELDEFINESBYPROPERTIES('R-PSET',$,$,$,(#10),#41);\n" +
-                "#50=IFCQUANTITYAREA('NetSideArea',$,$,12.0,$);\n" +
-                "#51=IFCQUANTITYVOLUME('NetVolume',$,$,2.4,$);\n" +
-                "#52=IFCELEMENTQUANTITY('Q1',$,'BaseQuantities',$,$,(#50,#51));\n" +
+                "#50=IFCQUANTITYAREA('NetSideArea',$,#84,120000.0,$);\n" +
+                "#51=IFCQUANTITYVOLUME('NetVolume',$,$,2400.0,$);\n" +
+                "#54=IFCQUANTITYLENGTH('Length',$,$,5000.0,$);\n" +
+                "#55=IFCQUANTITYWEIGHT('Mass',$,$,1250.0,$);\n" +
+                "#56=IFCQUANTITYCOUNT('Count',$,$,3.0,$);\n" +
+                "#52=IFCELEMENTQUANTITY('Q1',$,'BaseQuantities',$,$,(#50,#51,#54,#55,#56));\n" +
                 "#53=IFCRELDEFINESBYPROPERTIES('R-QTO',$,$,$,(#10),#52);\n" +
                 "#60=IFCCLASSIFICATIONREFERENCE($,'ARC.WALL','Wall',$);\n" +
-                "#61=IFCRELASSOCIATESCLASSIFICATION('R-CLASS',$,$,$,(#10),#60);\nENDSEC;\nEND-ISO-10303-21;\n";
+                "#61=IFCRELASSOCIATESCLASSIFICATION('R-CLASS',$,$,$,(#10),#60);\n" +
+                "#80=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);\n" +
+                "#81=IFCSIUNIT(*,.AREAUNIT.,$,.SQUARE_METRE.);\n" +
+                "#82=IFCSIUNIT(*,.VOLUMEUNIT.,.DECI.,.CUBIC_METRE.);\n" +
+                "#83=IFCSIUNIT(*,.MASSUNIT.,$,.GRAM.);\n" +
+                "#84=IFCSIUNIT(*,.AREAUNIT.,.CENTI.,.SQUARE_METRE.);\n" +
+                "#90=IFCUNITASSIGNMENT((#80,#81,#82,#83));\nENDSEC;\nEND-ISO-10303-21;\n";
 
             var source = new IfcStepStandaloneSource();
             var document = source.Parse("minimal-qto.ifc", step);
@@ -134,8 +144,16 @@ namespace QS3D.Core.SmokeTests
             Equal("ARC.WALL", wall.Classification, "STEP classification relationship");
             Equal("ifc-step://#10", wall.GeometryReference, "STEP source evidence reference");
             True(wall.Properties.Any(x => x.Name == "Pset_WallCommon.IsExternal" && x.Value == "TRUE"), "STEP property set");
-            Near(12d, wall.Quantities.Single(x => x.QuantityName == "NetSideArea").Quantity, 1e-12, "STEP area quantity");
-            Near(2.4d, wall.Quantities.Single(x => x.QuantityName == "NetVolume").Quantity, 1e-12, "STEP volume quantity");
+            Near(12d, wall.Quantities.Single(x => x.QuantityName == "NetSideArea").Quantity, 1e-12, "explicit area unit overrides global area unit");
+            Equal("m2", wall.Quantities.Single(x => x.QuantityName == "NetSideArea").Unit, "explicit area canonical unit");
+            Near(2.4d, wall.Quantities.Single(x => x.QuantityName == "NetVolume").Quantity, 1e-12, "global volume unit normalization");
+            Equal("m3", wall.Quantities.Single(x => x.QuantityName == "NetVolume").Unit, "global volume canonical unit");
+            Near(5d, wall.Quantities.Single(x => x.QuantityName == "Length").Quantity, 1e-12, "global millimetre length normalization");
+            Equal("m", wall.Quantities.Single(x => x.QuantityName == "Length").Unit, "global length canonical unit");
+            Near(1.25d, wall.Quantities.Single(x => x.QuantityName == "Mass").Quantity, 1e-12, "IFC gram mass normalization");
+            Equal("kg", wall.Quantities.Single(x => x.QuantityName == "Mass").Unit, "mass canonical unit");
+            Near(3d, wall.Quantities.Single(x => x.QuantityName == "Count").Quantity, 1e-12, "count remains canonical");
+            Equal("count", wall.Quantities.Single(x => x.QuantityName == "Count").Unit, "count canonical unit");
 
             var workbench = new QuantBimStandaloneWorkbench(source);
             var tempPath = Path.Combine(Path.GetTempPath(), "qs3d-quantbim-" + Guid.NewGuid().ToString("N") + ".ifc");
@@ -144,22 +162,40 @@ namespace QS3D.Core.SmokeTests
                 File.WriteAllText(tempPath, step);
                 var opened = workbench.Open(tempPath);
                 Equal("G1", opened.Elements.Single().Guid, "standalone file-open IFC ingestion");
+                Near(5d, opened.Elements.Single().Quantities.Single(x => x.QuantityName == "Length").Quantity, 1e-12, "file-open unit normalization");
             }
             finally
             {
                 if (File.Exists(tempPath)) File.Delete(tempPath);
             }
 
-            var duplicateRejected = false;
+            const string legacyStep = "ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n" +
+                "#10=IFCWALL('LEGACY',$,'Legacy',$,$,$,$,$);\n" +
+                "#50=IFCQUANTITYAREA('Area',$,$,2.5,$);\n" +
+                "#52=IFCELEMENTQUANTITY('Q',$,'BaseQuantities',$,$,(#50));\n" +
+                "#53=IFCRELDEFINESBYPROPERTIES('R',$,$,$,(#10),#52);\nENDSEC;\nEND-ISO-10303-21;\n";
+            var legacy = source.Parse("legacy.ifc", legacyStep).Elements.Single().Quantities.Single();
+            Near(2.5d, legacy.Quantity, 1e-12, "legacy omitted-unit quantity remains canonical SI");
+            Equal("m2", legacy.Unit, "legacy omitted-unit label");
+
+            RejectsInvalidData(() => source.Parse("duplicate.ifc", step.Replace("#20=IFCBUILDINGSTOREY", "#10=IFCBUILDINGSTOREY")), "duplicate STEP identity fails closed");
+            RejectsInvalidData(() => source.Parse("unit-mismatch.ifc", step.Replace("#50=IFCQUANTITYAREA('NetSideArea',$,#84", "#50=IFCQUANTITYAREA('NetSideArea',$,#80")), "quantity unit type mismatch fails closed");
+            RejectsInvalidData(() => source.Parse("missing-unit.ifc", step.Replace("#50=IFCQUANTITYAREA('NetSideArea',$,#84", "#50=IFCQUANTITYAREA('NetSideArea',$,#999")), "dangling explicit unit fails closed");
+            RejectsInvalidData(() => source.Parse("conversion-unit.ifc", step.Replace("#82=IFCSIUNIT(*,.VOLUMEUNIT.,.DECI.,.CUBIC_METRE.);", "#82=IFCCONVERSIONBASEDUNIT(#900,.VOLUMEUNIT.,'CUBIC_FOOT',#901);")), "unsupported relevant conversion unit fails closed");
+        }
+
+        private static void RejectsInvalidData(Action action, string label)
+        {
+            var rejected = false;
             try
             {
-                source.Parse("duplicate.ifc", step.Replace("#20=IFCBUILDINGSTOREY", "#10=IFCBUILDINGSTOREY"));
+                action();
             }
             catch (InvalidDataException)
             {
-                duplicateRejected = true;
+                rejected = true;
             }
-            True(duplicateRejected, "duplicate STEP identity fails closed");
+            True(rejected, label);
         }
 
         private sealed class FakeIfcSource : IIfcStandaloneSource

@@ -170,6 +170,87 @@ namespace QS3D.BricsCAD.V25.Updates
                        StringComparison.OrdinalIgnoreCase);
         }
 
+        internal static bool IsSupersededByLoadedAssembly(
+            PreviewInstallReceiptInfo info,
+            string actualVersion,
+            string actualAdapterPath)
+        {
+            if (info == null || string.IsNullOrWhiteSpace(actualAdapterPath)) return false;
+            string actualPath;
+            try { actualPath = Path.GetFullPath(actualAdapterPath); }
+            catch { return false; }
+
+            if (!string.Equals(info.ExpectedAdapterPath, actualPath, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return CompareNormalizedVersions(actualVersion, info.ExpectedVersion) > 0;
+        }
+
+        internal static int CompareNormalizedVersions(string leftValue, string rightValue)
+        {
+            Version leftCore;
+            Version rightCore;
+            string[] leftPrerelease;
+            string[] rightPrerelease;
+            if (!TryParseSemanticVersion(leftValue, out leftCore, out leftPrerelease) ||
+                !TryParseSemanticVersion(rightValue, out rightCore, out rightPrerelease))
+                return 0;
+
+            var coreComparison = leftCore.CompareTo(rightCore);
+            if (coreComparison != 0) return coreComparison;
+
+            var leftStable = leftPrerelease.Length == 0;
+            var rightStable = rightPrerelease.Length == 0;
+            if (leftStable && rightStable) return 0;
+            if (leftStable) return 1;
+            if (rightStable) return -1;
+
+            var shared = Math.Min(leftPrerelease.Length, rightPrerelease.Length);
+            for (var index = 0; index < shared; index++)
+            {
+                var leftPart = leftPrerelease[index];
+                var rightPart = rightPrerelease[index];
+                long leftNumber;
+                long rightNumber;
+                var leftNumeric = long.TryParse(leftPart, NumberStyles.None, CultureInfo.InvariantCulture, out leftNumber);
+                var rightNumeric = long.TryParse(rightPart, NumberStyles.None, CultureInfo.InvariantCulture, out rightNumber);
+                if (leftNumeric && rightNumeric)
+                {
+                    var numericComparison = leftNumber.CompareTo(rightNumber);
+                    if (numericComparison != 0) return numericComparison;
+                    continue;
+                }
+                if (leftNumeric != rightNumeric) return leftNumeric ? -1 : 1;
+                var textComparison = string.Compare(leftPart, rightPart, StringComparison.Ordinal);
+                if (textComparison != 0) return textComparison;
+            }
+
+            return leftPrerelease.Length.CompareTo(rightPrerelease.Length);
+        }
+
+        private static bool TryParseSemanticVersion(string value, out Version core, out string[] prerelease)
+        {
+            core = new Version(0, 0);
+            prerelease = Array.Empty<string>();
+            var normalized = NormalizeVersion(value);
+            if (normalized.Length == 0) return false;
+
+            var dash = normalized.IndexOf('-');
+            var coreText = dash >= 0 ? normalized.Substring(0, dash) : normalized;
+            var prereleaseText = dash >= 0 ? normalized.Substring(dash + 1) : string.Empty;
+            Version? parsedCore;
+            if (!Version.TryParse(coreText, out parsedCore) || parsedCore == null) return false;
+            if (dash >= 0 && prereleaseText.Length == 0) return false;
+
+            core = parsedCore;
+            prerelease = prereleaseText.Length == 0 ? Array.Empty<string>() : prereleaseText.Split('.');
+            for (var index = 0; index < prerelease.Length; index++)
+            {
+                if (prerelease[index].Length == 0) return false;
+            }
+            return true;
+        }
+
         internal static string DescribeMismatch(
             PreviewInstallReceiptInfo info,
             string actualVersion,

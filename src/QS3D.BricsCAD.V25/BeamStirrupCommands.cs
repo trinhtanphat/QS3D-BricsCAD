@@ -24,12 +24,14 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try
             {
                 var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
                 if (selectedIds.Length == 0)
                 {
-                    Report(document, "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
+                    Report(document, nativeDatabaseIdentity, "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
                     return;
                 }
 
@@ -41,20 +43,20 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (selectedHandles.Count == 0)
                 {
-                    Report(document, "Beam Stirrup 3D: selection không có source handle hợp lệ.");
+                    Report(document, nativeDatabaseIdentity, "Beam Stirrup 3D: selection không có source handle hợp lệ.");
                     return;
                 }
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
                 {
-                    Report(document, "Beam Stirrup 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
+                    Report(document, nativeDatabaseIdentity, "Beam Stirrup 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
                     return;
                 }
 
                 var previewTargets = ResolveBeamTargets(previewProject, selectedHandles);
                 if (previewTargets.Count == 0)
                 {
-                    Report(document, "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
+                    Report(document, nativeDatabaseIdentity, "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8).");
                     return;
                 }
 
@@ -71,15 +73,16 @@ namespace QS3D.BricsCAD.V25
                 if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
                     throw new InvalidOperationException("Beam Stirrup 3D: semantic Beam target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 var result = BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds);
                 var message = result.Stirrups == 0
                     ? "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8)."
                     : "Beam Stirrup 3D: đã tạo/cập nhật " + result.Stirrups + " đai trên " + result.Elements + " dầm.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message);
             }
             catch (Exception)
             {
-                Report(document, OperationFailure);
+                Report(document, nativeDatabaseIdentity, OperationFailure);
             }
         }
 
@@ -95,7 +98,7 @@ namespace QS3D.BricsCAD.V25
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 {
-                    Report(document, "Beam Stirrup Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.");
+                    ReportHealth(document, "Beam Stirrup Health: BLOCKED • chưa có QS3D project state/sidecar; lệnh kiểm tra không tạo project mới.");
                     return;
                 }
 
@@ -117,7 +120,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception)
             {
-                Report(document, HealthFailure);
+                ReportHealth(document, HealthFailure);
             }
         }
 
@@ -127,26 +130,47 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private static void FinalizeUi(Document document, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try
             {
-                RefreshProjectForDocument(document);
+                RefreshModelTree(document, nativeDatabaseIdentity);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.Regen();
-                SetPaletteStatusForDocument(document, message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                SetPaletteStatusForDocument(document, nativeDatabaseIdentity, message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.WriteMessage("\nQS3D " + message);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message + " " + UiSyncWarning + " (" + ex.GetType().Name + ").");
             }
         }
 
-        private static bool IsActiveDocument(Document document)
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
             try
             {
-                return ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument);
+                return document.Database.UnmanagedObject;
+            }
+            catch
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                return false;
+
+            try
+            {
+                return document.Database.UnmanagedObject == nativeDatabaseIdentity;
             }
             catch
             {
@@ -154,32 +178,51 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void RefreshProjectForDocument(Document document)
+        private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
         {
-            if (!IsActiveDocument(document)) return;
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException("Beam Stirrup 3D document generation changed before geometry mutation.");
+        }
+
+        private static void RefreshModelTree(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             PaletteCoordinator.RefreshProject();
         }
 
-        private static void SetPaletteStatusForDocument(Document document, string message)
+        private static void SetPaletteStatusForDocument(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
-            if (!IsActiveDocument(document)) return;
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             PaletteCoordinator.SetStatus(message);
         }
 
         private static void TrySetPaletteStatusForDocument(Document document, string message)
         {
-            try { SetPaletteStatusForDocument(document, message); }
+            try
+            {
+                if (ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                    PaletteCoordinator.SetStatus(message);
+            }
             catch { }
         }
 
-        private static void Report(Document document, string message)
+        private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
-            TrySetPaletteStatusForDocument(document, message);
-            TryWriteMessage(document, "\nQS3D " + message);
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message);
         }
 
-        private static void TryWriteMessage(Document document, string message)
+        private static void ReportHealth(Document document, string message)
         {
+            TrySetPaletteStatusForDocument(document, message);
+            try { document.Editor.WriteMessage("\nQS3D " + message); }
+            catch { }
+        }
+
+        private static void TryWriteMessage(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { document.Editor.WriteMessage(message); }
             catch { }
         }

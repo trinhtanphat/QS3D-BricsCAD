@@ -20,31 +20,39 @@ def method_block(source: str, signature: str, next_signature: str) -> str:
 
 def main() -> None:
     source = SOURCE.read_text(encoding="utf-8")
-
     build = method_block(source, "public void BuildBeamStirrups()", "[CommandMethod(\"QS3DBEAMSTIRRUPHEALTH\"")
     health = method_block(source, "public void BeamStirrupHealth()", "private static List<ProjectElement> ResolveBeamTargets")
-    finalize = method_block(source, "private static void FinalizeUi(Document document, string message)", "private static void Report(Document document, string message)")
+    finalize = method_block(
+        source,
+        "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)",
+        "private static IntPtr GetNativeDatabaseIdentity(Document document)",
+    )
 
     require("ex.Message" not in build, "Beam Stirrup mutation must not expose raw exception messages")
     require("ex.Message" not in health, "Beam Stirrup health must not expose raw exception messages")
     require("ex.Message" not in finalize, "post-commit UI sync must not expose raw exception messages")
-
     require("OperationFailure" in source, "missing stable Beam Stirrup operation failure message")
     require("HealthFailure" in source, "missing stable Beam Stirrup health failure message")
     require("UiSyncWarning" in source, "missing stable post-commit UI sync warning")
-
-    require("Report(document, OperationFailure);" in build, "mutation catch must report the stable operation failure")
-    require("Report(document, HealthFailure);" in health, "health catch must report the stable health failure")
     require(
-        'TryWriteMessage(document, "\\nQS3D " + message + " " + UiSyncWarning);' in finalize,
-        "post-commit UI failure must preserve the success message and append the stable warning",
+        "Report(document, nativeDatabaseIdentity, OperationFailure);" in build,
+        "mutation catch must report the stable operation failure through exact generation affinity",
+    )
+    require("ReportHealth(document, HealthFailure);" in health, "health catch must report the stable health failure")
+    require("ex.GetType().Name" in finalize, "post-commit UI warning may expose exception type only")
+    require(
+        "TryWriteMessage(document, nativeDatabaseIdentity" in finalize and "UiSyncWarning" in finalize,
+        "post-commit UI failure must preserve success text through generation-aware output",
+    )
+    require(
+        "IsActiveDocumentGeneration(document, nativeDatabaseIdentity)" in finalize,
+        "post-commit UI recovery must reject stale native database generations",
     )
 
-    forbidden = ("DocumentLock", "LockDocument(", "StartTransaction(", "Commit(", "Abort(")
-    for token in forbidden:
+    for token in ("DocumentLock", "LockDocument(", "StartTransaction(", "Commit(", "Abort("):
         require(token not in finalize, f"UI-sync recovery must not perform native transaction/rollback work: {token}")
 
-    print("PASS: Beam Stirrup command failures are redacted and post-commit UI sync remains fail-soft")
+    print("PASS: Beam Stirrup failures remain redacted while generation-aware post-commit UI stays fail-soft")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ namespace QS3D.Core.BenchmarkParity
 
             var records = ParseRecords(stepText);
             if (records.Count == 0) throw new InvalidDataException("IFC STEP DATA section contains no entity records.");
+            var units = new QuantityUnitResolver(records);
 
             var storeyNames = records.Values.Where(x => x.Entity == "IFCBUILDINGSTOREY")
                 .ToDictionary(x => x.Id, x => TextAt(x.Args, 2), StringComparer.OrdinalIgnoreCase);
@@ -81,7 +82,7 @@ namespace QS3D.Core.BenchmarkParity
                 {
                     StepRecord quantity;
                     if (!records.TryGetValue(quantityRef, out quantity)) throw new InvalidDataException("Quantity set references missing quantity " + quantityRef + ".");
-                    quantities.Add(ParseQuantity(quantity));
+                    quantities.Add(ParseQuantity(quantity, units));
                 }
                 quantitySets.Add(set.Id, new ReadOnlyCollection<ParsedQuantity>(quantities));
             }
@@ -227,24 +228,17 @@ namespace QS3D.Core.BenchmarkParity
             }
         }
 
-        private static ParsedQuantity ParseQuantity(StepRecord record)
+        private static ParsedQuantity ParseQuantity(StepRecord record, QuantityUnitResolver units)
         {
-            string unit;
-            switch (record.Entity)
-            {
-                case "IFCQUANTITYLENGTH": unit = "m"; break;
-                case "IFCQUANTITYAREA": unit = "m2"; break;
-                case "IFCQUANTITYVOLUME": unit = "m3"; break;
-                case "IFCQUANTITYCOUNT": unit = "count"; break;
-                case "IFCQUANTITYWEIGHT": unit = "kg"; break;
-                default: throw new InvalidDataException("Unsupported IFC quantity entity " + record.Entity + ".");
-            }
             if (record.Args.Count < 4) throw new InvalidDataException(record.Entity + " has no quantity value.");
-            var explicitUnit = record.Args[2].Trim();
-            if (explicitUnit != "$" && explicitUnit != "*") throw new InvalidDataException("Explicit IFC unit references require unit-assignment resolution: " + explicitUnit + ".");
+            var spec = QuantitySpec.For(record.Entity);
+            var resolved = units.Resolve(record, spec);
             double number;
-            if (!double.TryParse(record.Args[3], NumberStyles.Float, CultureInfo.InvariantCulture, out number) || double.IsNaN(number) || double.IsInfinity(number)) throw new InvalidDataException("Invalid IFC quantity value in " + record.Id + ".");
-            return new ParsedQuantity(TextAt(record.Args, 0), number, unit);
+            if (!double.TryParse(record.Args[3], NumberStyles.Float, CultureInfo.InvariantCulture, out number) || double.IsNaN(number) || double.IsInfinity(number))
+                throw new InvalidDataException("Invalid IFC quantity value in " + record.Id + ".");
+            var canonical = number * resolved.Scale;
+            if (double.IsNaN(canonical) || double.IsInfinity(canonical)) throw new InvalidDataException("IFC quantity conversion is non-finite in " + record.Id + ".");
+            return new ParsedQuantity(TextAt(record.Args, 0), canonical, resolved.CanonicalUnit);
         }
 
         private static void AssignUnique(IDictionary<string, string> map, string key, string value, string relationship)
@@ -295,6 +289,189 @@ namespace QS3D.Core.BenchmarkParity
                 var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(text.Replace("\r\n", "\n")));
                 return "IFCSTEP-" + BitConverter.ToString(hash).Replace("-", string.Empty).Substring(0, 16);
             }
+        }
+
+        private sealed class QuantityUnitResolver
+        {
+            private readonly IDictionary<string, StepRecord> _records;
+            private readonly Dictionary<string, ResolvedUnit> _globalByType = new Dictionary<string, ResolvedUnit>(StringComparer.OrdinalIgnoreCase);
+
+            internal QuantityUnitResolver(IDictionary<string, StepRecord> records)
+            {
+                _records = records ?? throw new ArgumentNullException("records");
+                LoadGlobalUnits();
+            }
+
+            internal ResolvedUnit Resolve(StepRecord quantity, QuantitySpec spec)
+            {
+                var token = quantity.Args[2].Trim();
+                if (spec.UnitType.Length == 0)
+                {
+                    if (token != "$" && token != "*") throw new InvalidDataException("Explicit IFC count units are not supported: " + token + ".");
+                    return new ResolvedUnit(string.Empty, spec.CanonicalUnit, 1d);
+                }
+
+                if (token != "$" && token != "*") return ResolveReference(token, spec, "quantity " + quantity.Id);
+                ResolvedUnit global;
+                return _globalByType.TryGetValue(spec.UnitType, out global) ? global : new ResolvedUnit(spec.UnitType, spec.CanonicalUnit, 1d);
+            }
+
+            private void LoadGlobalUnits()
+            {
+                var assignmentRefs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var project in _records.Values.Where(x => x.Entity == "IFCPROJECT"))
+                {
+                    if (project.Args.Count <= 8) continue;
+                    var token = project.Args[8].Trim();
+                    if (token == "$" || token == "*") continue;
+                    if (!token.StartsWith("#", StringComparison.Ordinal)) throw new InvalidDataException("IFCPROJECT UnitsInContext is not a STEP reference: " + token + ".");
+                    assignmentRefs.Add(token);
+                }
+
+                if (assignmentRefs.Count > 1) throw new InvalidDataException("Multiple IFCPROJECT unit assignments are ambiguous for standalone quantity normalization.");
+                if (assignmentRefs.Count == 0) return;
+
+                var assignmentRef = assignmentRefs.Single();
+                StepRecord assignment;
+                if (!_records.TryGetValue(assignmentRef, out assignment) || assignment.Entity != "IFCUNITASSIGNMENT")
+                    throw new InvalidDataException("IFCPROJECT UnitsInContext references missing IFCUNITASSIGNMENT " + assignmentRef + ".");
+
+                foreach (var unitRef in ReferencesAt(assignment.Args, 0))
+                {
+                    StepRecord unitRecord;
+                    if (!_records.TryGetValue(unitRef, out unitRecord)) throw new InvalidDataException("IFCUNITASSIGNMENT references missing unit " + unitRef + ".");
+                    var unitType = UnitTypeOf(unitRecord);
+                    if (!QuantitySpec.IsRelevantUnitType(unitType)) continue;
+                    if (unitRecord.Entity != "IFCSIUNIT") throw new InvalidDataException("Unsupported global IFC unit entity " + unitRecord.Entity + " for " + unitType + ".");
+                    var resolved = ParseSiUnit(unitRecord);
+                    ResolvedUnit existing;
+                    if (_globalByType.TryGetValue(unitType, out existing) && (existing.CanonicalUnit != resolved.CanonicalUnit || existing.Scale != resolved.Scale))
+                        throw new InvalidDataException("Conflicting global IFC units for " + unitType + ".");
+                    _globalByType[unitType] = resolved;
+                }
+            }
+
+            private ResolvedUnit ResolveReference(string reference, QuantitySpec spec, string context)
+            {
+                if (!reference.StartsWith("#", StringComparison.Ordinal)) throw new InvalidDataException("Expected IFC unit reference for " + context + ", got " + reference + ".");
+                StepRecord unitRecord;
+                if (!_records.TryGetValue(reference, out unitRecord)) throw new InvalidDataException("IFC unit reference " + reference + " for " + context + " is missing.");
+                if (unitRecord.Entity != "IFCSIUNIT") throw new InvalidDataException("Unsupported explicit IFC unit entity " + unitRecord.Entity + " for " + context + ".");
+                var resolved = ParseSiUnit(unitRecord);
+                if (!string.Equals(resolved.UnitType, spec.UnitType, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("IFC unit type mismatch for " + context + ": expected " + spec.UnitType + ", got " + resolved.UnitType + ".");
+                return resolved;
+            }
+
+            private static string UnitTypeOf(StepRecord record)
+            {
+                if (record.Args.Count <= 1) return string.Empty;
+                switch (record.Entity)
+                {
+                    case "IFCSIUNIT":
+                    case "IFCCONVERSIONBASEDUNIT":
+                    case "IFCCONVERSIONBASEDUNITWITHOFFSET":
+                    case "IFCCONTEXTDEPENDENTUNIT":
+                        return Unquote(record.Args[1]).ToUpperInvariant();
+                    default:
+                        return string.Empty;
+                }
+            }
+
+            private static ResolvedUnit ParseSiUnit(StepRecord record)
+            {
+                if (record.Args.Count < 4) throw new InvalidDataException("IFCSIUNIT " + record.Id + " is incomplete.");
+                var unitType = Unquote(record.Args[1]).ToUpperInvariant();
+                var prefix = Unquote(record.Args[2]).ToUpperInvariant();
+                var name = Unquote(record.Args[3]).ToUpperInvariant();
+                var factor = PrefixFactor(prefix);
+                switch (unitType)
+                {
+                    case "LENGTHUNIT":
+                        RequireUnitName(record, name, "METRE");
+                        return new ResolvedUnit(unitType, "m", factor);
+                    case "AREAUNIT":
+                        RequireUnitName(record, name, "SQUARE_METRE");
+                        return new ResolvedUnit(unitType, "m2", factor * factor);
+                    case "VOLUMEUNIT":
+                        RequireUnitName(record, name, "CUBIC_METRE");
+                        return new ResolvedUnit(unitType, "m3", factor * factor * factor);
+                    case "MASSUNIT":
+                        RequireUnitName(record, name, "GRAM");
+                        return new ResolvedUnit(unitType, "kg", factor / 1000d);
+                    default:
+                        throw new InvalidDataException("Unsupported IFC SI unit type " + unitType + " in " + record.Id + ".");
+                }
+            }
+
+            private static void RequireUnitName(StepRecord record, string actual, string expected)
+            {
+                if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("IFCSIUNIT " + record.Id + " has unexpected name " + actual + " for " + Unquote(record.Args[1]) + "; expected " + expected + ".");
+            }
+
+            private static double PrefixFactor(string prefix)
+            {
+                switch (prefix)
+                {
+                    case "": return 1d;
+                    case "EXA": return 1e18;
+                    case "PETA": return 1e15;
+                    case "TERA": return 1e12;
+                    case "GIGA": return 1e9;
+                    case "MEGA": return 1e6;
+                    case "KILO": return 1e3;
+                    case "HECTO": return 1e2;
+                    case "DECA": return 1e1;
+                    case "DECI": return 1e-1;
+                    case "CENTI": return 1e-2;
+                    case "MILLI": return 1e-3;
+                    case "MICRO": return 1e-6;
+                    case "NANO": return 1e-9;
+                    case "PICO": return 1e-12;
+                    case "FEMTO": return 1e-15;
+                    case "ATTO": return 1e-18;
+                    default: throw new InvalidDataException("Unsupported IFC SI prefix " + prefix + ".");
+                }
+            }
+        }
+
+        private sealed class QuantitySpec
+        {
+            private QuantitySpec(string unitType, string canonicalUnit) { UnitType = unitType; CanonicalUnit = canonicalUnit; }
+            internal string UnitType { get; private set; }
+            internal string CanonicalUnit { get; private set; }
+
+            internal static QuantitySpec For(string entity)
+            {
+                switch (entity)
+                {
+                    case "IFCQUANTITYLENGTH": return new QuantitySpec("LENGTHUNIT", "m");
+                    case "IFCQUANTITYAREA": return new QuantitySpec("AREAUNIT", "m2");
+                    case "IFCQUANTITYVOLUME": return new QuantitySpec("VOLUMEUNIT", "m3");
+                    case "IFCQUANTITYCOUNT": return new QuantitySpec(string.Empty, "count");
+                    case "IFCQUANTITYWEIGHT": return new QuantitySpec("MASSUNIT", "kg");
+                    default: throw new InvalidDataException("Unsupported IFC quantity entity " + entity + ".");
+                }
+            }
+
+            internal static bool IsRelevantUnitType(string unitType)
+            {
+                return unitType == "LENGTHUNIT" || unitType == "AREAUNIT" || unitType == "VOLUMEUNIT" || unitType == "MASSUNIT";
+            }
+        }
+
+        private sealed class ResolvedUnit
+        {
+            internal ResolvedUnit(string unitType, string canonicalUnit, double scale)
+            {
+                UnitType = unitType;
+                CanonicalUnit = canonicalUnit;
+                Scale = scale;
+            }
+            internal string UnitType { get; private set; }
+            internal string CanonicalUnit { get; private set; }
+            internal double Scale { get; private set; }
         }
 
         private sealed class StepRecord

@@ -807,7 +807,8 @@ namespace QS3D.BricsCAD.V25.Updates
                 .FirstOrDefault();
             var actualVersion = informational ?? assembly.GetName().Version?.ToString() ?? string.Empty;
 
-            if (PreviewInstallReceipt.MatchesLoadedAssembly(receipt, actualVersion, actualPath))
+            if (PreviewInstallReceipt.MatchesLoadedAssembly(receipt, actualVersion, actualPath) ||
+                PreviewInstallReceipt.IsSupersededByLoadedAssembly(receipt, actualVersion, actualPath))
             {
                 PreviewInstallReceipt.TryDelete();
                 _postRestartDiagnostic = null;
