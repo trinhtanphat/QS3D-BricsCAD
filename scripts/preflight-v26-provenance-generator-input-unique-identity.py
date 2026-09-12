@@ -62,6 +62,21 @@ foreach ($case in $cases) {
         throw "provenance-generator duplicate-property probe failed for $($case.Name): expected $($case.Expected), got $actual"
     }
 }
+
+# The generator consumes identity at specific JSON paths. Unrelated nested extension data
+# must not be mistaken for duplicate root identity. This intentionally fails the old
+# global-regex counter and keeps the carrier RED until admission becomes path-aware.
+$nestedCases = @(
+    @{ Json='{"product":"QS3D","extension":{"product":"diagnostic"}}'; Name='product'; Expected=1 },
+    @{ Json='{"Version":1,"Files":[],"extension":{"Version":99}}'; Name='Version'; Expected=1 },
+    @{ Json='{"framework":"net8.0-windows","extension":[{"framework":"ignored"}]}'; Name='framework'; Expected=1 }
+)
+foreach ($case in $nestedCases) {
+    $actual = Get-JsonPropertyOccurrenceCount -JsonText $case.Json -PropertyName $case.Name
+    if ($actual -ne $case.Expected) {
+        throw "provenance-generator path-scope probe failed for $($case.Name): expected $($case.Expected), got $actual"
+    }
+}
 '''
 
 with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as tmp:
@@ -78,8 +93,8 @@ finally:
     probe_path.unlink(missing_ok=True)
 if completed.returncode != 0:
     raise SystemExit(
-        "ERROR: behavioral V26 provenance-generator duplicate/escaped/case-variant-key probe failed: "
+        "ERROR: behavioral V26 provenance-generator duplicate/path-scope probe failed: "
         + (completed.stderr or completed.stdout).strip()
     )
 
-print("PASS: V26 provenance generator duplicate-rejects host-state/package identity before parsing and recognizes escaped/case-variant names")
+print("PASS: V26 provenance generator duplicate-rejects identity before parsing without treating unrelated nested keys as duplicates")
