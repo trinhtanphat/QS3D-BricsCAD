@@ -75,7 +75,7 @@ namespace QS3D.Core.SmokeTests
             Require(checkpoint.Matches(project), "Stable persistence checkpoint did not match its unchanged project revision.");
             var expectedVersion = checkpoint.ProjectChangeVersion;
             var expectedUpdatedUtc = checkpoint.ProjectUpdatedUtc;
-            element.SetProperty("LengthM", "5");
+            element.MarkDirty(ElementDirtyFlags.Quantity);
             Require(!checkpoint.Matches(project), "Persistence checkpoint ignored changed element persistence state.");
             checkpoint.Restore(project);
             Require(checkpoint.Matches(project), "Persistence checkpoint did not restore its captured persistence state.");
