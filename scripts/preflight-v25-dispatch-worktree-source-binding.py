@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW = ROOT / ".github/workflows/dispatch-v25-cloud-after-main-integration.yml"
+errors = []
+
+if not WORKFLOW.is_file():
+    errors.append("missing V25 post-main dispatcher workflow")
+    workflow = ""
+else:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+
+required = (
+    "dispatch_source_ref='refs/remotes/origin/qs3d-v25-dispatch-source'",
+    'git fetch --no-tags origin "+${source_sha}:${dispatch_source_ref}"',
+    'fetched_source="$(git rev-parse "${dispatch_source_ref}^{commit}")"',
+    'if [[ "${fetched_source,,}" != "${source_sha}" ]]; then',
+    'git checkout --detach "${source_sha}"',
+    'checked_out_source="$(git rev-parse HEAD)"',
+    'if [[ "${checked_out_source,,}" != "${source_sha}" ]]; then',
+)
+for token in required:
+    if token not in workflow:
+        errors.append("dispatcher exact-source worktree contract missing token: " + token)
+
+if workflow:
+    source_guard = workflow.find('if [[ ! "${source_sha}" =~ ^[0-9a-f]{40}$ ]]; then')
+    source_fetch = workflow.find("dispatch_source_ref='refs/remotes/origin/qs3d-v25-dispatch-source'", source_guard)
+    source_checkout = workflow.find('git checkout --detach "${source_sha}"', source_fetch)
+    head_guard = workflow.find('checked_out_source="$(git rev-parse HEAD)"', source_checkout)
+    release_workflow_read = workflow.find("release_workflow='.github/workflows/release-v25-cloud.yml'", head_guard)
+    version_read = workflow.find('version_project="src/QS3D.BricsCAD.V25/QS3D.BricsCAD.V25.csproj"', head_guard)
+    batch_gate = workflow.find("scripts/v25-release-batch-gate.py", head_guard)
+    indexes = (source_guard, source_fetch, source_checkout, head_guard, release_workflow_read, version_read, batch_gate)
+    if min(indexes) < 0 or not (
+        source_guard < source_fetch < source_checkout < head_guard
+        < release_workflow_read < version_read < batch_gate
+    ):
+        errors.append(
+            "dispatcher must bind/detach the worktree to exact source_sha before reading release workflow, committed Version, or executing the batch gate"
+        )
+
+    workflow_run_rebind = workflow.find('if [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then')
+    current_main_rebind = workflow.find('source_sha="${current_main,,}"', workflow_run_rebind)
+    if workflow_run_rebind < 0 or current_main_rebind < 0:
+        errors.append("workflow_run path must explicitly rebind source_sha to current protected main before exact-source checkout")
+
+print("QS3D V25 dispatcher exact-source worktree binding preflight")
+if errors:
+    for error in errors:
+        print("ERROR:", error)
+    print(f"FAILED with {len(errors)} error(s).")
+    sys.exit(1)
+
+print("PASS: V25 dispatcher proves and detaches to exact admitted source_sha before release inspection and batch-gate execution.")
