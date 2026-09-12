@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             P5RebarBinding();
             P6SpecialCategoryBindings();
             P7ReviewDocumentationBindings();
+            P8DrawingInteroperabilityBindings();
         }
 
         private static void P2ShellProjectBindings()
@@ -131,6 +132,17 @@ namespace QS3D.Core.SmokeTests
                 ParityWorkflowSurface.Ui, ParityWorkflowRequirement.ActiveDocument | ParityWorkflowRequirement.Project);
             if (registry.TryGet(new FeatureId("drawing-manager"), out _))
                 throw new InvalidOperationException("P7 must keep Drawing Manager unbound until a canonical QS3D workflow exists.");
+        }
+        private static void P8DrawingInteroperabilityBindings()
+        {
+            var registry = ParityDrawingInteroperabilityCatalog.CreateRegistry();
+            if (registry.Bindings.Count != 2)
+                throw new InvalidOperationException("P8 Drawing Manager/IFC catalog must contain exactly two bindings.");
+
+            AssertBinding(registry, "drawing-manager", ParityWorkflowKind.Infrastructure,
+                ParityWorkflowSurface.Ui, ParityWorkflowRequirement.ActiveDocument);
+            AssertBinding(registry, "ifc", ParityWorkflowKind.Infrastructure,
+                ParityWorkflowSurface.Ui, ParityWorkflowRequirement.ActiveDocument);
         }
         private static void AssertBinding(ParityWorkflowRegistry registry, string id,
             ParityWorkflowKind kind, ParityWorkflowSurface surfaces, ParityWorkflowRequirement requirements)

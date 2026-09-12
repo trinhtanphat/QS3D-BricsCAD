@@ -5,7 +5,15 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 HEADER = "FeatureId\tDomain\tReferencePath\tWorkflowKey\tApplicability\tEvidenceStage\tDecisionReference\tDecisionReason"
 WIRED = ("view", "quantity", "revision")
-REFERENCE_ONLY = ("drawing-manager",)
+REFERENCE_MINIMUM = ("drawing-manager",)
+EVIDENCE_ORDER = {
+    "ReferenceCaptured": 0,
+    "UiPresent": 1,
+    "CommandWired": 2,
+    "SemanticBehaviorPass": 3,
+    "SaveReopenPass": 4,
+    "V25V26ParityPass": 5,
+}
 
 
 def fail(message):
@@ -52,12 +60,15 @@ def main():
             fail(f"manifest missing P7 wired feature: {feature_id}")
         if fields[3] != feature_id or fields[4] != "Applicable" or fields[5] != "CommandWired":
             fail(f"P7 wired feature is not canonical Applicable/CommandWired: {feature_id}")
-    for feature_id in REFERENCE_ONLY:
+    for feature_id in REFERENCE_MINIMUM:
         fields = rows.get(feature_id)
         if fields is None:
             fail(f"manifest missing P7 reference feature: {feature_id}")
-        if fields[3] != feature_id or fields[4] != "Applicable" or fields[5] != "ReferenceCaptured":
-            fail(f"P7 reference-only feature advanced beyond evidence ceiling: {feature_id}")
+        if fields[3] != feature_id or fields[4] != "Applicable":
+            fail(f"P7 reference feature lost canonical applicability/workflow identity: {feature_id}")
+        stage = fields[5]
+        if stage not in EVIDENCE_ORDER or EVIDENCE_ORDER[stage] < EVIDENCE_ORDER["ReferenceCaptured"]:
+            fail(f"P7 reference feature regressed below ReferenceCaptured: {feature_id}")
 
     catalog = read("src/QS3D.Core/Features/ParityReviewDocumentationCatalog.cs")
     require(catalog, "public static class ParityReviewDocumentationCatalog", "P7 catalog")
