@@ -51,6 +51,7 @@ namespace QS3D.Core.BenchmarkParity
                     { "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error },
                     { "QA2.MISSING_PSET", QsQaSeverity.Error },
                     { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Critical },
+                    { "QA2.MISSING_STOREY", QsQaSeverity.Critical },
                     { "QA2.SPATIAL_MISMATCH", QsQaSeverity.Critical },
                     { "QA2.TYPE_ASSIGNMENT_MISMATCH", QsQaSeverity.Critical },
                     { "QA2.DUPLICATE_IFC_GUID", QsQaSeverity.Critical },
@@ -176,7 +177,9 @@ namespace QS3D.Core.BenchmarkParity
             var waived = new List<QsQaFinding>();
             foreach (var finding in findings)
             {
-                var structuralIdentityConflict = string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase);
+                var structuralIdentityConflict =
+                    string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(finding.RuleId, "QA2.DUPLICATE_IFC_GUID", StringComparison.OrdinalIgnoreCase);
                 if (!structuralIdentityConflict && waiverList.Any(x => x.Applies(finding, nowUtc))) waived.Add(finding);
                 else active.Add(finding);
             }
@@ -213,7 +216,7 @@ namespace QS3D.Core.BenchmarkParity
                 AddIf(result, duplicateElementIds.Contains(element.Id), profile, "QA2.DUPLICATE_ELEMENT_ID", QsQaSeverity.Critical, element.Id, "Element identity must be unique before QA waivers can be evaluated safely.");
                 AddIf(result, element.Material.Length == 0, profile, "QA2.MISSING_MATERIAL", QsQaSeverity.Error, element.Id, "Material is required.");
                 AddIf(result, element.Type.Length == 0, profile, "QA2.MISSING_TYPE", QsQaSeverity.Error, element.Id, "Type assignment is required.");
-                AddIf(result, element.Length <= 0d || element.Width <= 0d || element.Height <= 0d, profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Positive length, width and height are required.");
+                AddIf(result, !IsFinitePositive(element.Length) || !IsFinitePositive(element.Width) || !IsFinitePositive(element.Height), profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Finite positive length, width and height are required.");
 
                 var guid = GetIfcGuid(element);
                 AddIf(
@@ -252,10 +255,17 @@ namespace QS3D.Core.BenchmarkParity
                 }
 
                 string spatialContainer;
-                if (element.Storey.Length > 0 && element.Properties.TryGetValue("IfcRel.SpatialContainer", out spatialContainer) && !string.IsNullOrWhiteSpace(spatialContainer))
+                if (element.Properties.TryGetValue("IfcRel.SpatialContainer", out spatialContainer) && !string.IsNullOrWhiteSpace(spatialContainer))
                 {
                     AddIf(result,
-                        !string.Equals(element.Storey, spatialContainer.Trim(), StringComparison.OrdinalIgnoreCase),
+                        element.Storey.Length == 0,
+                        profile,
+                        "QA2.MISSING_STOREY",
+                        QsQaSeverity.Critical,
+                        element.Id,
+                        "Storey identity is required when IFC spatial containment is present.");
+                    AddIf(result,
+                        element.Storey.Length > 0 && !string.Equals(element.Storey, spatialContainer.Trim(), StringComparison.OrdinalIgnoreCase),
                         profile,
                         "QA2.SPATIAL_MISMATCH",
                         QsQaSeverity.Critical,
@@ -287,6 +297,11 @@ namespace QS3D.Core.BenchmarkParity
             string guid;
             if (!element.Properties.TryGetValue("IfcGuid", out guid) || string.IsNullOrWhiteSpace(guid)) return null;
             return guid.Trim();
+        }
+
+        private static bool IsFinitePositive(double value)
+        {
+            return value > 0d && !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
         private static void AddIf(List<QsQaFinding> result, bool condition, QsQaRuleProfile profile, string ruleId, QsQaSeverity fallback, string elementId, string message)
