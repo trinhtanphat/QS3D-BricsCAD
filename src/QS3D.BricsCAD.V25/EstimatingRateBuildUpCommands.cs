@@ -259,7 +259,13 @@ namespace QS3D.BricsCAD.V25
         {
             if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
                 return;
-            Report(document, message);
+
+            try { document.Editor.WriteMessage("\n" + message); } catch { }
+
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                return;
+
+            try { PaletteCoordinator.SetStatus(message); } catch { }
         }
 
         private static void TryReportCurrentDocument(Document document, string message)
@@ -268,12 +274,6 @@ namespace QS3D.BricsCAD.V25
             try { nativeDatabaseIdentity = GetNativeDatabaseIdentity(document); }
             catch { return; }
             ReportIfActive(document, nativeDatabaseIdentity, message);
-        }
-
-        private static void Report(Document document, string message)
-        {
-            try { document.Editor.WriteMessage("\n" + message); } catch { }
-            try { PaletteCoordinator.SetStatus(message); } catch { }
         }
     }
 }
