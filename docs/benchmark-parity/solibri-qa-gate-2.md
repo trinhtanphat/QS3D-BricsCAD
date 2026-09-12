@@ -7,7 +7,7 @@
 `QsQaRuleProfile.SolibriQuantityStrict()` requires:
 
 - material and type completeness;
-- positive length, width and height;
+- finite, positive length, width and height;
 - IFC property-set evidence for `Pset_Qto` and `Pset_Identity`;
 - IFC spatial-containment and type-assignment relationships;
 - consistency between the QS3D storey and IFC spatial-container value;
@@ -16,6 +16,8 @@
 - unique QS3D element identities.
 
 Rule severities are configurable per rule. A profile also carries a blocking threshold, allowing project-specific QA policies without changing the analysis engine. `QA2.TYPE_ASSIGNMENT_MISMATCH` is Critical in the strict profile and can be overridden like the other rule severities.
+
+`QA2.INVALID_DIMENSIONS` now treats IEEE-754 `NaN`, positive infinity and negative infinity as invalid in addition to zero and negative values. A quantity dimension must therefore be both finite and strictly greater than zero before the Solibri strict profile can clear it for downstream quantity work.
 
 Duplicate IFC GUID analysis is conflict-set based: every element sharing the same non-empty normalized GUID receives its own `QA2.DUPLICATE_IFC_GUID` finding. Normalization trims surrounding whitespace and compares case-insensitively. This preserves element-level auditability and prevents input-order-dependent hard-gate results.
 
@@ -80,8 +82,12 @@ The waiver effective-window hardening does not change the waiver schema or metho
 
 The UTC hardening also keeps the public schema and signatures unchanged, but it intentionally stops accepting ambiguous `DateTimeKind.Local` or `DateTimeKind.Unspecified` inputs. Integrations that previously passed those values must normalize at their own application/serialization boundary and construct the QA2 waiver/evaluation timestamps as explicit UTC instants before calling the gate. Do not use `DateTime.SpecifyKind` unless the stored clock value is already known to represent UTC; convert from the source timezone to the correct UTC instant first.
 
+The finite-dimension hardening keeps the `QA2.INVALID_DIMENSIONS` rule id, severity customization and public APIs unchanged. Adapters that previously emitted `NaN` or infinities as placeholders must stop treating those sentinels as quantity-ready geometry; supply a real finite positive dimension or allow the QA gate to remain blocked until authoritative geometry is available.
+
 ## Smoke coverage
 
 `QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid, expired and future-dated waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It verifies that future-dated waivers keep findings active until approval and become effective at the approval timestamp. It additionally verifies that Local/Unspecified waiver/evaluation timestamps fail closed, duplicate-GUID findings cover the complete conflict set, case/whitespace normalization is stable, a one-sided duplicate waiver remains blocked, and explicit waivers for every IFC GUID participant remain auditable. Duplicate element IDs are tested case-insensitively as a complete conflict set, remain active despite a matching waiver, and block Takeoff/BOQ/Estimate. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
+
+The registered `BenchmarkParitySuiteSmoke` additionally verifies that `NaN`, positive infinity and negative infinity dimensions produce `QA2.INVALID_DIMENSIONS`, leave QA2 blocked, and deny Takeoff/BOQ/Estimate.
 
 The registered `QsIntelligenceSmoke` additionally verifies the production integration: a blocking relationship failure prevents downstream Intelligence execution, an explicit valid waiver releases the gate while remaining auditable, and a warning-level profile permits BOQ execution with `PassWithWarnings`.

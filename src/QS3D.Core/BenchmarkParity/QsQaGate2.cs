@@ -213,7 +213,7 @@ namespace QS3D.Core.BenchmarkParity
                 AddIf(result, duplicateElementIds.Contains(element.Id), profile, "QA2.DUPLICATE_ELEMENT_ID", QsQaSeverity.Critical, element.Id, "Element identity must be unique before QA waivers can be evaluated safely.");
                 AddIf(result, element.Material.Length == 0, profile, "QA2.MISSING_MATERIAL", QsQaSeverity.Error, element.Id, "Material is required.");
                 AddIf(result, element.Type.Length == 0, profile, "QA2.MISSING_TYPE", QsQaSeverity.Error, element.Id, "Type assignment is required.");
-                AddIf(result, element.Length <= 0d || element.Width <= 0d || element.Height <= 0d, profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Positive length, width and height are required.");
+                AddIf(result, !IsFinitePositive(element.Length) || !IsFinitePositive(element.Width) || !IsFinitePositive(element.Height), profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Finite positive length, width and height are required.");
 
                 var guid = GetIfcGuid(element);
                 AddIf(
@@ -287,6 +287,11 @@ namespace QS3D.Core.BenchmarkParity
             string guid;
             if (!element.Properties.TryGetValue("IfcGuid", out guid) || string.IsNullOrWhiteSpace(guid)) return null;
             return guid.Trim();
+        }
+
+        private static bool IsFinitePositive(double value)
+        {
+            return value > 0d && !double.IsNaN(value) && !double.IsInfinity(value);
         }
 
         private static void AddIf(List<QsQaFinding> result, bool condition, QsQaRuleProfile profile, string ruleId, QsQaSeverity fallback, string elementId, string message)
