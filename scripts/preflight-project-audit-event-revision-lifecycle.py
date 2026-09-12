@@ -32,7 +32,7 @@ for stale in (
         )
 
 required_audit = [
-    "internal event Action? PersistenceMutationRequested;",
+    "internal event System.Action? PersistenceMutationRequested;",
     "PersistenceMutationRequested?.Invoke();",
     "return new AuditTrail(project.AuditEvents);",
     "new AuditTrail(project.AuditEvents).ValidateExistingHistory(",
