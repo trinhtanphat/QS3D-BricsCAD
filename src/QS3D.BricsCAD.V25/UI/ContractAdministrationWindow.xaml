@@ -79,28 +79,32 @@
                     </GroupBox>
 
                     <GroupBox Header="3. Extension of time">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0"><TextBlock Text="EOT ID"/><TextBox x:Name="EotIdBox" Text="EOT-001"/></StackPanel>
-                            <StackPanel Grid.Column="1"><TextBlock Text="Requested days"/><TextBox x:Name="RequestedDaysBox" Text="10"/></StackPanel>
-                            <StackPanel Grid.Column="2"><TextBlock Text="Assessment / decision days"/><TextBox x:Name="EotDecisionDaysBox" Text="7"/></StackPanel>
-                        </Grid>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Create EOT" Click="CreateEot_Click"/>
-                            <Button Content="Advance EOT" Click="AdvanceEot_Click"/>
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0"><TextBlock Text="EOT ID"/><TextBox x:Name="EotIdBox" Text="EOT-001"/></StackPanel>
+                                <StackPanel Grid.Column="1"><TextBlock Text="Requested days"/><TextBox x:Name="RequestedDaysBox" Text="10"/></StackPanel>
+                                <StackPanel Grid.Column="2"><TextBlock Text="Assessment / decision days"/><TextBox x:Name="EotDecisionDaysBox" Text="7"/></StackPanel>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Create EOT" Click="CreateEot_Click"/>
+                                <Button Content="Advance EOT" Click="AdvanceEot_Click"/>
+                            </StackPanel>
                         </StackPanel>
                     </GroupBox>
 
                     <GroupBox Header="4. Claim administration">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0"><TextBlock Text="Claim ID"/><TextBox x:Name="ClaimIdBox" Text="CLM-001"/></StackPanel>
-                            <StackPanel Grid.Column="1"><TextBlock Text="Claim type"/><TextBox x:Name="ClaimTypeBox" Text="time-related"/></StackPanel>
-                            <StackPanel Grid.Column="2"><TextBlock Text="Narrative"/><TextBox x:Name="ClaimNarrativeBox" Text="Claim linked to event, notice and supporting evidence."/></StackPanel>
-                        </Grid>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Create claim" Click="CreateClaim_Click"/>
-                            <Button Content="Advance claim" Click="AdvanceClaim_Click"/>
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0"><TextBlock Text="Claim ID"/><TextBox x:Name="ClaimIdBox" Text="CLM-001"/></StackPanel>
+                                <StackPanel Grid.Column="1"><TextBlock Text="Claim type"/><TextBox x:Name="ClaimTypeBox" Text="time-related"/></StackPanel>
+                                <StackPanel Grid.Column="2"><TextBlock Text="Narrative"/><TextBox x:Name="ClaimNarrativeBox" Text="Claim linked to event, notice and supporting evidence."/></StackPanel>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Create claim" Click="CreateClaim_Click"/>
+                                <Button Content="Advance claim" Click="AdvanceClaim_Click"/>
+                            </StackPanel>
                         </StackPanel>
                     </GroupBox>
                 </StackPanel>
