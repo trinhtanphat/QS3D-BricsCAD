@@ -8,7 +8,7 @@ This slice closes a P0 auditability/stability gap between calibrated 2D markup e
 
 The aggregate quantity uses compensated summation rather than a naive `Enumerable.Sum`. This matters when a package contains mixed-magnitude measurements because the Package/Inventory boundary must not create avoidable floating-point drift merely from evidence ordering.
 
-Evidence identity is `(SheetId, Revision, MarkupId)` and is case-insensitive. Duplicate identity is rejected before aggregation. The aggregator therefore fails closed instead of silently double-counting the same logical markup while still allowing a markup id to appear legitimately on another sheet or revision.
+Evidence identity is the typed semantic tuple `(SheetId, Revision, MarkupId)` and is case-insensitive per component. Duplicate identity is rejected before aggregation. Identity is not represented by delimiter-concatenated text, so control/separator characters inside otherwise valid source identifiers cannot make two distinct tuples collide. The aggregator therefore fails closed on a real duplicate instead of silently double-counting it, while still allowing the same markup id on another sheet/revision and allowing any valid identifier characters without synthetic identity aliasing.
 
 ## Workflow fit
 
@@ -23,7 +23,9 @@ This change is additive and does not alter PDF/raster ingestion, calibration mat
 ## Compatibility and validation
 
 - No migration is required for existing `TakeoffQuantityEvidence2D` producers.
+- Case-insensitive duplicate semantics for the three evidence identity components are unchanged.
+- Identifiers containing former delimiter/control characters are now handled by component boundaries rather than string serialization, eliminating false duplicate rejection from delimiter collisions.
 - Empty input returns an empty aggregate list.
 - Null evidence rows, duplicate logical evidence identity, and non-finite quantities fail closed.
 - Evidence rows remain immutable/read-only at the aggregation boundary.
-- Smoke coverage validates case-insensitive grouping, deterministic evidence ordering, multi-sheet evidence counts, duplicate rejection, and compensated mixed-magnitude summation.
+- Smoke coverage validates case-insensitive grouping, deterministic evidence ordering, multi-sheet evidence counts, separator-safe typed identity, true duplicate rejection, and compensated mixed-magnitude summation.

@@ -143,10 +143,16 @@ FENCE_RE = re.compile(
 
 
 class GhClient:
-    def __init__(self, repository: str) -> None:
+    def __init__(self, repository: str, *, token_env_var: str = "GH_TOKEN") -> None:
         self.repository = repository
+        self.token_env_var = token_env_var
 
     def api(self, path: str, *, method: str = "GET", body: dict[str, Any] | None = None) -> Any:
+        token = os.environ.get(self.token_env_var, "").strip()
+        if not token:
+            raise AutoVersionError(f"{self.token_env_var} is required for GitHub API access")
+        env = dict(os.environ)
+        env["GH_TOKEN"] = token
         cmd = ["gh", "api", path]
         if method != "GET":
             cmd.extend(["--method", method])
@@ -154,7 +160,7 @@ class GhClient:
         if body is not None:
             cmd.extend(["--input", "-"])
             payload = json.dumps(body)
-        completed = subprocess.run(cmd, input=payload, text=True, capture_output=True, check=False)
+        completed = subprocess.run(cmd, input=payload, text=True, capture_output=True, env=env, check=False)
         if completed.returncode != 0:
             detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
             raise AutoVersionError(f"gh api {method} {path} failed: {detail}")
@@ -339,7 +345,9 @@ def _create_or_resume_issue(client: GhClient, target: PreviewIdentity) -> tuple[
     return _validate_carrier_body(issue, target)
 
 
-def _run_reservation_precheck(issue_number: int, repository: str) -> None:
+def _run_reservation_precheck(
+    issue_number: int, repository: str, *, token_env_var: str = "GH_TOKEN"
+) -> None:
     cmd = [
         sys.executable,
         "scripts/agent-reservation-precheck.py",
@@ -347,9 +355,10 @@ def _run_reservation_precheck(issue_number: int, repository: str) -> None:
         "--repository", repository,
     ]
     env = dict(os.environ)
-    token = env.get("GH_TOKEN", "").strip()
+    token = env.get(token_env_var, "").strip()
     if not token:
-        raise AutoVersionError("GH_TOKEN is required for automatic version preparation")
+        raise AutoVersionError(f"{token_env_var} is required for automatic version preparation")
+    env["GH_TOKEN"] = token
     completed = subprocess.run(cmd, text=True, capture_output=True, env=env, check=False)
     if completed.returncode != 0:
         detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
@@ -702,23 +711,24 @@ def prepare(args: argparse.Namespace) -> int:
     base_sha = _validate_sha(args.base_sha, "base SHA")
     _run_git("merge-base", "--is-ancestor", source_sha, base_sha)
 
-    client = GhClient(repository)
-    _require_main(client, base_sha)
+    issue_client = GhClient(repository, token_env_var="GH_TOKEN")
+    mutation_client = GhClient(repository, token_env_var="QS3D_AUTOMERGE_TOKEN")
+    _require_main(issue_client, base_sha)
     committed = _identity_at_base(base_sha)
     published, release_ordinals = _published_ordinal(
-        client=client,
+        client=issue_client,
         committed=committed,
         published_tag=args.published_tag,
     )
     tag_ordinals = _collect_tag_ordinals(committed.series)
-    ledger_ordinals = _collect_ledger_ordinals(client, args.ledger_issue)
+    ledger_ordinals = _collect_ledger_ordinals(issue_client, args.ledger_issue)
     occupied = set(release_ordinals) | set(tag_ordinals) | set(ledger_ordinals)
 
-    existing_series = _series_carrier(client, committed.series)
+    existing_series = _series_carrier(issue_client, committed.series)
     if existing_series is not None:
         target = _target_from_carrier(existing_series, committed.series)
         issue_number, branch = _validate_carrier_body(existing_series, target)
-        existing_pr = _find_open_pr(client, branch)
+        existing_pr = _find_open_pr(mutation_client, branch)
         if existing_pr is not None:
             number = int(existing_pr.get("number") or 0)
             print(
@@ -737,28 +747,28 @@ def prepare(args: argparse.Namespace) -> int:
             occupied=occupied,
         )
         target = PreviewIdentity(committed.major, committed.minor, committed.patch, next_ordinal)
-        issue_number, branch = _create_or_resume_issue(client, target)
+        issue_number, branch = _create_or_resume_issue(issue_client, target)
 
-    _run_reservation_precheck(issue_number, repository)
-    _require_main(client, base_sha)
+    _run_reservation_precheck(issue_number, repository, token_env_var="GH_TOKEN")
+    _require_main(issue_client, base_sha)
     refreshed_occupied = (
         _collect_tag_ordinals(committed.series)
-        | _collect_release_ordinals(client, committed.series)
-        | _collect_ledger_ordinals(client, args.ledger_issue)
+        | _collect_release_ordinals(issue_client, committed.series)
+        | _collect_ledger_ordinals(issue_client, args.ledger_issue)
     )
     if target.ordinal in refreshed_occupied:
         raise AutoVersionError(
             f"target {target.tag} became occupied before branch mutation; carrier #{issue_number} remains visible"
         )
-    _admit_base_twice(client, base_sha)
+    _admit_base_twice(issue_client, base_sha)
     commit_sha = _create_or_verify_branch_commit(
-        client,
+        mutation_client,
         branch=branch,
         base_sha=base_sha,
         target=target,
     )
     _create_or_resume_pr(
-        client,
+        mutation_client,
         issue_number=issue_number,
         branch=branch,
         target=target,
