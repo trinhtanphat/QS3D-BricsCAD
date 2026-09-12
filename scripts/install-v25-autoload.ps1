@@ -379,11 +379,8 @@ function Assert-PackageIdentity {
     catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
     $metadataProductVersion = Convert-ToStrictSemVerIdentity -Value ([string]$metadata.productVersion) -Label 'PACKAGE-METADATA productVersion'
 
-    if ($metadataAssemblyVersion.Major -ne $metadataProductVersion.Major -or
-        $metadataAssemblyVersion.Minor -ne $metadataProductVersion.Minor -or
-        $metadataAssemblyVersion.Build -ne $metadataProductVersion.Patch) {
-        throw "PACKAGE-METADATA assembly version $metadataAssemblyVersion does not match productVersion core $($metadataProductVersion.Major).$($metadataProductVersion.Minor).$($metadataProductVersion.Patch)."
-    }
+    # AssemblyVersion is the CLR compatibility identity while ProductVersion is release identity.
+    # Release packaging may stamp ProductVersion independently; each field is bound to its own DLL metadata below.
 
     $fullDllProductVersion = $null
     foreach ($name in @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')) {
