@@ -161,6 +161,7 @@ namespace QS3D.Core.BenchmarkParity
                 sources.Add(new TakeoffPackageSource(sheet.Id, TakeoffPackageSourceKind.Drawing2D, sheet.SourceReference, sheet.Revision));
             }
 
+            var evidenceIdsBySheet = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in evidence)
             {
                 if (item == null)
@@ -168,6 +169,15 @@ namespace QS3D.Core.BenchmarkParity
                     issues.Add(new TakeoffPackageValidationIssue("PKG.NULL_EVIDENCE", TakeoffPackageValidationSeverity.Error, string.Empty, "Drawing quantity evidence contains a null item."));
                     continue;
                 }
+
+                HashSet<string>? markupIds;
+                if (!evidenceIdsBySheet.TryGetValue(item.SheetId, out markupIds))
+                {
+                    markupIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    evidenceIdsBySheet.Add(item.SheetId, markupIds);
+                }
+                if (!markupIds.Add(item.MarkupId))
+                    issues.Add(new TakeoffPackageValidationIssue("PKG.DUPLICATE_EVIDENCE", TakeoffPackageValidationSeverity.Error, item.MarkupId, "Drawing evidence markup id is duplicated for the same sheet."));
 
                 DrawingSheet2D? sourceSheet;
                 if (!sheetsById.TryGetValue(item.SheetId, out sourceSheet))
