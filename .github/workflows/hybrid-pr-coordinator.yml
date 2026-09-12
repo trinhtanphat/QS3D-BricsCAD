@@ -138,12 +138,15 @@ jobs:
 
   refresh-branches:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    permissions:
+      actions: write
     runs-on: ubuntu-latest
     steps:
       - name: Rebase-first refresh remaining eligible PRs from current main
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}
+          ACTIONS_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
 
@@ -242,7 +245,7 @@ jobs:
               echo "PR #${number} has active exact-head Shared CI; cancelling stale run(s) before refreshing from main."
               for run_id in "${active_run_ids[@]}"; do
                 cancel_output=""
-                if cancel_output="$(gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" --silent 2>&1)"; then
+                if cancel_output="$(GH_TOKEN="$ACTIONS_TOKEN" gh api --method POST "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/cancel" --silent 2>&1)"; then
                   echo "Cancelled stale Shared CI run ${run_id} for PR #${number}."
                   continue
                 fi
