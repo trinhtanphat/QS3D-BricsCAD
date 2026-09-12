@@ -84,7 +84,19 @@ namespace QS3D.Core.BenchmarkParity
         public TakeoffSheetResult2D(DrawingSheet2D sheet, IReadOnlyList<TakeoffQuantityEvidence2D> evidence)
         {
             Sheet = sheet ?? throw new ArgumentNullException("sheet");
-            Evidence = evidence ?? throw new ArgumentNullException("evidence");
+            if (evidence == null) throw new ArgumentNullException("evidence");
+
+            var markupIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in evidence)
+            {
+                if (item == null) throw new ArgumentException("Takeoff evidence collection contains null.", "evidence");
+                if (!string.Equals(item.SheetId, Sheet.Id, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Takeoff evidence belongs to another sheet.");
+                if (!string.Equals(item.Revision, Sheet.Revision, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Takeoff evidence belongs to another sheet revision.");
+                if (!string.Equals(item.SourceReference, Sheet.SourceReference, StringComparison.Ordinal)) throw new InvalidOperationException("Takeoff evidence belongs to another sheet source.");
+                if (!markupIds.Add(item.MarkupId)) throw new InvalidOperationException("Duplicate takeoff evidence markup id.");
+            }
+
+            Evidence = evidence;
         }
         public DrawingSheet2D Sheet { get; private set; }
         public IReadOnlyList<TakeoffQuantityEvidence2D> Evidence { get; private set; }
