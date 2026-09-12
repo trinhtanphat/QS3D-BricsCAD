@@ -14,4 +14,4 @@ Adapters/importers should resolve duplicate IFC GUIDs at source, regenerate or r
 
 ## Regression coverage
 
-`QsQaDuplicateIfcGuidNonWaivableSmoke` supplies two otherwise valid elements whose GUIDs differ only by whitespace/case, supplies matching waivers for both participants, and proves that both duplicate findings remain active while Takeoff, BOQ, and Estimate stay blocked.
+The registered `QsQaGate2Smoke.DuplicateGuidWaiverMustCoverEveryConflictingElement` scenario supplies two otherwise valid elements whose GUIDs differ only by whitespace/case, supplies matching waivers for both participants, and proves that both duplicate findings remain active while Takeoff, BOQ, and Estimate stay blocked.
