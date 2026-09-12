@@ -61,7 +61,164 @@ function Get-OrdinaryFileIdentity([string]$Path, [string]$Label) {
     finally { $stream.Dispose() }
 }
 
-function Read-StrictUtf8Json([string]$Path, [string]$Label) {
+function Get-JsonPropertyOccurrenceCount([string]$JsonText, [string]$PropertyName) {
+    $firstNonWhitespace = 0
+    while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
+    if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') {
+        throw 'V26 admitted JSON identity document must have a top-level object.'
+    }
+
+    $count = 0
+    $objectDepth = 0
+    $arrayDepth = 0
+    $i = 0
+    while ($i -lt $JsonText.Length) {
+        $ch = $JsonText[$i]
+        if ($ch -eq '"') {
+            $tokenStart = $i
+            $i++
+            $closed = $false
+            while ($i -lt $JsonText.Length) {
+                if ($JsonText[$i] -eq '\') { $i += 2; continue }
+                if ($JsonText[$i] -eq '"') { $closed = $true; break }
+                $i++
+            }
+            if (-not $closed) { throw 'V26 admitted JSON contains an unterminated string token.' }
+            $tokenEnd = $i
+            $lookahead = $tokenEnd + 1
+            while ($lookahead -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$lookahead])) { $lookahead++ }
+            if ($objectDepth -eq 1 -and $arrayDepth -eq 0 -and $lookahead -lt $JsonText.Length -and $JsonText[$lookahead] -eq ':') {
+                $rawPropertyToken = $JsonText.Substring($tokenStart, $tokenEnd - $tokenStart + 1)
+                try { $decodedPropertyName = [string]($rawPropertyToken | ConvertFrom-Json -ErrorAction Stop) }
+                catch { throw 'V26 admitted JSON contains malformed property encoding.' }
+                if ([string]::Equals($decodedPropertyName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) { $count++ }
+            }
+            $i = $tokenEnd + 1
+            continue
+        }
+
+        switch ($ch) {
+            '{' { $objectDepth++ }
+            '}' { $objectDepth--; if ($objectDepth -lt 0) { throw 'V26 admitted JSON has invalid object nesting.' } }
+            '[' { $arrayDepth++ }
+            ']' { $arrayDepth--; if ($arrayDepth -lt 0) { throw 'V26 admitted JSON has invalid array nesting.' } }
+        }
+        $i++
+    }
+    if ($objectDepth -ne 0 -or $arrayDepth -ne 0) { throw 'V26 admitted JSON has unbalanced container nesting.' }
+    return $count
+}
+
+function Get-JsonTopLevelArrayObjectTexts([string]$JsonText, [string]$ArrayPropertyName, [string]$Label) {
+    $firstNonWhitespace = 0
+    while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
+    if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') { throw "$Label must have a top-level object." }
+
+    $objectDepth = 0
+    $arrayDepth = 0
+    $arrayStart = -1
+    $i = 0
+    while ($i -lt $JsonText.Length -and $arrayStart -lt 0) {
+        $ch = $JsonText[$i]
+        if ($ch -eq '"') {
+            $tokenStart = $i
+            $i++
+            $closed = $false
+            while ($i -lt $JsonText.Length) {
+                if ($JsonText[$i] -eq '\') { $i += 2; continue }
+                if ($JsonText[$i] -eq '"') { $closed = $true; break }
+                $i++
+            }
+            if (-not $closed) { throw "$Label contains an unterminated string token." }
+            $tokenEnd = $i
+            $lookahead = $tokenEnd + 1
+            while ($lookahead -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$lookahead])) { $lookahead++ }
+            if ($objectDepth -eq 1 -and $arrayDepth -eq 0 -and $lookahead -lt $JsonText.Length -and $JsonText[$lookahead] -eq ':') {
+                $rawPropertyToken = $JsonText.Substring($tokenStart, $tokenEnd - $tokenStart + 1)
+                try { $decodedPropertyName = [string]($rawPropertyToken | ConvertFrom-Json -ErrorAction Stop) }
+                catch { throw "$Label contains malformed property encoding." }
+                if ([string]::Equals($decodedPropertyName, $ArrayPropertyName, [StringComparison]::OrdinalIgnoreCase)) {
+                    $valueStart = $lookahead + 1
+                    while ($valueStart -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$valueStart])) { $valueStart++ }
+                    if ($valueStart -ge $JsonText.Length -or $JsonText[$valueStart] -ne '[') { throw "$Label property '$ArrayPropertyName' must be an array." }
+                    $arrayStart = $valueStart
+                    break
+                }
+            }
+            $i = $tokenEnd + 1
+            continue
+        }
+        switch ($ch) {
+            '{' { $objectDepth++ }
+            '}' { $objectDepth-- }
+            '[' { $arrayDepth++ }
+            ']' { $arrayDepth-- }
+        }
+        $i++
+    }
+    if ($arrayStart -lt 0) { throw "$Label is missing top-level array property '$ArrayPropertyName'." }
+
+    $items = [Collections.Generic.List[string]]::new()
+    $arrayDepth = 0
+    $objectDepth = 0
+    $objectStart = -1
+    $i = $arrayStart
+    while ($i -lt $JsonText.Length) {
+        $ch = $JsonText[$i]
+        if ($ch -eq '"') {
+            $i++
+            $closed = $false
+            while ($i -lt $JsonText.Length) {
+                if ($JsonText[$i] -eq '\') { $i += 2; continue }
+                if ($JsonText[$i] -eq '"') { $closed = $true; break }
+                $i++
+            }
+            if (-not $closed) { throw "$Label contains an unterminated string token in '$ArrayPropertyName'." }
+            $i++
+            continue
+        }
+        switch ($ch) {
+            '[' { $arrayDepth++ }
+            ']' {
+                if ($arrayDepth -eq 1 -and $objectDepth -eq 0) { return @($items) }
+                $arrayDepth--
+                if ($arrayDepth -lt 0) { throw "$Label has invalid array nesting in '$ArrayPropertyName'." }
+            }
+            '{' {
+                if ($arrayDepth -eq 1 -and $objectDepth -eq 0) { $objectStart = $i }
+                $objectDepth++
+            }
+            '}' {
+                $objectDepth--
+                if ($objectDepth -lt 0) { throw "$Label has invalid object nesting in '$ArrayPropertyName'." }
+                if ($arrayDepth -eq 1 -and $objectDepth -eq 0 -and $objectStart -ge 0) {
+                    $items.Add($JsonText.Substring($objectStart, $i - $objectStart + 1))
+                    $objectStart = -1
+                }
+            }
+        }
+        $i++
+    }
+    throw "$Label array property '$ArrayPropertyName' is unterminated."
+}
+
+function Assert-JsonPropertyCounts([string]$JsonText, [hashtable]$ExpectedPropertyCounts, [string]$Label) {
+    foreach ($propertyName in @($ExpectedPropertyCounts.Keys)) {
+        $expectedCount = [int]$ExpectedPropertyCounts[$propertyName]
+        $actualCount = Get-JsonPropertyOccurrenceCount -JsonText $JsonText -PropertyName $propertyName
+        if ($actualCount -ne $expectedCount) { throw "$Label must contain exactly $expectedCount top-level $propertyName properties; found $actualCount." }
+    }
+}
+
+function Assert-JsonArrayObjectPropertyCounts([string]$JsonText, [string]$ArrayPropertyName, [int]$ExpectedObjectCount, [hashtable]$ExpectedPropertyCounts, [string]$Label) {
+    $objects = @(Get-JsonTopLevelArrayObjectTexts -JsonText $JsonText -ArrayPropertyName $ArrayPropertyName -Label $Label)
+    if ($objects.Count -ne $ExpectedObjectCount) { throw "$Label property '$ArrayPropertyName' must contain exactly $ExpectedObjectCount object records; found $($objects.Count)." }
+    for ($recordIndex = 0; $recordIndex -lt $objects.Count; $recordIndex++) {
+        Assert-JsonPropertyCounts -JsonText $objects[$recordIndex] -ExpectedPropertyCounts $ExpectedPropertyCounts -Label "$Label $ArrayPropertyName[$recordIndex]"
+    }
+}
+
+function Read-StrictUtf8Json([string]$Path, [string]$Label, [hashtable]$ExpectedPropertyCounts, [string]$ArrayPropertyName, [int]$ExpectedArrayObjectCount, [hashtable]$ExpectedArrayObjectPropertyCounts) {
     $item = Resolve-OrdinaryFile -Path $Path -Label $Label
     if ($item.Length -gt $maxMetadataBytes) { throw "$Label exceeds the $maxMetadataBytes-byte safety limit." }
     $stream = [IO.File]::Open($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
@@ -74,11 +231,13 @@ function Read-StrictUtf8Json([string]$Path, [string]$Label) {
             $offset += $read
         }
         $current = Resolve-OrdinaryFile -Path $item.FullName -Label $Label
-        if ($current.Length -ne $stream.Length -or $current.LastWriteTimeUtc.Ticks -ne $item.LastWriteTimeUtc.Ticks) {
-            throw "$Label changed while its generation was being admitted."
-        }
+        if ($current.Length -ne $stream.Length -or $current.LastWriteTimeUtc.Ticks -ne $item.LastWriteTimeUtc.Ticks) { throw "$Label changed while its generation was being admitted." }
         try { $text = $strictUtf8.GetString($bytes) }
         catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
+        Assert-JsonPropertyCounts -JsonText $text -ExpectedPropertyCounts $ExpectedPropertyCounts -Label $Label
+        if (-not [string]::IsNullOrWhiteSpace($ArrayPropertyName)) {
+            Assert-JsonArrayObjectPropertyCounts -JsonText $text -ArrayPropertyName $ArrayPropertyName -ExpectedObjectCount $ExpectedArrayObjectCount -ExpectedPropertyCounts $ExpectedArrayObjectPropertyCounts -Label $Label
+        }
         try { return $text | ConvertFrom-Json -ErrorAction Stop }
         catch { throw "$Label JSON is invalid: $($_.Exception.Message)" }
     }
@@ -303,21 +462,15 @@ function Open-PinnedPublishedProvenanceGeneration([string]$Path, [string]$Expect
 
 function Assert-PinnedPublishedProvenanceBytes($Generation, [byte[]]$ExpectedBytes) {
     $currentIdentity = Get-OwnedProvenanceGenerationIdentity -Generation $Generation
-    if (-not [string]::Equals($currentIdentity, $Generation.Identity, [StringComparison]::Ordinal)) {
-        throw "$($Generation.Label) identity changed while pinned: expected $($Generation.Identity), got $currentIdentity"
-    }
+    if (-not [string]::Equals($currentIdentity, $Generation.Identity, [StringComparison]::Ordinal)) { throw "$($Generation.Label) identity changed while pinned: expected $($Generation.Identity), got $currentIdentity" }
     $actualBytes = [Qs3dProvenanceGenerationNative]::ReadPinnedPublishedProvenanceBytes($Generation.Handle, $ExpectedBytes.Length)
     if ($actualBytes.Length -ne $ExpectedBytes.Length) { throw "$($Generation.Label) byte length changed while pinned." }
-    for ($i = 0; $i -lt $ExpectedBytes.Length; $i++) {
-        if ($actualBytes[$i] -ne $ExpectedBytes[$i]) { throw "$($Generation.Label) bytes differ from the staged provenance generation." }
-    }
+    for ($i = 0; $i -lt $ExpectedBytes.Length; $i++) { if ($actualBytes[$i] -ne $ExpectedBytes[$i]) { throw "$($Generation.Label) bytes differ from the staged provenance generation." } }
 }
 
 function Remove-OwnedProvenanceGeneration($Generation) {
     $currentIdentity = Get-OwnedProvenanceGenerationIdentity -Generation $Generation
-    if (-not [string]::Equals($currentIdentity, $Generation.Identity, [StringComparison]::Ordinal)) {
-        throw "$($Generation.Label) identity changed while owned: expected $($Generation.Identity), got $currentIdentity"
-    }
+    if (-not [string]::Equals($currentIdentity, $Generation.Identity, [StringComparison]::Ordinal)) { throw "$($Generation.Label) identity changed while owned: expected $($Generation.Identity), got $currentIdentity" }
     try { [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($Generation.Handle) }
     finally { $Generation.Handle.Dispose() }
 }
@@ -326,11 +479,19 @@ function Close-OwnedProvenanceGeneration($Generation) {
     if ($null -ne $Generation) { $Generation.Handle.Dispose() }
 }
 
-if ([string]::IsNullOrWhiteSpace($InstallerSha256) -or $InstallerSha256 -cnotmatch '^[0-9a-f]{64}$') {
-    throw 'V26 admitted installer SHA-256 must be canonical lowercase 64-hex.'
-}
+if ([string]::IsNullOrWhiteSpace($InstallerSha256) -or $InstallerSha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'V26 admitted installer SHA-256 must be canonical lowercase 64-hex.' }
 
-$hostState = Read-StrictUtf8Json -Path $HostReferenceStatePath -Label 'V26 host-reference state'
+$hostExpectedPropertyCounts = @{
+    Version = 1
+    Files = 1
+}
+$hostFileExpectedPropertyCounts = @{
+    Name = 1
+    Path = 1
+    Sha256 = 1
+    Length = 1
+}
+$hostState = Read-StrictUtf8Json -Path $HostReferenceStatePath -Label 'V26 host-reference state' -ExpectedPropertyCounts $hostExpectedPropertyCounts -ArrayPropertyName 'Files' -ExpectedArrayObjectCount $requiredHostNames.Count -ExpectedArrayObjectPropertyCounts $hostFileExpectedPropertyCounts
 if ([int]$hostState.Version -ne 1) { throw 'V26 host-reference state version must be 1.' }
 $hostFiles = @($hostState.Files)
 if ($hostFiles.Count -ne $requiredHostNames.Count) { throw 'V26 host-reference state must contain exactly four required files.' }
@@ -344,9 +505,7 @@ $hostReferences = foreach ($name in $requiredHostNames) {
     if ($sha256 -cnotmatch '^[0-9a-f]{64}$') { throw "V26 host-reference SHA-256 must be canonical lowercase hex for $name." }
     if ($length -le 0) { throw "V26 host-reference length must be positive for $name." }
     $actual = Get-OrdinaryFileIdentity -Path $path -Label "V26 host reference $name"
-    if ($actual.Length -ne $length -or -not [string]::Equals($actual.Sha256, $sha256, [StringComparison]::Ordinal)) {
-        throw "V26 host reference $name changed after its admitted generation was captured."
-    }
+    if ($actual.Length -ne $length -or -not [string]::Equals($actual.Sha256, $sha256, [StringComparison]::Ordinal)) { throw "V26 host reference $name changed after its admitted generation was captured." }
     [ordered]@{ name = $name; length = $length; sha256 = $sha256 }
 }
 
@@ -370,6 +529,13 @@ try {
     }
     finally { $archive.Dispose() }
 
+    $metadataExpectedPropertyCounts = @{
+        product = 1
+        target = 1
+        framework = 1
+        productVersion = 1
+    }
+    Assert-JsonPropertyCounts -JsonText $metadataText -ExpectedPropertyCounts $metadataExpectedPropertyCounts -Label 'V26 PACKAGE-METADATA.json'
     try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "V26 PACKAGE-METADATA.json is invalid JSON: $($_.Exception.Message)" }
     if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V26 x64') { throw 'V26 package product/target identity is invalid.' }
@@ -409,9 +575,7 @@ try {
             $null = Resolve-OrdinaryFile -Path $outputFull -Label 'V26 provenance output'
             [IO.File]::Replace($tempPath, $outputFull, $null)
         }
-        else {
-            [IO.File]::Move($tempPath, $outputFull)
-        }
+        else { [IO.File]::Move($tempPath, $outputFull) }
 
         Close-OwnedProvenanceGeneration -Generation $tempGeneration
         $tempGeneration = $null
@@ -423,12 +587,8 @@ try {
         if ($publicationCommitted) {
             if ($null -ne $publishedGeneration) { Close-OwnedProvenanceGeneration -Generation $publishedGeneration }
         }
-        elseif ($null -ne $publishedGeneration) {
-            Remove-OwnedProvenanceGeneration -Generation $publishedGeneration
-        }
-        elseif ($null -ne $tempGeneration) {
-            Remove-OwnedProvenanceGeneration -Generation $tempGeneration
-        }
+        elseif ($null -ne $publishedGeneration) { Remove-OwnedProvenanceGeneration -Generation $publishedGeneration }
+        elseif ($null -ne $tempGeneration) { Remove-OwnedProvenanceGeneration -Generation $tempGeneration }
         $publishedGeneration = $null
         $tempGeneration = $null
     }
