@@ -27,7 +27,7 @@ namespace QS3D.Core.BenchmarkParity
         public int RemovedCount { get { return MarkupDeltas.Count(x => x.Kind == RevisionMarkupChangeKind.Removed); } }
         public int ChangedCount { get { return MarkupDeltas.Count(x => x.Kind == RevisionMarkupChangeKind.Changed); } }
         public int UnchangedCount { get { return MarkupDeltas.Count(x => x.Kind == RevisionMarkupChangeKind.Unchanged); } }
-        public double QuantityDelta { get { return MarkupDeltas.Sum(x => x.QuantityDelta); } }
+        public double QuantityDelta { get { return TakeoffRevisionNumeric.CompensatedSum(MarkupDeltas.Select(x => x.QuantityDelta), "sheet revision quantity delta"); } }
         public bool HasMaterialChange { get { return AddedCount > 0 || RemovedCount > 0 || ChangedCount > 0; } }
     }
 
@@ -53,10 +53,29 @@ namespace QS3D.Core.BenchmarkParity
         public int AddedMarkupCount { get { return SheetDeltas.Sum(x => x.AddedCount); } }
         public int RemovedMarkupCount { get { return SheetDeltas.Sum(x => x.RemovedCount); } }
         public int ChangedMarkupCount { get { return SheetDeltas.Sum(x => x.ChangedCount); } }
-        public double QuantityDelta { get { return SheetDeltas.Sum(x => x.QuantityDelta); } }
+        public double QuantityDelta { get { return TakeoffRevisionNumeric.CompensatedSum(SheetDeltas.Select(x => x.QuantityDelta), "package revision quantity delta"); } }
         public bool RequiresReview { get { return ChangedSheetCount > 0; } }
     }
 
+    internal static class TakeoffRevisionNumeric
+    {
+        internal static double CompensatedSum(IEnumerable<double> values, string label)
+        {
+            var sum = 0d;
+            var compensation = 0d;
+            foreach (var value in values)
+            {
+                var next = sum + value;
+                var correction = Math.Abs(sum) >= Math.Abs(value) ? (sum - next) + value : (value - next) + sum;
+                sum = next;
+                compensation += correction;
+                if (double.IsNaN(sum) || double.IsInfinity(sum) || double.IsNaN(compensation) || double.IsInfinity(compensation)) throw new OverflowException(label + " exceeded the representable numeric range.");
+            }
+            var result = sum + compensation;
+            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " exceeded the representable numeric range.");
+            return result == 0d ? 0d : result;
+        }
+    }
     public sealed class AutodeskTakeoffPackageRevisionComparer
     {
         public TakeoffPackageRevisionComparison Compare(
