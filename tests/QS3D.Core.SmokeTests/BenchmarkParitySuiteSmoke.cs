@@ -19,6 +19,7 @@ namespace QS3D.Core.SmokeTests
             WorkbookLiveLinkRefresh();
             IntegrationRoutes();
             IntegrationApiRejectsNonFiniteEstimateAmount();
+            IntegrationApiNormalizesRevisionTimeDeterministically();
             QsLiveWorkbookApiSmoke.Run();
             ConcreteAndFormwork();
             IfcWorkbench();
@@ -131,6 +132,17 @@ namespace QS3D.Core.SmokeTests
                 rejected = true;
             }
             True(rejected, "API estimate amount overflow is rejected before publication");
+        }
+
+        private static void IntegrationApiNormalizesRevisionTimeDeterministically()
+        {
+            var unspecified = new DateTime(2026, 9, 12, 6, 7, 8, DateTimeKind.Unspecified);
+            var revision = new QsApiRevisionDto("R3", "S3", unspecified);
+            Equal(DateTimeKind.Utc, revision.CreatedUtc.Kind, "unspecified revision timestamp kind");
+            Equal(unspecified.Ticks, revision.CreatedUtc.Ticks, "unspecified revision timestamp ticks are host-independent");
+
+            var utc = new DateTime(2026, 9, 12, 6, 7, 8, DateTimeKind.Utc);
+            Equal(utc, new QsApiRevisionDto("R4", "S4", utc).CreatedUtc, "UTC revision timestamp preserved");
         }
 
         private static void ConcreteAndFormwork()
