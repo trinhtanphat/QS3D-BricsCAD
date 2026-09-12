@@ -93,10 +93,47 @@ function Read-HeldStrictUtf8 {
     param($Held, [int64]$MaxBytes, [string]$Label)
     if ([int64]$Held.Length -gt $MaxBytes) { throw "$Label exceeds the $MaxBytes-byte input limit." }
     $Held.Stream.Seek(0, [IO.SeekOrigin]::Begin) | Out-Null
-    $reader = [IO.StreamReader]::new($Held.Stream, [Text.UTF8Encoding]::new($false, $true), $true, 4096, $true)
+    $reader = [IO.StreamReader]::new($Held.Stream, [Text.UTF8Encoding]::new($false, $true), $false, 4096, $true)
     try { return $reader.ReadToEnd() }
     catch { throw "$Label is not strict UTF-8: $($_.Exception.Message)" }
     finally { $reader.Dispose() }
+}
+
+function Get-JsonPropertyOccurrenceCount {
+    param(
+        [Parameter(Mandatory = $true)][string]$JsonText,
+        [Parameter(Mandatory = $true)][string]$PropertyName
+    )
+    $propertyPattern = '(?m)(?:"(?:[^"\\]|\\.)*")\s*:'
+    $count = 0
+    foreach ($match in [regex]::Matches($JsonText, $propertyPattern)) {
+        $rawPropertyToken = [regex]::Match($match.Value, '^("(?:[^"\\]|\\.)*")').Groups[1].Value
+        if (-not $rawPropertyToken) { continue }
+        try {
+            $decodedPropertyName = $rawPropertyToken | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            throw 'Downloaded V25 draft JSON contains malformed property encoding.'
+        }
+        if ([string]::Equals([string]$decodedPropertyName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) {
+            $count++
+        }
+    }
+    return $count
+}
+
+function Assert-JsonPropertyCounts {
+    param(
+        [Parameter(Mandatory = $true)][string]$JsonText,
+        [Parameter(Mandatory = $true)][hashtable]$ExpectedPropertyCounts
+    )
+    foreach ($propertyName in $ExpectedPropertyCounts.Keys) {
+        $expectedCount = [int]$ExpectedPropertyCounts[$propertyName]
+        $actualCount = Get-JsonPropertyOccurrenceCount -JsonText $JsonText -PropertyName $propertyName
+        if ($actualCount -ne $expectedCount) {
+            throw "Downloaded V25 draft JSON property '$propertyName' must appear exactly $expectedCount time(s); found $actualCount."
+        }
+    }
 }
 
 function Get-HeldSha256 {
@@ -122,11 +159,18 @@ function Read-ZipMetadataIdentity {
         if ([int64]$entry.Length -gt $MaxMetadataBytes) { throw "Downloaded V25 draft PACKAGE-METADATA.json exceeds $MaxMetadataBytes bytes." }
         $entryStream = $entry.Open()
         try {
-            $reader = [IO.StreamReader]::new($entryStream, [Text.UTF8Encoding]::new($false, $true), $true, 4096, $true)
+            $reader = [IO.StreamReader]::new($entryStream, [Text.UTF8Encoding]::new($false, $true), $false, 4096, $true)
             try { $text = $reader.ReadToEnd() }
             finally { $reader.Dispose() }
         }
         finally { $entryStream.Dispose() }
+        $metadataExpectedPropertyCounts = @{
+            product = 1
+            target = 1
+            productVersion = 1
+            gitCommit = 1
+        }
+        Assert-JsonPropertyCounts -JsonText $text -ExpectedPropertyCounts $metadataExpectedPropertyCounts
         try { return $text | ConvertFrom-Json -ErrorAction Stop }
         catch { throw "Downloaded V25 draft PACKAGE-METADATA.json is invalid JSON: $($_.Exception.Message)" }
     }
@@ -238,6 +282,20 @@ try {
     if (-not [string]::Equals($Matches[1], $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'Downloaded V25 draft ZIP fails its SHA-256 checksum.' }
 
     $provenanceText = Read-HeldStrictUtf8 -Held $provenanceHeld -MaxBytes $MaxProvenanceBytes -Label 'downloaded V25 draft provenance'
+    $provenanceExpectedPropertyCounts = @{
+        schemaVersion = 1
+        product = 1
+        target = 1
+        releaseTag = 1
+        productVersion = 1
+        sourceCommit = 1
+        signerThumbprint = 1
+        packageFile = 1
+        packageSha256 = 1
+        updateManifestFile = 1
+        updateManifestSha256 = 1
+    }
+    Assert-JsonPropertyCounts -JsonText $provenanceText -ExpectedPropertyCounts $provenanceExpectedPropertyCounts
     try { $provenance = $provenanceText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "Downloaded V25 draft provenance is invalid JSON: $($_.Exception.Message)" }
 
