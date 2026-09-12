@@ -18,7 +18,7 @@ Refresh states are explicit:
 - `Stale` — usable evidence exists but its source revision is not the requested current revision;
 - `MissingSource` — no authoritative source exists for the binding;
 - `Conflict` — duplicate cell/binding identity or conflicting source snapshots make the result ambiguous;
-- `Error` — missing/cyclic dependency or an unusable upstream result prevents deterministic recalculation.
+- `Error` — missing/cyclic dependency, an unusable upstream result, or non-finite cascade arithmetic prevents deterministic recalculation.
 
 `LiveWorkbookRefreshResult.Trace` records source evidence plus upstream binding values. `ToNextBinding()` creates the accepted baseline for the next refresh without mutating the prior audit snapshot. A batch reports both `HasBlockingFailure` and `HasStaleData`; publish/estimate adapters should refuse automatic publication when blocking failure is true and should surface stale data visibly rather than silently treating it as current.
 
@@ -28,7 +28,7 @@ The deterministic calculation for a binding is:
 
 `value = (authoritative source quantity + sum(resolved dependency values)) * multiplier + offset`
 
-Bindings with no source can act as deterministic calculated cells over upstream bindings. Cycles are rejected as errors. Conflicting source snapshots are rejected instead of selecting an arbitrary winner.
+Bindings with no source can act as deterministic calculated cells over upstream bindings. Cycles are rejected as errors. Conflicting source snapshots are rejected instead of selecting an arbitrary winner. If otherwise finite admitted values overflow or produce `NaN`/infinity during the cascade, the affected binding returns `Error`, preserves its last accepted value, and blocks its dependents through the normal unusable-upstream path. The engine still returns deterministic results for unrelated bindings in the same batch instead of aborting the entire refresh operation.
 
 ## REST API v1 contract
 
@@ -81,7 +81,7 @@ A host should:
 
 ## Backward compatibility
 
-No existing benchmark type or route is removed. The original `WorkbookLiveLinkEngine` and four-route `QsIntegrationRouteCatalog` remain valid. V2 live-link and API v1 types use new names and can be adopted incrementally by existing workbook/export adapters. The ETag hardening changes only cache-validator values, not DTO shape, routes, scopes or response representation.
+No existing benchmark type or route is removed. The original `WorkbookLiveLinkEngine` and four-route `QsIntegrationRouteCatalog` remain valid. V2 live-link and API v1 types use new names and can be adopted incrementally by existing workbook/export adapters. The ETag hardening changes only cache-validator values, not DTO shape, routes, scopes or response representation. Non-finite cascade containment changes only a previous exceptional failure mode: callers now receive a normal batch with blocking `Error` results and preserved last accepted values.
 
 ## Smoke coverage
 
@@ -93,6 +93,7 @@ No existing benchmark type or route is removed. The original `WorkbookLiveLinkEn
 - accepted refresh becoming fresh on the next pass;
 - conflicting source snapshots;
 - dependency-cycle rejection;
+- non-finite cascade containment, downstream blocking and unrelated-row continuation;
 - API route coverage including tender/procurement/workbook refresh;
 - authentication, per-resource authorization and conditional GET;
 - collision-safe project/revision ETags;

@@ -254,7 +254,11 @@ namespace QS3D.Core.BenchmarkParity
                 }
 
                 var value = (sourceValue + dependencyValue) * binding.Multiplier + binding.Offset;
-                value = QsModelElementSnapshot.Finite(value, "value");
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                {
+                    results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh arithmetic produced a non-finite value.");
+                    continue;
+                }
                 var isStale = binding.SourceId.Length > 0 && !string.Equals(sourceRevision, currentRevision, StringComparison.OrdinalIgnoreCase);
                 var changed = Math.Abs(value - binding.LastValue) >= Epsilon || (binding.SourceId.Length > 0 && !string.Equals(binding.SourceRevision, sourceRevision, StringComparison.OrdinalIgnoreCase));
                 var freshness = isStale ? LiveWorkbookFreshness.Stale : changed ? LiveWorkbookFreshness.Refreshed : LiveWorkbookFreshness.Fresh;
