@@ -75,7 +75,11 @@ namespace QS3D.Core.Intelligence
             if (qaEvaluationUtc.Kind != DateTimeKind.Utc)
                 throw new ArgumentException("QA Gate 2.0 evaluation timestamp must be UTC.", nameof(qaEvaluationUtc));
 
-            var decision = new QsQaGate2().Evaluate(qaElements, qaProfile, waivers, qaEvaluationUtc);
+            var decision = new QsQaGate2().Evaluate(
+                qaElements,
+                qaProfile,
+                waivers ?? Array.Empty<QsQaWaiver>(),
+                qaEvaluationUtc);
             var executor = new QsQaGuardedExecutor();
 
             // Treat the unified pipeline as the protected downstream boundary. Nest all
