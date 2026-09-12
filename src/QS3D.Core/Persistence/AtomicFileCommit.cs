@@ -90,7 +90,23 @@ namespace QS3D.Core.Persistence
             RequireSafe(destination, "destination");
             RequireSafe(backup, "backup");
             File.Move(temp, destination);
-            RequireSafe(backup, "backup");
+            try
+            {
+                RequireSafe(backup, "backup");
+            }
+            catch (Exception publicationFailure) when (publicationFailure is IOException || publicationFailure is UnauthorizedAccessException || publicationFailure is InvalidDataException)
+            {
+                try
+                {
+                    RequireSafe(destination, "destination");
+                    File.Delete(destination);
+                }
+                catch (Exception rollbackFailure) when (rollbackFailure is IOException || rollbackFailure is UnauthorizedAccessException || rollbackFailure is InvalidDataException)
+                {
+                    RecordRollbackFailure(publicationFailure, rollbackFailure);
+                }
+                throw;
+            }
             if (!File.Exists(backup) && !Directory.Exists(backup)) return;
 
             try
