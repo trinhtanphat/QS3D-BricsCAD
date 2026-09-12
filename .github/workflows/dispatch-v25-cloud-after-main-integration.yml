@@ -74,6 +74,21 @@ jobs:
             exit 1
           fi
 
+          dispatch_source_ref='refs/remotes/origin/qs3d-v25-dispatch-source'
+          git fetch --no-tags origin "+refs/heads/main:${dispatch_source_ref}"
+          fetched_dispatch_main="$(git rev-parse "${dispatch_source_ref}^{commit}")"
+          if ! git merge-base --is-ancestor "${source_sha}" "${fetched_dispatch_main}"; then
+            echo "Triggering source is not an ancestor of fetched protected main; refusing stale/foreign dispatcher source." >&2
+            exit 1
+          fi
+          git checkout --detach "${source_sha}"
+          checked_out_source="$(git rev-parse HEAD)"
+          if [[ "${checked_out_source,,}" != "${source_sha}" ]]; then
+            echo "Dispatcher worktree is not bound to exact admitted source ${source_sha}; got ${checked_out_source}." >&2
+            exit 1
+          fi
+          current_main="${fetched_dispatch_main,,}"
+
           release_relevant_pathspecs=(
             'src/'
             'tests/'
