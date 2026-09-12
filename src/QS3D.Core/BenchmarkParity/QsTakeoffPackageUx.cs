@@ -141,6 +141,7 @@ namespace QS3D.Core.BenchmarkParity
             var sources = new List<TakeoffPackageSource>();
 
             var sheetIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var sheetsById = new Dictionary<string, DrawingSheet2D>(StringComparer.OrdinalIgnoreCase);
             foreach (var sheet in sheets)
             {
                 if (sheet == null)
@@ -151,6 +152,8 @@ namespace QS3D.Core.BenchmarkParity
 
                 if (!sheetIds.Add(sheet.Id))
                     issues.Add(new TakeoffPackageValidationIssue("PKG.DUPLICATE_SHEET", TakeoffPackageValidationSeverity.Error, sheet.Id, "Drawing sheet id is duplicated in the package."));
+                else
+                    sheetsById.Add(sheet.Id, sheet);
 
                 if (!string.Equals(sheet.Revision, package.Revision, StringComparison.OrdinalIgnoreCase))
                     issues.Add(new TakeoffPackageValidationIssue("PKG.STALE_DRAWING_REVISION", TakeoffPackageValidationSeverity.Error, sheet.Id, "Drawing sheet revision does not match the package revision."));
@@ -166,8 +169,15 @@ namespace QS3D.Core.BenchmarkParity
                     continue;
                 }
 
-                if (!sheetIds.Contains(item.SheetId))
+                DrawingSheet2D? sourceSheet;
+                if (!sheetsById.TryGetValue(item.SheetId, out sourceSheet))
+                {
                     issues.Add(new TakeoffPackageValidationIssue("PKG.ORPHAN_EVIDENCE", TakeoffPackageValidationSeverity.Error, item.MarkupId, "Drawing evidence references a sheet that is not part of the package."));
+                }
+                else if (!string.Equals(item.SourceReference, sourceSheet.SourceReference, StringComparison.Ordinal))
+                {
+                    issues.Add(new TakeoffPackageValidationIssue("PKG.STALE_EVIDENCE_SOURCE", TakeoffPackageValidationSeverity.Error, item.MarkupId, "Drawing evidence source does not match the package sheet source."));
+                }
 
                 if (!string.Equals(item.Revision, package.Revision, StringComparison.OrdinalIgnoreCase))
                     issues.Add(new TakeoffPackageValidationIssue("PKG.STALE_EVIDENCE_REVISION", TakeoffPackageValidationSeverity.Error, item.MarkupId, "Drawing evidence revision does not match the package revision."));
