@@ -16,8 +16,11 @@ namespace QS3D.Core.SmokeTests
             ProjectQuantityRuleRevisionLifecycleSmoke.Run();
             AuditEventStructuralMutationsAdvanceExactlyOnce();
             AuditEventNoOpMutationsDoNotAdvance();
+            AuditEventPropertyMutationsAdvanceExactlyOnce();
+            AuditEventPropertyNoOpsDoNotAdvance();
             AuditTrailMutationsAdvanceExactlyOnce();
             AuditEventRevisionOverflowFailsBeforeMutation();
+            AuditEventPropertyRevisionOverflowFailsBeforeMutation();
         }
 
         private static void StructuralMutationsAdvanceExactlyOnce()
@@ -144,6 +147,36 @@ namespace QS3D.Core.SmokeTests
             Equal(emptyVersion, project.ChangeVersion, "audit clear-empty");
         }
 
+        private static void AuditEventPropertyMutationsAdvanceExactlyOnce()
+        {
+            var project = Project();
+            var item = Audit("one");
+            project.AuditEvents.Add(item);
+
+            AssertAdvance(project, () => item.Utc = new DateTime(2026, 9, 12, 1, 2, 3, DateTimeKind.Utc), "audit Utc mutation");
+            AssertAdvance(project, () => item.Action = "two", "audit Action mutation");
+            AssertAdvance(project, () => item.ElementId = "E2", "audit ElementId mutation");
+            AssertAdvance(project, () => item.Detail = "detail", "audit Detail mutation");
+            AssertAdvance(project, () => item.Actor = "actor", "audit Actor mutation");
+            AssertAdvance(project, () => item.CorrelationId = "corr", "audit CorrelationId mutation");
+        }
+
+        private static void AuditEventPropertyNoOpsDoNotAdvance()
+        {
+            var project = Project();
+            var item = Audit("one");
+            project.AuditEvents.Add(item);
+            var version = project.ChangeVersion;
+
+            item.Utc = item.Utc;
+            item.Action = item.Action;
+            item.ElementId = item.ElementId;
+            item.Detail = item.Detail;
+            item.Actor = item.Actor;
+            item.CorrelationId = item.CorrelationId;
+            Equal(version, project.ChangeVersion, "audit property no-op assignments");
+        }
+
         private static void AuditTrailMutationsAdvanceExactlyOnce()
         {
             var project = Project();
@@ -160,6 +193,18 @@ namespace QS3D.Core.SmokeTests
             Throws<OverflowException>(() => project.AuditEvents.Add(Audit("overflow")));
             Equal(beforeCount, project.AuditEvents.Count, "audit overflow count");
             Equal(long.MaxValue, project.ChangeVersion, "audit overflow revision");
+        }
+
+        private static void AuditEventPropertyRevisionOverflowFailsBeforeMutation()
+        {
+            var project = Project();
+            var item = Audit("before");
+            project.AuditEvents.Add(item);
+            SetChangeVersion(project, long.MaxValue);
+            var beforeAction = item.Action;
+            Throws<OverflowException>(() => item.Action = "after");
+            Equal(beforeAction, item.Action, "audit property overflow value");
+            Equal(long.MaxValue, project.ChangeVersion, "audit property overflow revision");
         }
 
         private static void AssertAdvance(ProjectState project, Action action, string operation)
@@ -196,7 +241,7 @@ namespace QS3D.Core.SmokeTests
 
         private static AuditEvent Audit(string action) => new AuditEvent
         {
-            Utc = DateTime.UtcNow,
+            Utc = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc),
             Action = action
         };
 
