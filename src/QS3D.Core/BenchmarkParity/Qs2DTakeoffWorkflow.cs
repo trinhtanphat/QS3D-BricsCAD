@@ -96,7 +96,7 @@ namespace QS3D.Core.BenchmarkParity
                 if (!markupIds.Add(item.MarkupId)) throw new InvalidOperationException("Duplicate takeoff evidence markup id.");
             }
 
-            Evidence = evidence;
+            Evidence = new ReadOnlyCollection<TakeoffQuantityEvidence2D>(evidence.ToList());
         }
         public DrawingSheet2D Sheet { get; private set; }
         public IReadOnlyList<TakeoffQuantityEvidence2D> Evidence { get; private set; }
