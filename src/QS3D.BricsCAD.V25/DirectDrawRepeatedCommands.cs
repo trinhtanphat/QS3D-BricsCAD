@@ -56,16 +56,27 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                RunCore(document, category, label, expectedProjectId, expectedFamilyId);
+                var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+                try
+                {
+                    RunCore(document, nativeDatabaseIdentity, category, label, expectedProjectId, expectedFamilyId);
+                }
+                catch (Exception)
+                {
+                    if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                        Report(document, label + ": không thể hoàn tất thao tác. Vui lòng thử lại.");
+                }
             }
             catch (Exception)
             {
-                Report(document, label + ": không thể hoàn tất thao tác. Vui lòng thử lại.");
+                // Admission failed before an exact managed/native document generation could be
+                // established. Publishing through a potentially stale editor/palette is unsafe.
             }
         }
 
         private static void RunCore(
             Document document,
+            IntPtr nativeDatabaseIdentity,
             ElementCategory category,
             string label,
             string? expectedProjectId,
@@ -75,6 +86,7 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(
                     "Repeated Direct Draw hiện chỉ hỗ trợ ArchitecturalWall và Beam.");
 
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / admission");
             DirectDrawCommands.RequireRepeatedModelSpace(document);
             var editor = document.Editor;
             var commandUnit = (object)CadUnitService.GetLengthUnit(document);
@@ -90,10 +102,12 @@ namespace QS3D.BricsCAD.V25
                 AllowNone = true
             };
             var first = editor.GetPoint(firstOptions);
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / điểm đầu");
             if (first.Status != PromptStatus.OK)
             {
                 WriteResult(
-                    editor,
+                    document,
+                    nativeDatabaseIdentity,
                     category,
                     0,
                     first.Status == PromptStatus.None ? "ENTER_BEFORE_START" : "ESC_OR_CANCEL_BEFORE_START");
@@ -125,6 +139,7 @@ namespace QS3D.BricsCAD.V25
                             termination = "DOCUMENT_SWITCH";
                             break;
                         }
+                        RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / trước preview");
                         DirectDrawCommands.RequireRepeatedPromptContextUnchanged(
                             document, commandUnit, commandUcs, label + " / trước preview");
                         // The first segment must resolve against the preview captured before the
@@ -146,6 +161,7 @@ namespace QS3D.BricsCAD.V25
                             commandUcs,
                             "\n" + label + " - chọn điểm tiếp theo (Enter/ESC để kết thúc): ");
                         var drag = editor.Drag(jig);
+                        RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / sau preview");
                         if (lifecycleGuard.WasDeactivated)
                         {
                             termination = "DOCUMENT_SWITCH";
@@ -163,12 +179,15 @@ namespace QS3D.BricsCAD.V25
                         }
                         if (!jig.HasUsableEndPoint)
                         {
-                            editor.WriteMessage(
+                            TryWriteMessage(
+                                document,
+                                nativeDatabaseIdentity,
                                 "\nQS3D " + label + ": điểm trùng điểm đầu segment; chọn lại hoặc Enter/ESC để kết thúc.");
                             continue;
                         }
 
                         var endWcs = jig.EndPoint;
+                        RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / trước commit segment");
                         var result = DirectDrawCommands.ExecuteDirect(
                             document,
                             category,
@@ -228,13 +247,22 @@ namespace QS3D.BricsCAD.V25
                                 committed,
                                 transitionError);
                         }
+                        RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / sau checkpoint");
                         currentPreview = DirectDrawProjectPreviewContext.Capture(document);
+                        RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / sau refresh preview");
                         if (!currentPreview.HasProject ||
                             !ReferenceEquals(currentPreview.DefaultsProject, trackedProject))
                             throw new InvalidOperationException(
                                 "Repeated Direct Draw canonical project changed after an accepted segment.");
                         NotifySegmentCommitted(document, accepted);
-                        editor.WriteMessage(
+                        if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                        {
+                            termination = "DOCUMENT_GENERATION_CHANGED";
+                            break;
+                        }
+                        TryWriteMessage(
+                            document,
+                            nativeDatabaseIdentity,
                             "\nQS3D " + label + " đã commit segment #" + accepted +
                             ". Chọn endpoint tiếp theo; Enter/ESC kết thúc và giữ các segment đã commit.");
                         if (lifecycleGuard.WasDeactivated)
@@ -260,11 +288,13 @@ namespace QS3D.BricsCAD.V25
                 }
             }
 
-            WriteResult(editor, category, accepted, termination);
-            NotifySequenceCompleted(document, accepted, termination);
+            WriteResult(document, nativeDatabaseIdentity, category, accepted, termination);
+            if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                NotifySequenceCompleted(document, accepted, termination);
             if (deferredSegmentError != null)
                 Report(
                     document,
+                    nativeDatabaseIdentity,
                     label + " dừng sau " + accepted + " segment đã commit; các segment đã commit vẫn được giữ. Vui lòng thử segment tiếp theo bằng lệnh mới.");
         }
 
@@ -426,13 +456,51 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(operation + ": Active Family changed during repeated drawing.");
         }
 
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var database = document.Database;
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("Repeated Direct Draw native database generation is unavailable.");
+            return identity;
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) return false;
+                var database = document.Database;
+                return database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RequireActiveDocumentGeneration(
+            Document document,
+            IntPtr nativeDatabaseIdentity,
+            string operation)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException(operation + ": active document/database generation changed.");
+        }
+
         private static void WriteResult(
-            Editor editor,
+            Document document,
+            IntPtr nativeDatabaseIdentity,
             ElementCategory category,
             int accepted,
             string termination)
         {
-            editor.WriteMessage(
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            TryWriteMessage(
+                document,
+                nativeDatabaseIdentity,
                 "\n" + ResultSchema +
                 "|category=" + category +
                 "|accepted_segments=" + accepted.ToString(CultureInfo.InvariantCulture) +
@@ -442,6 +510,16 @@ namespace QS3D.BricsCAD.V25
                 "|semantic_model=CanonicalProject" +
                 "|native_model=CanonicalBuilder" +
                 "|undo_scope=WholeCommand");
+        }
+
+        private static void TryWriteMessage(
+            Document document,
+            IntPtr nativeDatabaseIdentity,
+            string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try { document.Editor.WriteMessage(message); }
+            catch { }
         }
 
         private static void NotifySegmentCommitted(Document document, int accepted)
@@ -462,7 +540,14 @@ namespace QS3D.BricsCAD.V25
 
         private static void Report(Document document, string message)
         {
-            DirectDrawUiFailureReporter.ReportMessage(document, message);
+            try { DirectDrawUiFailureReporter.ReportMessage(document, message); }
+            catch { }
+        }
+
+        private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            Report(document, message);
         }
 
         private sealed class RepeatedDefaults
