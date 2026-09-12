@@ -162,6 +162,11 @@ try {
             throw "V26 candidate provenance must contain exactly one $propertyName property."
         }
     }
+    foreach ($hostPropertyName in @('name', 'sha256', 'length')) {
+        if ((Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName $hostPropertyName) -ne $requiredHostNames.Count) {
+            throw "V26 candidate provenance host-reference identity must contain exactly $($requiredHostNames.Count) $hostPropertyName properties."
+        }
+    }
     try { $provenance = $provenanceText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "V26 candidate provenance JSON is invalid: $($_.Exception.Message)" }
     if ([string]$provenance.product -ne 'QS3D' -or [string]$provenance.target -ne 'BricsCAD V26 x64') { throw 'V26 candidate provenance product/target identity is invalid.' }
