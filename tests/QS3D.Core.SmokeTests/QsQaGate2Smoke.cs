@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             RejectsNonUtcWaiverAndEvaluationTimestamps();
             AppliesConfigurableSeverityThreshold();
             DetectsIfcPsetSpatialTypeAndGuidConsistency();
+            MissingIfcGuidIsNonWaivableAndBlocksStrictGate();
             MissingStoreyWithSpatialContainmentBlocksStrictGate();
             DuplicateGuidWaiverMustCoverEveryConflictingElement();
             DuplicateElementIdentityIsNonWaivable();
@@ -150,6 +151,32 @@ namespace QS3D.Core.SmokeTests
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.SPATIAL_MISMATCH" && x.ElementId == "E6"), "storey/spatial mismatch must be detected");
             Expect(decision.ActiveFindings.Any(x => x.RuleId == "QA2.TYPE_ASSIGNMENT_MISMATCH" && x.ElementId == "E6"), "element type/IFC type assignment mismatch must be detected");
             Expect(decision.Status == QsQaGateStatus.Blocked, "IFC consistency failures must block strict profile");
+        }
+
+        private static void MissingIfcGuidIsNonWaivableAndBlocksStrictGate()
+        {
+            var now = Utc(2026, 9, 12);
+            foreach (var guid in new[] { null, "   " })
+            {
+                var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "IfcPset.Pset_Qto", "present" },
+                    { "IfcPset.Pset_Identity", "present" },
+                    { "IfcRel.SpatialContainer", "L01" },
+                    { "IfcRel.TypeAssignment", "Wall" }
+                };
+                if (guid != null) properties["IfcGuid"] = guid;
+
+                var element = new QsModelElementSnapshot("E-MISSING-GUID-" + (guid == null ? "ABSENT" : "BLANK"), "Wall", "Concrete", "A-WALL", "L01", 4d, 0.2d, 3d, properties);
+                var waiver = new QsQaWaiver("QA2.MISSING_IFC_GUID", element.Id, "Invalid identity waiver attempt", "lead.qs", now.AddHours(-1), now.AddDays(1));
+                var decision = new QsQaGate2().Evaluate(new[] { element }, QsQaRuleProfile.SolibriQuantityStrict(), new[] { waiver }, now);
+
+                var finding = decision.ActiveFindings.SingleOrDefault(x => x.RuleId == "QA2.MISSING_IFC_GUID" && x.ElementId == element.Id);
+                Expect(finding != null && finding.Severity == QsQaSeverity.Critical, "missing or blank IFC GUID must be Critical in the strict profile");
+                Expect(decision.Status == QsQaGateStatus.Blocked, "missing IFC GUID must keep the strict gate blocked");
+                Expect(decision.WaivedFindings.All(x => x.RuleId != "QA2.MISSING_IFC_GUID"), "missing IFC identity must never be waived");
+                Expect(!decision.CanTakeoff && !decision.CanBoq && !decision.CanEstimate, "missing IFC GUID must block every guarded quantity workflow");
+            }
         }
 
         private static void MissingStoreyWithSpatialContainmentBlocksStrictGate()
