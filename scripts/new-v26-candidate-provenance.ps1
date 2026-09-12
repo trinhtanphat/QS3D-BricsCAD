@@ -61,7 +61,31 @@ function Get-OrdinaryFileIdentity([string]$Path, [string]$Label) {
     finally { $stream.Dispose() }
 }
 
-function Read-StrictUtf8Json([string]$Path, [string]$Label) {
+function Get-JsonPropertyOccurrenceCount([string]$JsonText, [string]$PropertyName) {
+    $count = 0
+    $propertyPattern = '"(?:\\["\\/bfnrt]|\\u[0-9A-Fa-f]{4}|[^"\\\x00-\x1F])*"\s*:'
+    foreach ($match in [Text.RegularExpressions.Regex]::Matches($JsonText, $propertyPattern)) {
+        $colon = $match.Value.LastIndexOf(':')
+        if ($colon -le 0) { continue }
+        $encodedName = $match.Value.Substring(0, $colon).Trim()
+        try { $decodedName = [string]($encodedName | ConvertFrom-Json -ErrorAction Stop) }
+        catch { continue }
+        if ([string]::Equals($decodedName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) { $count++ }
+    }
+    return $count
+}
+
+function Assert-JsonPropertyCounts([string]$JsonText, [hashtable]$ExpectedPropertyCounts, [string]$Label) {
+    foreach ($propertyName in @($ExpectedPropertyCounts.Keys)) {
+        $expectedCount = [int]$ExpectedPropertyCounts[$propertyName]
+        $actualCount = Get-JsonPropertyOccurrenceCount -JsonText $JsonText -PropertyName $propertyName
+        if ($actualCount -ne $expectedCount) {
+            throw "$Label must contain exactly $expectedCount $propertyName properties; found $actualCount."
+        }
+    }
+}
+
+function Read-StrictUtf8Json([string]$Path, [string]$Label, [hashtable]$ExpectedPropertyCounts) {
     $item = Resolve-OrdinaryFile -Path $Path -Label $Label
     if ($item.Length -gt $maxMetadataBytes) { throw "$Label exceeds the $maxMetadataBytes-byte safety limit." }
     $stream = [IO.File]::Open($item.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
@@ -79,6 +103,7 @@ function Read-StrictUtf8Json([string]$Path, [string]$Label) {
         }
         try { $text = $strictUtf8.GetString($bytes) }
         catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
+        Assert-JsonPropertyCounts -JsonText $text -ExpectedPropertyCounts $ExpectedPropertyCounts -Label $Label
         try { return $text | ConvertFrom-Json -ErrorAction Stop }
         catch { throw "$Label JSON is invalid: $($_.Exception.Message)" }
     }
@@ -330,7 +355,15 @@ if ([string]::IsNullOrWhiteSpace($InstallerSha256) -or $InstallerSha256 -cnotmat
     throw 'V26 admitted installer SHA-256 must be canonical lowercase 64-hex.'
 }
 
-$hostState = Read-StrictUtf8Json -Path $HostReferenceStatePath -Label 'V26 host-reference state'
+$hostExpectedPropertyCounts = @{
+    Version = 1
+    Files = 1
+    Name = $requiredHostNames.Count
+    Path = $requiredHostNames.Count
+    Sha256 = $requiredHostNames.Count
+    Length = $requiredHostNames.Count
+}
+$hostState = Read-StrictUtf8Json -Path $HostReferenceStatePath -Label 'V26 host-reference state' -ExpectedPropertyCounts $hostExpectedPropertyCounts
 if ([int]$hostState.Version -ne 1) { throw 'V26 host-reference state version must be 1.' }
 $hostFiles = @($hostState.Files)
 if ($hostFiles.Count -ne $requiredHostNames.Count) { throw 'V26 host-reference state must contain exactly four required files.' }
@@ -370,6 +403,13 @@ try {
     }
     finally { $archive.Dispose() }
 
+    $metadataExpectedPropertyCounts = @{
+        product = 1
+        target = 1
+        framework = 1
+        productVersion = 1
+    }
+    Assert-JsonPropertyCounts -JsonText $metadataText -ExpectedPropertyCounts $metadataExpectedPropertyCounts -Label 'V26 PACKAGE-METADATA.json'
     try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "V26 PACKAGE-METADATA.json is invalid JSON: $($_.Exception.Message)" }
     if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V26 x64') { throw 'V26 package product/target identity is invalid.' }
