@@ -22,19 +22,27 @@ namespace QS3D.Core.BenchmarkParity
     public sealed class IfcSceneMesh
     {
         public IfcSceneMesh(IEnumerable<IfcSceneVertex> vertices, IEnumerable<int> triangleIndices)
+            : this(vertices, triangleIndices, Array.Empty<byte>())
+        {
+        }
+
+        public IfcSceneMesh(IEnumerable<IfcSceneVertex> vertices, IEnumerable<int> triangleIndices, IEnumerable<byte> artifactBytes)
         {
             var vertexList = (vertices ?? throw new ArgumentNullException("vertices")).ToList();
             var indexList = (triangleIndices ?? throw new ArgumentNullException("triangleIndices")).ToList();
+            var artifactSnapshot = (artifactBytes ?? throw new ArgumentNullException("artifactBytes")).ToArray();
             if (vertexList.Count < 3) throw new ArgumentException("Scene mesh requires at least three vertices.", "vertices");
             if (vertexList.Any(x => x == null)) throw new ArgumentException("Scene mesh contains a null vertex.", "vertices");
             if (indexList.Count == 0 || indexList.Count % 3 != 0) throw new ArgumentException("Triangle indices must contain complete triangles.", "triangleIndices");
             if (indexList.Any(x => x < 0 || x >= vertexList.Count)) throw new ArgumentOutOfRangeException("triangleIndices", "Triangle index is outside the vertex range.");
             Vertices = new ReadOnlyCollection<IfcSceneVertex>(vertexList);
             TriangleIndices = new ReadOnlyCollection<int>(indexList);
+            ArtifactBytes = new ReadOnlyCollection<byte>(artifactSnapshot);
         }
 
         public IReadOnlyList<IfcSceneVertex> Vertices { get; private set; }
         public IReadOnlyList<int> TriangleIndices { get; private set; }
+        public IReadOnlyList<byte> ArtifactBytes { get; private set; }
     }
 
     public interface IIfcGeometryResolver
