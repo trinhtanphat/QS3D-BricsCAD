@@ -115,6 +115,169 @@ function Get-CurrentStableState {
     }
 }
 
+function Get-JsonPropertyOccurrenceCount {
+    param(
+        [Parameter(Mandatory = $true)][string]$JsonText,
+        [Parameter(Mandatory = $true)][string]$PropertyName
+    )
+
+    $firstNonWhitespace = 0
+    while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
+    if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') {
+        throw 'V25 compile-reference state identity object must have a top-level object.'
+    }
+
+    $count = 0
+    $objectDepth = 0
+    $arrayDepth = 0
+    $i = 0
+    while ($i -lt $JsonText.Length) {
+        $ch = $JsonText[$i]
+        if ($ch -eq '"') {
+            $tokenStart = $i
+            $i++
+            $closed = $false
+            while ($i -lt $JsonText.Length) {
+                if ($JsonText[$i] -eq '\') { $i += 2; continue }
+                if ($JsonText[$i] -eq '"') { $closed = $true; break }
+                $i++
+            }
+            if (-not $closed) { throw 'V25 compile-reference state contains an unterminated string token.' }
+            $tokenEnd = $i
+            $lookahead = $tokenEnd + 1
+            while ($lookahead -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$lookahead])) { $lookahead++ }
+            if ($objectDepth -eq 1 -and $arrayDepth -eq 0 -and $lookahead -lt $JsonText.Length -and $JsonText[$lookahead] -eq ':') {
+                $rawPropertyToken = $JsonText.Substring($tokenStart, $tokenEnd - $tokenStart + 1)
+                try { $decodedPropertyName = [string]($rawPropertyToken | ConvertFrom-Json -ErrorAction Stop) }
+                catch { throw 'V25 compile-reference state contains malformed property-name encoding.' }
+                if ([string]::Equals($decodedPropertyName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) { $count++ }
+            }
+            $i = $tokenEnd + 1
+            continue
+        }
+
+        switch ($ch) {
+            '{' { $objectDepth++ }
+            '}' { $objectDepth--; if ($objectDepth -lt 0) { throw 'V25 compile-reference state has invalid object nesting.' } }
+            '[' { $arrayDepth++ }
+            ']' { $arrayDepth--; if ($arrayDepth -lt 0) { throw 'V25 compile-reference state has invalid array nesting.' } }
+        }
+        $i++
+    }
+    if ($objectDepth -ne 0 -or $arrayDepth -ne 0) { throw 'V25 compile-reference state has unbalanced container nesting.' }
+    return $count
+}
+
+function Assert-JsonPropertyOccursExactlyOnce {
+    param(
+        [Parameter(Mandatory = $true)][string]$JsonText,
+        [Parameter(Mandatory = $true)][string]$PropertyName,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $count = Get-JsonPropertyOccurrenceCount -JsonText $JsonText -PropertyName $PropertyName
+    if ($count -ne 1) { throw "$Label must contain exactly one top-level '$PropertyName' property; found $count." }
+}
+
+function Get-JsonTopLevelArrayObjectTexts {
+    param(
+        [Parameter(Mandatory = $true)][string]$JsonText,
+        [Parameter(Mandatory = $true)][string]$ArrayPropertyName,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $firstNonWhitespace = 0
+    while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
+    if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') { throw "$Label must have a top-level object." }
+
+    $objectDepth = 0
+    $arrayDepth = 0
+    $arrayStart = -1
+    $i = 0
+    while ($i -lt $JsonText.Length -and $arrayStart -lt 0) {
+        $ch = $JsonText[$i]
+        if ($ch -eq '"') {
+            $tokenStart = $i
+            $i++
+            $closed = $false
+            while ($i -lt $JsonText.Length) {
+                if ($JsonText[$i] -eq '\') { $i += 2; continue }
+                if ($JsonText[$i] -eq '"') { $closed = $true; break }
+                $i++
+            }
+            if (-not $closed) { throw "$Label contains an unterminated string token." }
+            $tokenEnd = $i
+            $lookahead = $tokenEnd + 1
+            while ($lookahead -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$lookahead])) { $lookahead++ }
+            if ($objectDepth -eq 1 -and $arrayDepth -eq 0 -and $lookahead -lt $JsonText.Length -and $JsonText[$lookahead] -eq ':') {
+                $rawPropertyToken = $JsonText.Substring($tokenStart, $tokenEnd - $tokenStart + 1)
+                try { $decodedPropertyName = [string]($rawPropertyToken | ConvertFrom-Json -ErrorAction Stop) }
+                catch { throw "$Label contains malformed property-name encoding." }
+                if ([string]::Equals($decodedPropertyName, $ArrayPropertyName, [StringComparison]::OrdinalIgnoreCase)) {
+                    $valueStart = $lookahead + 1
+                    while ($valueStart -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$valueStart])) { $valueStart++ }
+                    if ($valueStart -ge $JsonText.Length -or $JsonText[$valueStart] -ne '[') { throw "$Label property '$ArrayPropertyName' must be an array." }
+                    $arrayStart = $valueStart
+                    break
+                }
+            }
+            $i = $tokenEnd + 1
+            continue
+        }
+        switch ($ch) {
+            '{' { $objectDepth++ }
+            '}' { $objectDepth-- }
+            '[' { $arrayDepth++ }
+            ']' { $arrayDepth-- }
+        }
+        $i++
+    }
+    if ($arrayStart -lt 0) { throw "$Label is missing top-level array property '$ArrayPropertyName'." }
+
+    $items = [Collections.Generic.List[string]]::new()
+    $arrayDepth = 0
+    $objectDepth = 0
+    $objectStart = -1
+    $i = $arrayStart
+    while ($i -lt $JsonText.Length) {
+        $ch = $JsonText[$i]
+        if ($ch -eq '"') {
+            $i++
+            $closed = $false
+            while ($i -lt $JsonText.Length) {
+                if ($JsonText[$i] -eq '\') { $i += 2; continue }
+                if ($JsonText[$i] -eq '"') { $closed = $true; break }
+                $i++
+            }
+            if (-not $closed) { throw "$Label contains an unterminated string token in '$ArrayPropertyName'." }
+            $i++
+            continue
+        }
+        switch ($ch) {
+            '[' { $arrayDepth++ }
+            ']' {
+                if ($arrayDepth -eq 1 -and $objectDepth -eq 0) { return @($items) }
+                $arrayDepth--
+                if ($arrayDepth -lt 0) { throw "$Label has invalid array nesting in '$ArrayPropertyName'." }
+            }
+            '{' {
+                if ($arrayDepth -eq 1 -and $objectDepth -eq 0) { $objectStart = $i }
+                $objectDepth++
+            }
+            '}' {
+                $objectDepth--
+                if ($objectDepth -lt 0) { throw "$Label has invalid object nesting in '$ArrayPropertyName'." }
+                if ($arrayDepth -eq 1 -and $objectDepth -eq 0 -and $objectStart -ge 0) {
+                    $items.Add($JsonText.Substring($objectStart, $i - $objectStart + 1))
+                    $objectStart = -1
+                }
+            }
+        }
+        $i++
+    }
+    throw "$Label array property '$ArrayPropertyName' is unterminated."
+}
+
 Assert-NoExistingReparseComponent -Path $StatePath -Label 'V25 compile-reference state path'
 Assert-NoExistingReparseComponent -Path $BricsCadDir -Label 'V25 compile-reference snapshot directory'
 $stateBefore = Get-CurrentStableState -Path $StatePath -Label 'V25 compile-reference state'
@@ -138,6 +301,20 @@ if (-not [string]::Equals($stateBefore.path, $stateAfter.path, [StringComparison
 $utf8 = New-Object Text.UTF8Encoding($false, $true)
 try { $raw = $utf8.GetString($rawBytes) }
 catch { throw "V25 compile-reference state is not strict UTF-8: $($_.Exception.Message)" }
+
+foreach ($propertyName in @('schemaVersion', 'bricsCadDir', 'references')) {
+    Assert-JsonPropertyOccursExactlyOnce -JsonText $raw -PropertyName $propertyName -Label 'V25 compile-reference state'
+}
+$rawReferenceRecords = @(Get-JsonTopLevelArrayObjectTexts -JsonText $raw -ArrayPropertyName 'references' -Label 'V25 compile-reference state')
+if ($rawReferenceRecords.Count -ne $requiredNames.Count) {
+    throw "V25 compile-reference state must contain exactly $($requiredNames.Count) reference objects."
+}
+for ($recordIndex = 0; $recordIndex -lt $rawReferenceRecords.Count; $recordIndex++) {
+    foreach ($propertyName in @('name', 'path', 'length', 'lastWriteUtcTicks', 'sha256')) {
+        Assert-JsonPropertyOccursExactlyOnce -JsonText $rawReferenceRecords[$recordIndex] -PropertyName $propertyName -Label "V25 compile-reference state references[$recordIndex]"
+    }
+}
+
 try { $state = $raw | ConvertFrom-Json }
 catch { throw "V25 compile-reference state is invalid JSON: $($_.Exception.Message)" }
 
