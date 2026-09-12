@@ -158,6 +158,8 @@ namespace QS3D.Core.Commercial
             EventRevision = ContractAdministrationGuard.RequireRevisionKind(eventRevision, "contract-event", nameof(eventRevision));
             if (!Enum.IsDefined(typeof(ContractNoticeDirection), direction)) throw new ArgumentOutOfRangeException(nameof(direction));
             if (!Enum.IsDefined(typeof(ContractNoticeState), state)) throw new ArgumentOutOfRangeException(nameof(state));
+            Direction = direction;
+            State = state;
             ContractClause = CommercialGuard.RequireCanonicalText(contractClause, nameof(contractClause));
             RequiredByUtc = CommercialGuard.RequireUtc(requiredByUtc, nameof(requiredByUtc));
             ActionUtc = actionUtc.HasValue ? CommercialGuard.RequireUtc(actionUtc.Value, nameof(actionUtc)) : (DateTime?)null;
