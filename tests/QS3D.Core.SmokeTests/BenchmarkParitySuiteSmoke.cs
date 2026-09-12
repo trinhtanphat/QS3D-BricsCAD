@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             QsTakeoffPackageUxSmoke.Run();
             WorkbookLiveLinkRefresh();
             IntegrationRoutes();
+            IntegrationApiRejectsNonFiniteEstimateAmount();
             QsLiveWorkbookApiSmoke.Run();
             ConcreteAndFormwork();
             IfcWorkbench();
@@ -113,6 +114,23 @@ namespace QS3D.Core.SmokeTests
             True(routes.Any(x => x.Contains("revisions")), "revision route");
             var resource = new QsIntegrationResource("P1", "R2", new List<TakeoffInventoryLine>(), new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Utc));
             Equal("P1", resource.ProjectId, "integration project id");
+        }
+
+        private static void IntegrationApiRejectsNonFiniteEstimateAmount()
+        {
+            var finite = new QsApiEstimateLineDto("L1", 4d, 2.5d);
+            Near(10d, finite.Amount, 0d, "finite API estimate amount");
+
+            var rejected = false;
+            try
+            {
+                _ = new QsApiEstimateLineDto("L2", double.MaxValue, 2d);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejected = true;
+            }
+            True(rejected, "API estimate amount overflow is rejected before publication");
         }
 
         private static void ConcreteAndFormwork()
