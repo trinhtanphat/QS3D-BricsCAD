@@ -52,18 +52,21 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
 
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (nativeDatabaseIdentity == IntPtr.Zero) return;
+
             try
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 {
-                    Report(document, operation + ": bản vẽ chưa có QS3D project. Mở Workspace, tạo/chọn Family trước khi vẽ.");
+                    Report(document, nativeDatabaseIdentity, operation + ": bản vẽ chưa có QS3D project. Mở Workspace, tạo/chọn Family trước khi vẽ.");
                     return;
                 }
 
                 var family = ProjectFamilyActivationService.GetActive(project);
                 if (family == null)
                 {
-                    Report(document, operation + ": chưa có Family active. Chọn Family/Type trong Workspace rồi chạy lại.");
+                    Report(document, nativeDatabaseIdentity, operation + ": chưa có Family active. Chọn Family/Type trong Workspace rồi chạy lại.");
                     return;
                 }
 
@@ -76,6 +79,7 @@ namespace QS3D.BricsCAD.V25
 
                 var dispatchFamily = RequireCurrentDispatchSnapshot(
                     document,
+                    nativeDatabaseIdentity,
                     expectedProjectId,
                     expectedChangeVersion,
                     expectedFamilyId,
@@ -86,22 +90,33 @@ namespace QS3D.BricsCAD.V25
 
                 if (repeated)
                 {
-                    DispatchRepeated(document, dispatchFamily, expectedProjectId, expectedFamilyId, operation);
+                    RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
+                    DispatchRepeated(
+                        document,
+                        nativeDatabaseIdentity,
+                        dispatchFamily,
+                        expectedProjectId,
+                        expectedFamilyId,
+                        operation);
                 }
                 else
                 {
                     using (DirectDrawProjectPreviewContext.BeginDispatchScope(document))
-                        Dispatch(document, dispatchFamily, advanced, operation);
+                    {
+                        RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
+                        Dispatch(document, nativeDatabaseIdentity, dispatchFamily, advanced, operation);
+                    }
                 }
             }
             catch (Exception)
             {
-                Report(document, operation + ": không thể hoàn tất thao tác. Vui lòng thử lại.");
+                Report(document, nativeDatabaseIdentity, operation + ": không thể hoàn tất thao tác. Vui lòng thử lại.");
             }
         }
 
         private static ProjectFamily RequireCurrentDispatchSnapshot(
             Document document,
+            IntPtr nativeDatabaseIdentity,
             string expectedProjectId,
             long expectedChangeVersion,
             string expectedFamilyId,
@@ -110,9 +125,7 @@ namespace QS3D.BricsCAD.V25
             bool expectedSlabOpenRouting,
             string operation)
         {
-            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
-                throw new InvalidOperationException(
-                    operation + ": DWG active đã thay đổi trước khi dispatch. Hãy chạy lại lệnh trên bản vẽ hiện hành.");
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
 
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var currentProject))
                 throw new InvalidOperationException(
@@ -139,17 +152,26 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException(
                     operation + ": Active Family/routing đã thay đổi trước khi dispatch. Hãy chạy lại lệnh.");
 
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
             return currentFamily;
         }
 
-        private static void Dispatch(Document document, ProjectFamily family, bool advanced, string operation)
+        private static void Dispatch(
+            Document document,
+            IntPtr nativeDatabaseIdentity,
+            ProjectFamily family,
+            bool advanced,
+            string operation)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (family == null) throw new ArgumentNullException(nameof(family));
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
+
             if (!SupportsFamily(family))
             {
                 Report(
                     document,
+                    nativeDatabaseIdentity,
                     operation + ": Family '" + family.Name + "' thuộc " + family.Category +
                     " chưa có Direct Draw " + (advanced ? "Advanced" : "Quick") +
                     " an toàn. Dùng workflow chuyên biệt hiện có cho category này.");
@@ -158,11 +180,13 @@ namespace QS3D.BricsCAD.V25
 
             if (SlabOpeningContract.IsSlabOpenFamily(family))
             {
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
                 if (advanced) new DirectDrawSlabOpeningCommands().DrawSlabOpeningAdvanced();
                 else new DirectDrawSlabOpeningCommands().DrawSlabOpening();
                 return;
             }
 
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
             switch (family.Category)
             {
                 case ElementCategory.ArchitecturalWall:
@@ -223,21 +247,26 @@ namespace QS3D.BricsCAD.V25
 
         private static void DispatchRepeated(
             Document document,
+            IntPtr nativeDatabaseIdentity,
             ProjectFamily family,
             string expectedProjectId,
             string expectedFamilyId,
             string operation)
         {
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
+
             if (family.Category != ElementCategory.ArchitecturalWall &&
                 family.Category != ElementCategory.Beam)
             {
                 Report(
                     document,
+                    nativeDatabaseIdentity,
                     operation + ": chế độ vẽ liên tục hiện chỉ hỗ trợ Family Tường KT hoặc Dầm. " +
                     "Dùng Quick/Advanced workflow hiện có cho " + family.Category + ".");
                 return;
             }
 
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation);
             new DirectDrawRepeatedCommands().DrawActiveFamilyRepeated(
                 family.Category,
                 expectedProjectId,
@@ -253,15 +282,51 @@ namespace QS3D.BricsCAD.V25
                    family.Properties.ContainsKey("WindowSillHeightM");
         }
 
-        private static void Report(Document document, string message)
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
-            try { document.Editor.WriteMessage("\n" + message); } catch { }
+            if (document == null) return IntPtr.Zero;
             try
             {
-                if (ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
-                    PaletteCoordinator.SetStatus(message);
+                var database = document.Database;
+                return database == null ? IntPtr.Zero : database.UnmanagedObject;
             }
-            catch { }
+            catch
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) return false;
+                var database = document.Database;
+                return database != null && database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RequireActiveDocumentGeneration(
+            Document document,
+            IntPtr nativeDatabaseIdentity,
+            string operation)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException(
+                    operation + ": DWG active/database generation đã thay đổi trước khi dispatch. Hãy chạy lại lệnh trên bản vẽ hiện hành.");
+        }
+
+        private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try { document.Editor.WriteMessage("\n" + message); } catch { }
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try { PaletteCoordinator.SetStatus(message); } catch { }
         }
     }
 }
