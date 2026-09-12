@@ -26,14 +26,12 @@ namespace QS3D.Core.Audit
         private const long MaxStoredTextCharacters = 8L * 1024L * 1024L;
 
         private readonly IList<AuditEvent> _events;
-        private readonly ProjectState? _project;
 
-        public AuditTrail() : this(new List<AuditEvent>(), null) { }
+        public AuditTrail() : this(new List<AuditEvent>()) { }
 
-        private AuditTrail(IList<AuditEvent> events, ProjectState? project)
+        private AuditTrail(IList<AuditEvent> events)
         {
             _events = events ?? throw new ArgumentNullException(nameof(events));
-            _project = project;
         }
 
         public IReadOnlyList<AuditEvent> Events
@@ -79,13 +77,13 @@ namespace QS3D.Core.Audit
         public static AuditTrail ForProject(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            return new AuditTrail(project.AuditEvents, project);
+            return new AuditTrail(project.AuditEvents);
         }
 
         internal static void ValidateSnapshotHistory(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
-            new AuditTrail(project.AuditEvents, project).ValidateExistingHistory(
+            new AuditTrail(project.AuditEvents).ValidateExistingHistory(
                 requireAppendCapacity: false,
                 allowNullActionBacking: true);
         }
@@ -133,7 +131,6 @@ namespace QS3D.Core.Audit
                 Actor = safeActor,
                 CorrelationId = safeCorrelationId
             };
-            _project?.Touch();
             _events.Add(item);
         }
 
@@ -141,7 +138,6 @@ namespace QS3D.Core.Audit
         {
             var observed = ValidateExistingHistory(requireAppendCapacity: false);
             if (observed == 0) return;
-            _project?.Touch();
             _events.Clear();
         }
 
