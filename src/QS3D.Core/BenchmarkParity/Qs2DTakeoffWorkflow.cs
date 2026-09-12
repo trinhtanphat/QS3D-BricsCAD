@@ -14,6 +14,7 @@ namespace QS3D.Core.BenchmarkParity
         {
             Id = QsModelElementSnapshot.Require(id, "id");
             Name = QsModelElementSnapshot.Require(name, "name");
+            if (sourceKind != DrawingSheetSourceKind.Pdf && sourceKind != DrawingSheetSourceKind.RasterImage) throw new ArgumentOutOfRangeException("sourceKind");
             SourceKind = sourceKind;
             SourceReference = QsModelElementSnapshot.Require(sourceReference, "sourceReference");
             Revision = QsModelElementSnapshot.Require(revision, "revision");
@@ -33,6 +34,7 @@ namespace QS3D.Core.BenchmarkParity
         {
             Id = QsModelElementSnapshot.Require(id, "id");
             SheetId = QsModelElementSnapshot.Require(sheetId, "sheetId");
+            if (kind != TakeoffMeasurementKind.Count && kind != TakeoffMeasurementKind.Length && kind != TakeoffMeasurementKind.Area) throw new ArgumentOutOfRangeException("kind");
             Kind = kind;
             RawValue = DrawingCalibration.Positive(rawValue, "rawValue");
             Classification = QsModelElementSnapshot.Require(classification, "classification");
