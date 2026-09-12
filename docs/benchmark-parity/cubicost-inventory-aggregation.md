@@ -16,4 +16,4 @@ BricsCAD-specific adapters remain optional and must consume these Core contracts
 
 ## Regression coverage
 
-`QsCubicostLegacyInventoryAggregationSmoke` is auto-registered with a module initializer and covers compensated Concrete/Formwork totals, reverse-input determinism, source-count preservation, signed-zero canonicalization, and fail-closed aggregate overflow. It deliberately avoids the shared benchmark smoke registry so concurrently reserved benchmark lanes remain collision-free.
+`QsCubicostLegacyInventoryAggregationSmoke` covers compensated Concrete/Formwork totals, reverse-input determinism, source-count preservation, signed-zero canonicalization, and fail-closed aggregate overflow. It executes through the existing registered `QsCubicostDomainWorkflowsSmoke.Run()` path, avoiding `ModuleInitializer` and leaving the shared `SmokeTestRegistration.cs` registry untouched so concurrently reserved benchmark lanes remain collision-free.
