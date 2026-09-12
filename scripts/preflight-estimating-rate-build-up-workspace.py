@@ -8,7 +8,6 @@ COMMAND = ROOT / "src/QS3D.BricsCAD.V25/EstimatingRateBuildUpCommands.cs"
 UI = ROOT / "src/QS3D.BricsCAD.V25/UI/EstimatingRateBuildUpWindow.xaml.cs"
 XAML = ROOT / "src/QS3D.BricsCAD.V25/UI/EstimatingRateBuildUpWindow.xaml"
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/EstimatingRateBuildUpSmoke.cs"
-RATE_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/RateBookSmoke.cs"
 
 
 def fail(message: str) -> None:
@@ -27,7 +26,6 @@ command = text(COMMAND)
 ui = text(UI)
 xaml = text(XAML)
 smoke = text(SMOKE)
-rate_smoke = text(RATE_SMOKE)
 
 required_core = [
     "public enum EstimatingResourceCategory",
@@ -96,6 +94,8 @@ for token in [
         fail(f"Estimating XAML lost professional workflow surface token: {token}")
 
 for token in [
+    "[ModuleInitializer]",
+    "RegisterAndRun()",
     "Equal(500m, result.DirectUnitCost",
     "Equal(50m, result.OverheadUnitCost",
     "Equal(55m, result.ProfitUnitCost",
@@ -105,10 +105,7 @@ for token in [
     "Currency mismatch",
 ]:
     if token not in smoke:
-        fail(f"Estimating smoke lost deterministic workflow oracle: {token}")
+        fail(f"Estimating smoke lost deterministic workflow oracle/registration token: {token}")
 
-if "EstimatingRateBuildUpSmoke.Run();" not in rate_smoke:
-    fail("Estimating smoke is not registered through RateBookSmoke.Run().")
-
-print("PASS: estimating rate build-up workspace preserves Core arithmetic authority, provenance, revision lifecycle and thin UI boundaries.")
+print("PASS: estimating rate build-up workspace preserves Core arithmetic authority, provenance, revision lifecycle, smoke registration and thin UI boundaries.")
 sys.exit(0)
