@@ -577,10 +577,10 @@ try {
         }
         else { [IO.File]::Move($tempPath, $outputFull) }
 
-        Close-OwnedProvenanceGeneration -Generation $tempGeneration
-        $tempGeneration = $null
         $publishedGeneration = Open-PinnedPublishedProvenanceGeneration -Path $outputFull -ExpectedIdentity $attemptIdentity
         Assert-PinnedPublishedProvenanceBytes -Generation $publishedGeneration -ExpectedBytes $provenanceBytes
+        Close-OwnedProvenanceGeneration -Generation $tempGeneration
+        $tempGeneration = $null
         $publicationCommitted = $true
     }
     finally {
