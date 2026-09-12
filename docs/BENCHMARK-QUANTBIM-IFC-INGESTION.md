@@ -1,6 +1,6 @@
 # QuantBIM IFC STEP ingestion
 
-Issue #6500 introduced the host-neutral IFC STEP source consumed by the canonical `QuantBimStandaloneWorkbench`. Issue #6560 extends that same source with quantity-specific and project/global SI-unit resolution; it does not create another workbench and does not add a BricsCAD dependency to `QS3D.Core`.
+Issue #6500 introduced the host-neutral IFC STEP source consumed by the canonical `QuantBimStandaloneWorkbench`. Issue #6560 added quantity-specific and project/global SI-unit resolution. Issue #6565 extends that same resolver with bounded `IfcConversionBasedUnit` support; no second workbench or BricsCAD dependency is introduced into `QS3D.Core`.
 
 ## Supported QS ingestion slice
 
@@ -11,46 +11,51 @@ Issue #6500 introduced the host-neutral IFC STEP source consumed by the canonica
 - `IfcRelDefinesByType` type names;
 - `IfcPropertySet` / `IfcPropertySingleValue` values;
 - `IfcElementQuantity` length/area/volume/count/weight values;
-- quantity-specific `IfcSIUnit` references when `IfcPhysicalSimpleQuantity.Unit` is present;
+- quantity-specific unit references when `IfcPhysicalSimpleQuantity.Unit` is present;
 - project `IfcUnitAssignment` through `IfcProject.UnitsInContext` when the quantity-specific unit is omitted;
-- SI prefix normalization, including dimensional scaling for area/volume and IFC's gram-based `MASSUNIT` convention;
+- `IfcSIUnit` prefix normalization, including dimensional area/volume scaling and IFC's gram-based `MASSUNIT` convention;
+- bounded `IfcConversionBasedUnit -> IfcMeasureWithUnit` chains for length, area, volume and mass when the component unit ultimately resolves to a supported SI or conversion-based unit of the same dimensional type;
 - `IfcClassificationReference` + `IfcRelAssociatesClassification` classification codes;
-- a content-derived `IFCSTEP-*` revision fingerprint;
-- `ifc-step://#id` source evidence locators.
+- content-derived `IFCSTEP-*` revision fingerprints and `ifc-step://#id` evidence locators.
 
-The parser normalizes supported quantities into the existing QS3D canonical downstream units: `m`, `m2`, `m3`, `kg`, and `count`. This keeps current QTO, BOQ, CSV, traceability and aggregation contracts source-compatible even when an IFC exchange file uses prefixed SI units such as millimetres or grams.
+Supported quantities continue to normalize into the existing downstream units `m`, `m2`, `m3`, `kg`, and `count`. Conversion-unit names are not trusted as conversion authority: scale comes from the IFC conversion-factor graph and dimensional metadata.
 
 ## Unit precedence and compatibility
 
-IFC quantity semantics are applied in this order:
+Quantity unit precedence remains:
 
-1. when a simple quantity has an explicit `Unit` reference, that unit is authoritative for the quantity;
-2. otherwise, a relevant SI unit from the `IfcProject.UnitsInContext` `IfcUnitAssignment` is used;
-3. when neither is present, the parser retains the pre-#6560 compatibility behavior and treats length/area/volume/weight values as already expressed in QS3D canonical SI units.
+1. explicit simple-quantity `Unit` reference;
+2. relevant unit from the project's `IfcUnitAssignment`;
+3. legacy compatibility default treating omitted length/area/volume/weight units as already canonical SI when no relevant project unit is declared.
 
-Count quantities remain canonical `count`; explicit count-unit extensions are outside this bounded slice.
+Count remains canonical `count`; explicit count-unit extensions are outside this bounded slice. Existing prefixed-SI behavior from #6560/#6562 remains source-compatible.
 
-The representative fixture now exercises:
+## Conversion-based unit resolution
 
-- an explicit prefixed area unit overriding the project's area unit;
-- global millimetre length normalization to metres;
-- global decimetre-based volume normalization to cubic metres;
-- IFC gram mass normalization to kilograms;
-- real file-open through `QuantBimStandaloneWorkbench` after normalization;
-- legacy files with no project unit assignment.
+For a supported `IfcConversionBasedUnit`, the resolver now requires:
+
+- an `IfcDimensionalExponents` reference matching the declared unit type;
+- a valid `IfcMeasureWithUnit` conversion-factor record;
+- a positive finite typed measure (`IfcLengthMeasure`, `IfcAreaMeasure`, `IfcVolumeMeasure`, or `IfcMassMeasure` as appropriate);
+- a component unit whose resolved dimensional type matches the conversion-based unit;
+- an acyclic reference chain.
+
+This supports data-driven units such as foot, square foot, cubic foot and nested inch-through-foot chains without hard-coding those names. Quantity-specific conversion units still override global project units.
+
+The representative `tests/fixtures/quantbim/conversion-qto.ifc` fixture and `QsQuantBimConversionUnitSmoke` exercise global foot length, explicit square-foot area, global cubic-foot volume, SI gram compatibility, a nested inch conversion chain, and deterministic fail-closed cases.
 
 ## Fail-closed behavior
 
-The source rejects malformed STEP envelopes/statements, duplicate STEP ids, duplicate IFC GlobalIds, missing relationship targets, conflicting storey/type/classification assignments, unsupported quantity entities and non-finite quantities. Unit handling also fails closed on dangling explicit unit references, quantity/unit-type mismatches, ambiguous project unit assignments, conflicting relevant global units, malformed SI units, unsupported SI prefixes, and relevant conversion/context-dependent units that are not yet implemented.
+The source rejects malformed STEP envelopes/statements, duplicate STEP ids/GlobalIds, missing relationship targets, conflicting storey/type/classification assignments, unsupported quantity entities and non-finite quantity values. Unit handling rejects dangling unit/factor references, unit-type mismatches, ambiguous/conflicting global units, malformed SI units/prefixes, dimensional-exponent mismatches, wrong conversion-measure types, non-positive/non-finite conversion factors, cyclic conversion chains, offset conversion units, and context-dependent units.
 
-Conversion-based units such as foot/inch and their area/volume forms remain a separate bounded extension. They must not be silently treated as SI or relabeled as canonical units without a validated conversion chain.
+`IfcConversionBasedUnitWithOffset` remains intentionally unsupported because offset units are not valid bounded quantity-normalization semantics for this QS slice. Unsupported or malformed units are never silently relabeled as canonical SI.
 
 ## Product boundary
 
-The host-neutral IFC/QTO contracts in `QS3D.Core` are reusable shared logic for the QS3D product family. This repository still ships the BricsCAD V25/V26 plugin as defined by `docs/PRODUCT-BOUNDARY.md`; a standalone desktop executable/shell/renderer belongs to sibling `QS3D-CAD` and is not created by this ingestion slice.
+The host-neutral IFC/QTO contracts in `QS3D.Core` are reusable shared logic for the QS3D product family. This repository still ships the BricsCAD V25/V26 plugin as defined by `docs/PRODUCT-BOUNDARY.md`; standalone desktop executable/shell/renderer work belongs to sibling `QS3D-CAD`.
 
-Geometry tessellation also remains outside this parser boundary. `GeometryReference` is evidence/provenance identity, not geometric quantity evidence.
+Geometry tessellation remains outside this parser boundary. `GeometryReference` is evidence/provenance identity, not geometric quantity evidence.
 
 ## Remaining bounded IFC work
 
-This slice does not claim schema-complete IFC support. Legitimate follow-up work includes conversion-based units, broader entity/schema coverage, richer property/value types and production tessellation adapters, each behind a separate ownership/evidence carrier. Existing `IIfcStandaloneSource`, `IfcStandaloneDocument`, QTO and downstream commercial contracts remain unchanged.
+This slice does not claim schema-complete IFC support. Legitimate follow-up work includes broader entity/schema coverage, richer property/value types, additional standards-backed unit forms where commercially relevant, and production tessellation adapters. Each requires a separate ownership/evidence carrier and must reuse `IfcStandaloneDocument`, QTO and downstream commercial contracts rather than fork them.
