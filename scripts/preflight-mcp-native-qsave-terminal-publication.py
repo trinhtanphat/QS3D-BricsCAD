@@ -45,9 +45,14 @@ else:
         raise SystemExit("FAIL: NativeSaveOperation.Complete body not found")
     body = match.group("body")
 
+    terminal_result_pattern = (
+        r"TerminalError\s*=\s*string\.IsNullOrEmpty\(generationError\)\s*\?\s*error\s*:\s*generationError\s*;"
+        if "generationError" in body
+        else r"TerminalError\s*=\s*error\s*;"
+    )
     required = [
         (r"Interlocked\.CompareExchange\(ref _terminalSet, 1, 0\)", "exactly-once terminal winner"),
-        (r"TerminalError\s*=\s*error\s*;", "terminal result publication"),
+        (terminal_result_pattern, "terminal result publication"),
         (r"finally\s*\{\s*Done\.Set\(\)\s*;\s*\}", "Done.Set terminal publication in finally"),
     ]
     for pattern, label in required:
