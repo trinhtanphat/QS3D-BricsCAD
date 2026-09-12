@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
         {
             QaGateBlocksInvalidModel();
             QsQaGate2Smoke.Run();
+            QaGate2RejectsInvalidSeverityProfiles();
             QaGateRejectsNonFiniteDimensions();
             CalibratedTwoDimensionalTakeoff();
             Qs2DTakeoffWorkflowSmoke.Run();
@@ -40,6 +41,53 @@ namespace QS3D.Core.SmokeTests
             var props = new Dictionary<string, string> { { "IfcGuid", "G1" }, { "IfcEntity", "IfcWall" }, { "QuantityUnit", "m3" } };
             var valid = new QsModelElementSnapshot("E2", "Wall", "Concrete", "STR.WALL", "L01", 4d, 0.2d, 3d, props);
             Equal(QsQaGateStatus.Pass, new QsQaGate().Evaluate(new[] { valid }, QsQaProfile.StrictIfcQuantity()).Status, "valid QA gate");
+        }
+
+        private static void QaGate2RejectsInvalidSeverityProfiles()
+        {
+            var rejectedThreshold = false;
+            try
+            {
+                _ = new QsQaRuleProfile(
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    new Dictionary<string, QsQaSeverity>(),
+                    (QsQaSeverity)999);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejectedThreshold = true;
+            }
+            True(rejectedThreshold, "QA2 rejects undefined blocking threshold");
+
+            var rejectedRuleSeverity = false;
+            try
+            {
+                _ = new QsQaRuleProfile(
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    new Dictionary<string, QsQaSeverity>
+                    {
+                        { "QA2.MISSING_MATERIAL", (QsQaSeverity)(-1) }
+                    },
+                    QsQaSeverity.Error);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                rejectedRuleSeverity = true;
+            }
+            True(rejectedRuleSeverity, "QA2 rejects undefined rule severity");
+
+            var valid = new QsQaRuleProfile(
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                new Dictionary<string, QsQaSeverity>
+                {
+                    { "QA2.MISSING_MATERIAL", QsQaSeverity.Warning }
+                },
+                QsQaSeverity.Critical);
+            Equal(QsQaSeverity.Warning, valid.SeverityFor("QA2.MISSING_MATERIAL", QsQaSeverity.Error), "QA2 valid severity override remains supported");
+            Equal(QsQaSeverity.Critical, valid.BlockingThreshold, "QA2 valid blocking threshold remains supported");
         }
 
         private static void QaGateRejectsNonFiniteDimensions()
