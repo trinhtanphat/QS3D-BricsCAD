@@ -157,8 +157,10 @@ try {
     if (-not [string]::Equals($Matches[1], $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate checksum does not bind the held ZIP generation.' }
 
     $provenanceText = Read-HeldText -Held $provenanceHeld -Label 'V26 candidate provenance'
-    if ((Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName 'installerSha256') -ne 1) {
-        throw 'V26 candidate provenance must contain exactly one installerSha256 property.'
+    foreach ($propertyName in @('product', 'target', 'releaseTag', 'sourceCommit', 'productVersion', 'packageSha256', 'installerSha256', 'hostReferences')) {
+        if ((Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName $propertyName) -ne 1) {
+            throw "V26 candidate provenance must contain exactly one $propertyName property."
+        }
     }
     try { $provenance = $provenanceText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw "V26 candidate provenance JSON is invalid: $($_.Exception.Message)" }

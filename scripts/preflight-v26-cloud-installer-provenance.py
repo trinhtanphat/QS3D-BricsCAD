@@ -20,6 +20,52 @@ def require(path: Path, tokens: list[str]) -> None:
         )
 
 
+def assert_validator_contract(text: str) -> None:
+    required_tokens = [
+        "[string]$ExpectedInstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256",
+        "$ExpectedInstallerSha256 -cnotmatch '^[0-9A-Fa-f]{64}$'",
+        "$expectedInstallerSha256Canonical = $ExpectedInstallerSha256.ToLowerInvariant()",
+        "Get-JsonPropertyOccurrenceCount",
+        "$installerSha256 = [string]$provenance.installerSha256",
+        "$installerSha256 -cnotmatch '^[0-9a-f]{64}$'",
+        "[string]::Equals($installerSha256, $expectedInstallerSha256Canonical, [StringComparison]::Ordinal)",
+        "V26 candidate provenance installer digest mismatch",
+        "InstallerSha256=$installerSha256",
+    ]
+    missing = [token for token in required_tokens if token not in text]
+    if missing:
+        raise SystemExit(f"validator missing V26 installer provenance contract token(s): {missing}")
+
+    loop_token = "foreach ($propertyName in @("
+    loop_at = text.find(loop_token)
+    if loop_at < 0:
+        raise SystemExit("V26 installer provenance admission no longer has the common duplicate-property loop")
+    header_end = text.find(")) {", loop_at)
+    if header_end < 0:
+        raise SystemExit("V26 installer provenance duplicate-property loop header is malformed")
+    loop_header = text[loop_at:header_end]
+    if "'installerSha256'" not in loop_header:
+        raise SystemExit("installerSha256 must remain a member of the common provenance uniqueness set")
+
+    parse_token = "$provenance = $provenanceText | ConvertFrom-Json -ErrorAction Stop"
+    parse_at = text.find(parse_token, loop_at)
+    if parse_at < 0:
+        raise SystemExit("V26 installer provenance admission no longer parses provenance after uniqueness admission")
+    loop_body = text[loop_at:parse_at]
+    for token in (
+        "Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName $propertyName",
+        'throw "V26 candidate provenance must contain exactly one $propertyName property."',
+    ):
+        if token not in loop_body:
+            raise SystemExit(f"V26 installer provenance common uniqueness loop is missing fail-closed behavior: {token}")
+
+    installer_check = text.find("$installerSha256 = [string]$provenance.installerSha256", parse_at)
+    script_parse = text.find("$admittedScriptBlock = $null", installer_check)
+    script_exec = text.find("& $admittedScriptBlock", script_parse)
+    if min(installer_check, script_parse, script_exec) < 0 or not loop_at < parse_at < installer_check < script_parse < script_exec:
+        raise SystemExit("V26 installer provenance uniqueness admission must precede extraction and publisher parsing/execution")
+
+
 workflow = read(WORKFLOW)
 generator = read(GENERATOR)
 validator = read(VALIDATOR)
@@ -44,34 +90,37 @@ require(
         "InstallerSha256 = $InstallerSha256",
     ],
 )
-require(
-    VALIDATOR,
-    [
-        "[string]$ExpectedInstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256",
-        "$ExpectedInstallerSha256 -cnotmatch '^[0-9A-Fa-f]{64}$'",
-        "$expectedInstallerSha256Canonical = $ExpectedInstallerSha256.ToLowerInvariant()",
-        "Get-JsonPropertyOccurrenceCount",
-        "-PropertyName 'installerSha256') -ne 1",
-        "$installerSha256 = [string]$provenance.installerSha256",
-        "$installerSha256 -cnotmatch '^[0-9a-f]{64}$'",
-        "[string]::Equals($installerSha256, $expectedInstallerSha256Canonical, [StringComparison]::Ordinal)",
-        "V26 candidate provenance installer digest mismatch",
-        "InstallerSha256=$installerSha256",
-    ],
-)
-
-# Admission must prove unique/canonical installer identity before publisher parsing/execution.
-unique_check = validator.index("-PropertyName 'installerSha256') -ne 1")
-installer_check = validator.index("$installerSha256 = [string]$provenance.installerSha256")
-script_parse = validator.index("$admittedScriptBlock = $null")
-script_exec = validator.index("& $admittedScriptBlock")
-if not unique_check < installer_check < script_parse < script_exec:
-    raise SystemExit("V26 installer provenance admission must precede admitted publisher parsing/execution")
+assert_validator_contract(validator)
 
 # installer-cache remains the sole canonicalizing authority for candidate creation; release-time
 # admission normalizes the already-admitted 64-hex environment value before exact comparison.
 if workflow.count("needs.installer-cache.outputs.msi_sha256") < 2:
     raise SystemExit("V26 cloud workflow no longer carries the admitted installer digest across jobs")
+
+# Adversarial self-tests prove this guard is semantic rather than satisfiable by decoy tokens.
+loop_start = validator.index("foreach ($propertyName in @(")
+loop_header_end = validator.index(")) {", loop_start)
+loop_header = validator[loop_start:loop_header_end]
+without_installer = loop_header.replace("'installerSha256', ", "", 1)
+if without_installer == loop_header:
+    without_installer = loop_header.replace(", 'installerSha256'", "", 1)
+if without_installer == loop_header:
+    raise SystemExit("mutation control unavailable: installerSha256 uniqueness-set membership")
+try:
+    assert_validator_contract(validator[:loop_start] + without_installer + validator[loop_header_end:])
+except SystemExit:
+    pass
+else:
+    raise SystemExit("V26 installer provenance guard accepted uniqueness set without installerSha256")
+
+occurrence_token = "Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName $propertyName"
+mutated_occurrence = validator.replace(occurrence_token, "# removed duplicate-property enforcement", 1)
+try:
+    assert_validator_contract(mutated_occurrence)
+except SystemExit:
+    pass
+else:
+    raise SystemExit("V26 installer provenance guard accepted a uniqueness loop without occurrence enforcement")
 
 mutations = {
     "generator environment binding": (generator, "[string]$InstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256"),
@@ -80,7 +129,6 @@ mutations = {
     "validator environment binding": (validator, "[string]$ExpectedInstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256"),
     "validator expected syntax": (validator, "$ExpectedInstallerSha256 -cnotmatch '^[0-9A-Fa-f]{64}$'"),
     "validator expected normalization": (validator, "$expectedInstallerSha256Canonical = $ExpectedInstallerSha256.ToLowerInvariant()"),
-    "validator unique property admission": (validator, "-PropertyName 'installerSha256') -ne 1"),
     "validator provenance field": (validator, "$installerSha256 = [string]$provenance.installerSha256"),
     "validator canonicality": (validator, "$installerSha256 -cnotmatch '^[0-9a-f]{64}$'"),
     "validator exact digest equality": (validator, "[string]::Equals($installerSha256, $expectedInstallerSha256Canonical, [StringComparison]::Ordinal)"),

@@ -90,7 +90,23 @@ namespace QS3D.Core.Persistence
             RequireSafe(destination, "destination");
             RequireSafe(backup, "backup");
             File.Move(temp, destination);
-            RequireSafe(backup, "backup");
+            try
+            {
+                RequireSafe(backup, "backup");
+            }
+            catch (Exception publicationFailure) when (publicationFailure is IOException || publicationFailure is UnauthorizedAccessException || publicationFailure is InvalidDataException)
+            {
+                try
+                {
+                    RequireSafe(destination, "destination");
+                    File.Delete(destination);
+                }
+                catch (Exception rollbackFailure) when (rollbackFailure is IOException || rollbackFailure is UnauthorizedAccessException || rollbackFailure is InvalidDataException)
+                {
+                    RecordRollbackFailure(publicationFailure, rollbackFailure);
+                }
+                throw;
+            }
             if (!File.Exists(backup) && !Directory.Exists(backup)) return;
 
             try
@@ -157,7 +173,27 @@ namespace QS3D.Core.Persistence
                 // primary generation. When the primary was already missing, an old
                 // .bak cannot satisfy that contract and must never remain eligible
                 // for LoadWithBackupFallback beside the newly published generation.
-                RequireSafe(backupPath, "backup");
+                try
+                {
+                    RequireSafe(backupPath, "backup");
+                }
+                catch (Exception backupSafetyFailure) when (backupSafetyFailure is IOException || backupSafetyFailure is UnauthorizedAccessException || backupSafetyFailure is InvalidDataException)
+                {
+                    // A safety rejection after the primary move is a failed publication.
+                    // Transfer rollback ownership before cleanup so finally restores any
+                    // older backup staged above even if deleting the new primary fails.
+                    installed = false;
+                    try
+                    {
+                        RequireSafe(destinationPath, "destination");
+                        File.Delete(destinationPath);
+                    }
+                    catch (Exception rollbackFailure) when (rollbackFailure is IOException || rollbackFailure is UnauthorizedAccessException || rollbackFailure is InvalidDataException)
+                    {
+                        RecordRollbackFailure(backupSafetyFailure, rollbackFailure);
+                    }
+                    throw;
+                }
                 if (File.Exists(backupPath) || Directory.Exists(backupPath))
                 {
                     try
@@ -165,7 +201,7 @@ namespace QS3D.Core.Persistence
                         // From this point the newly installed primary is rejected and
                         // rollback owns cleanup. Flip the state before File.Delete so a
                         // delete failure cannot send finally down the committed-install
-                        // cleanup path and discard the staged older backup.
+                        // cleanup path and discard the staged old backup.
                         installed = false;
                         RequireSafe(destinationPath, "destination");
                         File.Delete(destinationPath);

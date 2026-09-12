@@ -53,7 +53,8 @@ namespace QS3D.Core.BenchmarkParity
                     { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Critical },
                     { "QA2.SPATIAL_MISMATCH", QsQaSeverity.Critical },
                     { "QA2.TYPE_ASSIGNMENT_MISMATCH", QsQaSeverity.Critical },
-                    { "QA2.DUPLICATE_IFC_GUID", QsQaSeverity.Critical }
+                    { "QA2.DUPLICATE_IFC_GUID", QsQaSeverity.Critical },
+                    { "QA2.DUPLICATE_ELEMENT_ID", QsQaSeverity.Critical }
                 },
                 QsQaSeverity.Error);
         }
@@ -175,7 +176,8 @@ namespace QS3D.Core.BenchmarkParity
             var waived = new List<QsQaFinding>();
             foreach (var finding in findings)
             {
-                if (waiverList.Any(x => x.Applies(finding, nowUtc))) waived.Add(finding);
+                var structuralIdentityConflict = string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase);
+                if (!structuralIdentityConflict && waiverList.Any(x => x.Applies(finding, nowUtc))) waived.Add(finding);
                 else active.Add(finding);
             }
 
@@ -191,6 +193,12 @@ namespace QS3D.Core.BenchmarkParity
         private static IReadOnlyList<QsQaFinding> Analyze(IReadOnlyList<QsModelElementSnapshot> elements, QsQaRuleProfile profile)
         {
             var result = new List<QsQaFinding>();
+            var duplicateElementIds = new HashSet<string>(
+                elements
+                    .GroupBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
+                    .Where(x => x.Count() > 1)
+                    .Select(x => x.Key),
+                StringComparer.OrdinalIgnoreCase);
             var duplicateIfcGuids = new HashSet<string>(
                 elements
                     .Select(x => GetIfcGuid(x))
@@ -202,6 +210,7 @@ namespace QS3D.Core.BenchmarkParity
 
             foreach (var element in elements)
             {
+                AddIf(result, duplicateElementIds.Contains(element.Id), profile, "QA2.DUPLICATE_ELEMENT_ID", QsQaSeverity.Critical, element.Id, "Element identity must be unique before QA waivers can be evaluated safely.");
                 AddIf(result, element.Material.Length == 0, profile, "QA2.MISSING_MATERIAL", QsQaSeverity.Error, element.Id, "Material is required.");
                 AddIf(result, element.Type.Length == 0, profile, "QA2.MISSING_TYPE", QsQaSeverity.Error, element.Id, "Type assignment is required.");
                 AddIf(result, element.Length <= 0d || element.Width <= 0d || element.Height <= 0d, profile, "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error, element.Id, "Positive length, width and height are required.");

@@ -55,7 +55,6 @@ namespace QS3D.Core.SmokeTests
 
             owner.MarkDirty(ElementDirtyFlags.Geometry | ElementDirtyFlags.Quantity);
             unrelated.MarkDirty(ElementDirtyFlags.Quantity);
-            project.Touch();
             var unrelatedDirty = unrelated.Dirty;
             var unrelatedUtc = unrelated.UpdatedUtc;
 
