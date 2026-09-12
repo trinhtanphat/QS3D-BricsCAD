@@ -304,7 +304,7 @@ namespace QS3D.Core.Persistence
             var root = document.Root;
             if (root == null || !string.Equals(root.Name.LocalName, "qs3d", StringComparison.OrdinalIgnoreCase)) return null;
             var projectId = root.Attribute("projectId")?.Value;
-            if (string.IsNullOrWhiteSpace(projectId)) return null;
+            if (projectId == null || string.IsNullOrWhiteSpace(projectId)) return null;
             if (!string.Equals(projectId, projectId.Trim(), StringComparison.Ordinal)) return null;
             return projectId;
         }
