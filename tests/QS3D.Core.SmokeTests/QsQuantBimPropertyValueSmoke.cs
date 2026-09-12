@@ -22,9 +22,9 @@ namespace QS3D.Core.SmokeTests
             Equal("Paint", properties["Pset_QS.Finish[0000000001]"], "enumerated value 1");
             Equal("A", properties["Pset_QS.Phases[0000000000]"], "list value 0");
             Equal("B", properties["Pset_QS.Phases[0000000001]"], "list value 1");
-            Equal("18.", properties["Pset_QS.Temperature.Lower"], "bounded lower");
-            Equal("30.", properties["Pset_QS.Temperature.Upper"], "bounded upper");
-            Equal("22.", properties["Pset_QS.Temperature.SetPoint"], "bounded set point");
+            Equal("18", properties["Pset_QS.Temperature.Lower"], "bounded lower");
+            Equal("30", properties["Pset_QS.Temperature.Upper"], "bounded upper");
+            Equal("22", properties["Pset_QS.Temperature.SetPoint"], "bounded set point");
             Equal("W-01", properties["Pset_QS.Code"], "single-value compatibility");
             Equal(string.Empty, properties["Pset_QS.EmptyList"], "nil list property presence");
 
