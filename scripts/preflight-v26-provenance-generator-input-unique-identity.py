@@ -25,6 +25,8 @@ required_tokens = (
     "framework = 1",
     "productVersion = 1",
     "Assert-JsonPropertyCounts -JsonText $metadataText -ExpectedPropertyCounts $metadataExpectedPropertyCounts",
+    "RenameOwnedProvenanceGeneration",
+    "SetFileInformationByHandleBuffer",
 )
 for token in required_tokens:
     if token not in source:
@@ -50,18 +52,32 @@ metadata_parse = source.index("$metadata = $metadataText | ConvertFrom-Json -Err
 if not (metadata_expected < metadata_assert < metadata_parse):
     raise SystemExit("ERROR: PACKAGE-METADATA identity cardinality must be proved before ConvertFrom-Json")
 
-# Publication must retain an attempt-owned handle until the output pathname has been
-# pinned back to that exact generation. Otherwise a pathname swap between Move/Replace
-# and Open-Pinned can make pinning fail after the old handle was discarded, leaving an
-# unvalidated generation published with no owned handle available for rollback.
+# Publication must stay on the attempt-owned file handle from staging through rename,
+# identity verification, byte verification, and commit. Pathname Move/Replace plus a later
+# reopen creates a TOCTOU window and can lose rollback ownership. The creation handle must
+# also deny write/delete sharing so the owned generation cannot be replaced while admitted.
+native_start = source.index("public static class Qs3dProvenanceGenerationNative")
+create_start = source.index("public static SafeFileHandle CreateOwnedProvenanceGeneration", native_start)
+create_end = source.index("public static SafeFileHandle OpenPinnedPublishedProvenanceGeneration", create_start)
+create_block = source[create_start:create_end]
+if "FileShareRead," not in create_block or "FileShareWrite" in create_block or "FileShareDelete" in create_block:
+    raise SystemExit("ERROR: owned V26 provenance staging handle must deny write/delete sharing")
+
 publication_start = source.index("$tempGeneration = New-OwnedProvenanceGeneration")
-pin_published = source.index("$publishedGeneration = Open-PinnedPublishedProvenanceGeneration", publication_start)
-close_temp = source.index("Close-OwnedProvenanceGeneration -Generation $tempGeneration", publication_start)
-rollback_temp = source.index("elseif ($null -ne $tempGeneration) { Remove-OwnedProvenanceGeneration -Generation $tempGeneration }", publication_start)
-if not (publication_start < pin_published < close_temp < rollback_temp):
-    raise SystemExit(
-        "ERROR: V26 provenance publication must keep the attempt-owned generation handle through exact output pinning so pin failure can roll back by identity"
-    )
+publication_end = source.index("[pscustomobject]@{ SourceCommit", publication_start)
+publication = source[publication_start:publication_end]
+rename_owned = publication.index("[Qs3dProvenanceGenerationNative]::RenameOwnedProvenanceGeneration")
+identity_after = publication.index("$renamedIdentity = Get-OwnedProvenanceGenerationIdentity")
+bytes_after = publication.index("Assert-PinnedPublishedProvenanceBytes -Generation $tempGeneration")
+commit_after = publication.index("$publicationCommitted = $true")
+close_after = publication.index("Close-OwnedProvenanceGeneration -Generation $tempGeneration")
+rollback_after = publication.index("Remove-OwnedProvenanceGeneration -Generation $tempGeneration")
+if not (rename_owned < identity_after < bytes_after < commit_after < close_after):
+    raise SystemExit("ERROR: V26 provenance publication must rename, verify identity/bytes, commit, then close the same owned handle")
+if rollback_after < rename_owned:
+    raise SystemExit("ERROR: V26 provenance rollback must remain available after handle-owned rename")
+if "[IO.File]::Move(" in publication or "[IO.File]::Replace(" in publication or "Open-PinnedPublishedProvenanceGeneration -Path" in publication:
+    raise SystemExit("ERROR: V26 provenance publication must not reopen or pathname-move the admitted generation")
 
 # Exercise the production lexical decoder and path scoping directly. PowerShell JSON
 # consumers can collapse literal, JSON-escaped-equivalent, and case-variant names;
@@ -127,4 +143,4 @@ if completed.returncode != 0:
         + (completed.stderr or completed.stdout).strip()
     )
 
-print("PASS: V26 provenance generator proves path-scoped input identity before parsing and retains rollback ownership through publication pinning")
+print("PASS: V26 provenance generator proves path-scoped input identity and publishes by one rollback-capable owned handle")
