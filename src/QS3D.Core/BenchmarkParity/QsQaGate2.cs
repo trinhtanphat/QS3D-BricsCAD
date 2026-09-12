@@ -24,8 +24,20 @@ namespace QS3D.Core.BenchmarkParity
         {
             RequiredPsets = Normalize(requiredPsets, "requiredPsets");
             RequiredRelationships = Normalize(requiredRelationships, "requiredRelationships");
-            _severityByRule = new ReadOnlyDictionary<string, QsQaSeverity>(
-                new Dictionary<string, QsQaSeverity>(severityByRule ?? new Dictionary<string, QsQaSeverity>(), StringComparer.OrdinalIgnoreCase));
+
+            if (!IsDefinedSeverity(blockingThreshold))
+                throw new ArgumentOutOfRangeException("blockingThreshold", "QA blocking threshold must be a defined severity.");
+
+            var normalizedSeverityByRule = new Dictionary<string, QsQaSeverity>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in severityByRule ?? new Dictionary<string, QsQaSeverity>())
+            {
+                var ruleId = QsModelElementSnapshot.Require(pair.Key, "severityByRule");
+                if (!IsDefinedSeverity(pair.Value))
+                    throw new ArgumentOutOfRangeException("severityByRule", "QA rule severity must be a defined severity: " + ruleId + ".");
+                normalizedSeverityByRule.Add(ruleId, pair.Value);
+            }
+
+            _severityByRule = new ReadOnlyDictionary<string, QsQaSeverity>(normalizedSeverityByRule);
             BlockingThreshold = blockingThreshold;
         }
 
@@ -69,6 +81,20 @@ namespace QS3D.Core.BenchmarkParity
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList());
+        }
+
+        private static bool IsDefinedSeverity(QsQaSeverity severity)
+        {
+            switch (severity)
+            {
+                case QsQaSeverity.Info:
+                case QsQaSeverity.Warning:
+                case QsQaSeverity.Error:
+                case QsQaSeverity.Critical:
+                    return true;
+                default:
+                    return false;
+            }
         }
     }
 
