@@ -264,6 +264,7 @@ public static class Qs3dProvenanceGenerationNative
     private const uint FileAttributeNormal = 0x00000080;
     private const uint FileFlagOpenReparsePoint = 0x00200000;
     private const uint FileAttributeReparsePoint = 0x00000400;
+    private const uint FileBegin = 0;
 
     private enum FileInfoByHandleClass
     {
@@ -326,6 +327,10 @@ public static class Qs3dProvenanceGenerationNative
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool FlushFileBuffers(SafeFileHandle file);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetFilePointerEx(
+        SafeFileHandle file, long distanceToMove, out long newFilePointer, uint moveMethod);
 
     private static ByHandleFileInformation Information(SafeFileHandle handle)
     {
@@ -416,6 +421,9 @@ public static class Qs3dProvenanceGenerationNative
             throw new InvalidOperationException("Published provenance byte length changed while pinned.");
         var bytes = new byte[expectedLength];
         if (expectedLength == 0) return bytes;
+        long newPosition;
+        if (!SetFilePointerEx(handle, 0, out newPosition, FileBegin) || newPosition != 0)
+            throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to rewind pinned published provenance generation.");
         uint read;
         if (!ReadFile(handle, bytes, (uint)expectedLength, out read, IntPtr.Zero) || read != (uint)expectedLength)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Unable to read pinned published provenance generation.");
