@@ -176,6 +176,7 @@ def main() -> int:
         "PreviewInstallReceipt.TryWrite(",
         "PreviewInstallReceipt.TryDelete()",
         "TryApplyPostRestartReceipt",
+        "PreviewInstallReceipt.IsSupersededByLoadedAssembly(receipt, actualVersion, actualPath)",
     ):
         require(window, needle, WINDOW_REL)
     forbid(window, "resolve the newest release again at click time", WINDOW_REL)
@@ -190,6 +191,8 @@ def main() -> int:
         "ExpectedAdapterPath",
         "IsFromCurrentProcess",
         "MatchesLoadedAssembly",
+        "IsSupersededByLoadedAssembly",
+        "CompareNormalizedVersions",
         "NormalizeVersion",
         "MaxReceiptBytes",
         "preview-install.receipt",
