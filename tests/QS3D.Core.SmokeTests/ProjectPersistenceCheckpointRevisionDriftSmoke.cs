@@ -10,6 +10,7 @@ namespace QS3D.Core.SmokeTests
         public static void Run()
         {
             RejectsCapturedElementPersistenceDriftWithoutProjectRevisionChange();
+            RejectsRestoreAcrossNewerProjectRevisionBeforeMutation();
             StableCaptureStillMatches();
         }
 
@@ -43,6 +44,45 @@ namespace QS3D.Core.SmokeTests
                 "Element-only checkpoint drift fixture unexpectedly changed the project UpdatedUtc.");
             Require((first.Dirty & ElementDirtyFlags.Quantity) != 0,
                 "Element-only checkpoint drift fixture did not mutate captured persistence state.");
+        }
+
+        private static void RejectsRestoreAcrossNewerProjectRevisionBeforeMutation()
+        {
+            var project = new ProjectState("P-CHECKPOINT-RESTORE-REVISION", "Checkpoint restore revision");
+            var element = new ProjectElement("E1", ElementCategory.GlassWall);
+            element.MarkClean(ElementDirtyFlags.All);
+            project.Elements.Add(element);
+            project.Touch();
+
+            var checkpoint = ProjectPersistenceCheckpoint.Capture(project, new[] { "E1" });
+            element.MarkDirty(ElementDirtyFlags.Quantity);
+            var driftedElementDirty = element.Dirty;
+
+            project.Name = "Checkpoint restore newer revision";
+            var newerProjectName = project.Name;
+            var newerProjectVersion = project.ChangeVersion;
+            var newerProjectUpdatedUtc = project.UpdatedUtc;
+
+            var rejected = false;
+            try
+            {
+                checkpoint.Restore(project);
+            }
+            catch (InvalidOperationException ex)
+            {
+                rejected = ex.Message.IndexOf("project revision changed", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            Require(rejected,
+                "Persistence checkpoint restore accepted a newer project semantic revision.");
+            Require(element.Dirty == driftedElementDirty,
+                "Rejected checkpoint restore partially rewrote element persistence state.");
+            Require(string.Equals(project.Name, newerProjectName, StringComparison.Ordinal),
+                "Rejected checkpoint restore rewrote newer project semantic content.");
+            Require(project.ChangeVersion == newerProjectVersion,
+                "Rejected checkpoint restore rolled back the newer project ChangeVersion.");
+            Require(project.UpdatedUtc == newerProjectUpdatedUtc,
+                "Rejected checkpoint restore rolled back the newer project UpdatedUtc.");
         }
 
         private static IEnumerable<string> MutateCapturedElementAfterFirstYield(ProjectElement first)
