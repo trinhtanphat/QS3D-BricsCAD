@@ -177,7 +177,9 @@ namespace QS3D.Core.BenchmarkParity
             var waived = new List<QsQaFinding>();
             foreach (var finding in findings)
             {
-                var structuralIdentityConflict = string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase);
+                var structuralIdentityConflict =
+                    string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(finding.RuleId, "QA2.DUPLICATE_IFC_GUID", StringComparison.OrdinalIgnoreCase);
                 if (!structuralIdentityConflict && waiverList.Any(x => x.Applies(finding, nowUtc))) waived.Add(finding);
                 else active.Add(finding);
             }
