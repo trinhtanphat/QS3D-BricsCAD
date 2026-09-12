@@ -167,10 +167,25 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-
         private static bool RequireCurrentDocumentGeneration(Document? document, IntPtr nativeDatabaseIdentity)
         {
             return DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity);
+        }
+
+        private static void TryWriteRefreshDiagnostic(Document? document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
+            try
+            {
+                var editor = document!.Editor;
+                if (!RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                editor.WriteMessage("\nQS3DSTART refresh could not update the Start Center.");
+            }
+            catch
+            {
+                // Optional Start Center diagnostics must never escape document activation.
+            }
         }
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
@@ -203,26 +218,24 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            Document? document = null;
+            var nativeDatabaseIdentity = IntPtr.Zero;
             try
             {
                 // Bind display state to the document carried by this activation event, then prove
                 // the exact native database generation before any document-scoped UI publication.
-                var document = e.Document ?? Application.DocumentManager.MdiActiveDocument;
-                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                document = e.Document ?? Application.DocumentManager.MdiActiveDocument;
+                nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
                 if (document != null && !RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity))
                     nativeDatabaseIdentity = IntPtr.Zero;
                 panel.RefreshFromDocument(document, nativeDatabaseIdentity);
             }
             catch (Exception)
             {
-                try
-                {
-                    e.Document?.Editor.WriteMessage("\nQS3DSTART refresh could not update the Start Center.");
-                }
-                catch
-                {
-                    // Optional Start Center diagnostics must never escape document activation.
-                }
+                // A modeless callback can host-pump through refresh code. Publish diagnostics only
+                // when the event document is still the exact managed/native generation captured
+                // for this callback; otherwise stay silent rather than writing into a newer DWG.
+                TryWriteRefreshDiagnostic(document, nativeDatabaseIdentity);
             }
         }
     }
