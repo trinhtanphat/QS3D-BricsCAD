@@ -21,6 +21,8 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class IfcSceneMesh
     {
+        private readonly ReadOnlyCollection<byte> _artifactBytes;
+
         public IfcSceneMesh(IEnumerable<IfcSceneVertex> vertices, IEnumerable<int> triangleIndices)
             : this(vertices, triangleIndices, Array.Empty<byte>())
         {
@@ -37,12 +39,12 @@ namespace QS3D.Core.BenchmarkParity
             if (indexList.Any(x => x < 0 || x >= vertexList.Count)) throw new ArgumentOutOfRangeException("triangleIndices", "Triangle index is outside the vertex range.");
             Vertices = new ReadOnlyCollection<IfcSceneVertex>(vertexList);
             TriangleIndices = new ReadOnlyCollection<int>(indexList);
-            ArtifactBytes = new ReadOnlyCollection<byte>(artifactSnapshot);
+            _artifactBytes = new ReadOnlyCollection<byte>(artifactSnapshot);
         }
 
         public IReadOnlyList<IfcSceneVertex> Vertices { get; private set; }
         public IReadOnlyList<int> TriangleIndices { get; private set; }
-        public IReadOnlyList<byte> ArtifactBytes { get; private set; }
+        public IReadOnlyList<byte> ArtifactBytes { get { return _artifactBytes; } }
     }
 
     public interface IIfcGeometryResolver
