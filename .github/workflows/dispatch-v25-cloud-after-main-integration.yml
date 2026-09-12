@@ -58,6 +58,7 @@ jobs:
       - name: Gate batch, bind committed preview and dispatch exact main SHA
         env:
           GH_TOKEN: ${{ github.token }}
+          QS3D_AUTOMERGE_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -242,15 +243,67 @@ jobs:
             exit "${gate_status}"
           fi
 
+          prepare_protected_version_pr() {
+            local preparation_reason="$1"
+            if [[ -z "${QS3D_AUTOMERGE_TOKEN:-}" ]]; then
+              echo "QS3D_AUTOMERGE_TOKEN is required for protected V25 version PR preparation." >&2
+              return 1
+            fi
+            local preparation_base_sha
+            preparation_base_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+            preparation_base_sha="${preparation_base_sha,,}"
+            if [[ ! "${preparation_base_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "Protected V25 version PR preparation returned malformed main SHA: ${preparation_base_sha}" >&2
+              return 1
+            fi
+            local preparation_ref='refs/remotes/origin/qs3d-version-pr-main-admission'
+            git fetch --no-tags origin "+refs/heads/main:${preparation_ref}"
+            local fetched_preparation_base
+            fetched_preparation_base="$(git rev-parse "${preparation_ref}^{commit}")"
+            local confirmed_preparation_base
+            confirmed_preparation_base="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+            confirmed_preparation_base="${confirmed_preparation_base,,}"
+            if [[ "${fetched_preparation_base,,}" != "${preparation_base_sha}" || "${confirmed_preparation_base}" != "${preparation_base_sha}" ]]; then
+              echo "Protected main moved during V25 version PR preparation admission." >&2
+              return 1
+            fi
+            if [[ "${preparation_base_sha}" != "${source_sha}" ]]; then
+              if ! git merge-base --is-ancestor "${source_sha}" "${preparation_base_sha}"; then
+                echo "Version PR preparation base is not descended from dispatcher source ${source_sha}." >&2
+                return 1
+              fi
+              set +e
+              git diff --quiet --no-ext-diff "${source_sha}..${preparation_base_sha}" -- "${release_relevant_pathspecs[@]}"
+              local preparation_drift_status=$?
+              set -e
+              if (( preparation_drift_status == 1 )); then
+                echo "Newer release-relevant main integration owns protected V25 version PR preparation; superseded source ${source_sha} exits neutrally."
+                exit 0
+              fi
+              if (( preparation_drift_status != 0 )); then
+                echo "Could not inspect version PR preparation drift; git diff exit ${preparation_drift_status}." >&2
+                return "${preparation_drift_status}"
+              fi
+            fi
+            echo "Entering protected V25 version PR preparation: ${preparation_reason}"
+            GH_TOKEN="${QS3D_AUTOMERGE_TOKEN}" python scripts/v25-auto-version-pr.py prepare \
+              --repository "${GITHUB_REPOSITORY}" \
+              --source-sha "${source_sha}" \
+              --base-sha "${preparation_base_sha}" \
+              --published-tag "${published_preview_tag}" \
+              --ledger-issue 1441
+          }
           tag="${series_prefix}${committed_preview_ordinal}"
 
           if (( committed_preview_ordinal <= published_preview_ordinal )); then
-            echo "Batch is eligible, but protected main ProductVersion must be advanced before automatic preview dispatch. Committed=${committed_product_version} published=${published_preview_tag:-'(none)'}. Refusing to reserve or dispatch an uncommitted preview tag."
+            echo "Refusing to reserve or dispatch an uncommitted preview tag directly; protected main ProductVersion must advance through a normal PR."
+            echo "The protected main ProductVersion must advance before the next automatic preview dispatch."
+            prepare_protected_version_pr "committed ${committed_product_version} is not newer than published ${published_preview_tag:-'(none)'}"
             exit 0
           fi
           if [[ -n "$(git tag --list "${tag}")" ]]; then
-            echo "Committed ProductVersion ${committed_product_version} already has Git tag ${tag}; refusing duplicate automatic dispatch." >&2
-            exit 1
+            prepare_protected_version_pr "committed ProductVersion ${committed_product_version} already has Git tag ${tag}"
+            exit 0
           fi
 
           reservation_issue=1441
@@ -327,6 +380,7 @@ jobs:
             fi
             echo "Committed preview ordinal ${committed_preview_ordinal} already belongs to earlier protected-main source ${reservation_owner_source}; current source ${source_sha} will not reassign or duplicate-dispatch that ordinal."
             echo "The protected main ProductVersion must advance before the next automatic preview dispatch."
+            prepare_protected_version_pr "committed preview ordinal ${committed_preview_ordinal} belongs to prior source ${reservation_owner_source}"
             exit 0
           fi
 
