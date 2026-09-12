@@ -39,11 +39,13 @@ namespace QS3D.BricsCAD.V25
 
             var wasVisible = palette.Visible;
             var wasSubscribed = _documentActivatedMayBeSubscribed;
+            Document? document = null;
+            var nativeDatabaseIdentity = IntPtr.Zero;
             try
             {
                 SubscribeToDocumentActivation();
-                var document = Application.DocumentManager.MdiActiveDocument;
-                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                document = Application.DocumentManager.MdiActiveDocument;
+                nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
                 if (document != null && !RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity))
                     nativeDatabaseIdentity = IntPtr.Zero;
                 panel.RefreshFromDocument(document, nativeDatabaseIdentity);
@@ -51,7 +53,12 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception)
             {
-                panel.ShowUnavailable("Project Information không thể mở an toàn; dữ liệu cũ đã được xóa.");
+                // Opening the native palette may pump the host after the document snapshot was
+                // captured. Never clear or replace a newer document generation's display state.
+                ShowUnavailableIfCurrent(
+                    document,
+                    nativeDatabaseIdentity,
+                    "Project Information không thể mở an toàn; dữ liệu cũ đã được xóa.");
                 if (!wasVisible)
                 {
                     try { palette.Visible = false; } catch { }
@@ -159,10 +166,31 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-
         private static bool RequireCurrentDocumentGeneration(Document? document, IntPtr nativeDatabaseIdentity)
         {
             return DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity);
+        }
+
+        private static void ShowUnavailableIfCurrent(
+            Document? document,
+            IntPtr nativeDatabaseIdentity,
+            string status)
+        {
+            if (!RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
+            var panel = _panel;
+            if (panel == null) return;
+            if (!RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity)) return;
+
+            try
+            {
+                panel.ShowUnavailable(status);
+            }
+            catch
+            {
+                // Document activation is fail-soft. A disposed/replaced WPF surface must not let
+                // optional stale-state clearing escape into the BricsCAD event dispatcher.
+            }
         }
 
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
@@ -194,19 +222,25 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
 
+            Document? document = null;
+            var nativeDatabaseIdentity = IntPtr.Zero;
             try
             {
-                var document = e.Document ?? Application.DocumentManager.MdiActiveDocument;
-                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                document = e.Document ?? Application.DocumentManager.MdiActiveDocument;
+                nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
                 if (document != null && !RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity))
                     nativeDatabaseIdentity = IntPtr.Zero;
                 panel.RefreshFromDocument(document, nativeDatabaseIdentity);
             }
             catch (Exception)
             {
-                // Document activation must remain fail-soft. Never retain project information from
-                // the previously active drawing after a refresh failure.
-                panel.ShowUnavailable("Project Information không thể đọc bản vẽ vừa kích hoạt; dữ liệu cũ đã được xóa.");
+                // Refresh can host-pump while the managed Document wrapper survives a native DB
+                // replacement. Clear stale display state only for the exact generation captured
+                // by this callback; a newer generation owns its own subsequent refresh.
+                ShowUnavailableIfCurrent(
+                    document,
+                    nativeDatabaseIdentity,
+                    "Project Information không thể đọc bản vẽ vừa kích hoạt; dữ liệu cũ đã được xóa.");
             }
         }
     }
