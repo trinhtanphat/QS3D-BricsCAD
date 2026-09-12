@@ -10,12 +10,13 @@
 - finite, positive length, width and height;
 - IFC property-set evidence for `Pset_Qto` and `Pset_Identity`;
 - IFC spatial-containment and type-assignment relationships;
+- a canonical QS3D storey identity whenever IFC spatial containment is present;
 - consistency between the QS3D storey and IFC spatial-container value;
 - consistency between the QS3D element type and IFC type-assignment value;
 - unique IFC GUIDs;
 - unique QS3D element identities.
 
-Rule severities are configurable per rule. A profile also carries a blocking threshold, allowing project-specific QA policies without changing the analysis engine. `QA2.TYPE_ASSIGNMENT_MISMATCH` is Critical in the strict profile and can be overridden like the other rule severities.
+Rule severities are configurable per rule. A profile also carries a blocking threshold, allowing project-specific QA policies without changing the analysis engine. `QA2.TYPE_ASSIGNMENT_MISMATCH` is Critical in the strict profile and can be overridden like the other rule severities. `QA2.MISSING_STOREY` is also Critical in the strict profile so a present IFC spatial relationship cannot clear the gate while the canonical QS3D storey identity is absent.
 
 `QA2.INVALID_DIMENSIONS` now treats IEEE-754 `NaN`, positive infinity and negative infinity as invalid in addition to zero and negative values. A quantity dimension must therefore be both finite and strictly greater than zero before the Solibri strict profile can clear it for downstream quantity work.
 
@@ -34,6 +35,8 @@ Until IFC adapters expose richer typed relationship objects, snapshots provide n
 
 Adapters should populate these keys from the authoritative IFC source. `IfcRel.SpatialContainer` must carry the canonical storey/spatial identity represented by `QsModelElementSnapshot.Storey`; `IfcRel.TypeAssignment` must carry the canonical type identity represented by `QsModelElementSnapshot.Type`. Missing, blank, or contradictory evidence fails closed under the strict profile.
 
+When `IfcRel.SpatialContainer` is present and non-blank but `QsModelElementSnapshot.Storey` is empty, QA2 emits `QA2.MISSING_STOREY` rather than silently accepting the relationship as sufficient evidence. If both values are present, the existing case-insensitive trimmed equality check still governs `QA2.SPATIAL_MISMATCH`. This distinguishes missing canonical identity from contradictory identity and keeps audit findings deterministic.
+
 ## Waivers / exceptions
 
 `QsQaWaiver` is explicit and auditable: rule id, element id, reason, approver, approval UTC timestamp and optional expiry. A waiver applies only to the exact rule + element pair while the evaluation timestamp is within its effective window: at or after `ApprovedUtc`, and at or before `ExpiresUtc` when an expiry exists. A future-dated approval is therefore not active early. Waived findings are retained separately in the gate decision instead of being deleted.
@@ -43,6 +46,8 @@ All QA2 time boundaries are explicitly UTC. `approvedUtc`, optional `expiresUtc`
 For duplicate IFC GUIDs, waivers remain intentionally element-scoped. Waiving one participant does not release the collision because the other participants retain their own active findings. A host that intentionally accepts a temporary duplicate condition must explicitly waive every conflicting element, preserving a complete audit trail; alternatively, correcting the IFC identities removes the conflict findings normally.
 
 `QA2.DUPLICATE_ELEMENT_ID` is intentionally excluded from waiver application. Even a syntactically matching waiver stays inactive for this rule because two logical elements with the same normalized `ElementId` cannot be distinguished by the waiver key. This is a fail-closed audit-integrity rule rather than a project policy exception.
+
+`QA2.MISSING_STOREY` follows the ordinary audited waiver contract. Projects can therefore apply a bounded, explicit exception to a known legacy-model condition, while the default strict profile remains fail-closed and blocks the quantity workflows until the storey identity is supplied or waived.
 
 ## Hard gate
 
@@ -84,9 +89,11 @@ The UTC hardening also keeps the public schema and signatures unchanged, but it 
 
 The finite-dimension hardening keeps the `QA2.INVALID_DIMENSIONS` rule id, severity customization and public APIs unchanged. Adapters that previously emitted `NaN` or infinities as placeholders must stop treating those sentinels as quantity-ready geometry; supply a real finite positive dimension or allow the QA gate to remain blocked until authoritative geometry is available.
 
+The storey/spatial-completeness hardening is additive and does not change constructors or method signatures. Adapters that already provide both `Storey` and `IfcRel.SpatialContainer` are unaffected. Adapters that previously populated only the IFC relationship must now also map the authoritative canonical storey into `QsModelElementSnapshot.Storey`, or intentionally manage a `QA2.MISSING_STOREY` waiver under the existing exception policy.
+
 ## Smoke coverage
 
-`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid, expired and future-dated waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It verifies that future-dated waivers keep findings active until approval and become effective at the approval timestamp. It additionally verifies that Local/Unspecified waiver/evaluation timestamps fail closed, duplicate-GUID findings cover the complete conflict set, case/whitespace normalization is stable, a one-sided duplicate waiver remains blocked, and explicit waivers for every IFC GUID participant remain auditable. Duplicate element IDs are tested case-insensitively as a complete conflict set, remain active despite a matching waiver, and block Takeoff/BOQ/Estimate. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
+`QsQaGate2Smoke` covers hard blocking, BOQ/estimate/takeoff parity, fail-closed workflow demand, valid, expired and future-dated waivers, severity override behavior, IFC Pset completeness, spatial mismatch, IFC type-assignment mismatch, relationship completeness and duplicate IFC GUID detection. It verifies that future-dated waivers keep findings active until approval and become effective at the approval timestamp. It additionally verifies that Local/Unspecified waiver/evaluation timestamps fail closed, duplicate-GUID findings cover the complete conflict set, case/whitespace normalization is stable, a one-sided duplicate waiver remains blocked, and explicit waivers for every IFC GUID participant remain auditable. Duplicate element IDs are tested case-insensitively as a complete conflict set, remain active despite a matching waiver, and block Takeoff/BOQ/Estimate. The smoke also verifies that a non-empty `IfcRel.SpatialContainer` with an empty canonical Storey produces Critical `QA2.MISSING_STOREY`, does not get misreported as a missing relationship, and blocks all three guarded quantity workflows. It also verifies that `QsQaGuardedExecutor` never invokes blocked work and executes each allowed Takeoff/BOQ/Estimate delegate exactly once.
 
 The registered `BenchmarkParitySuiteSmoke` additionally verifies that `NaN`, positive infinity and negative infinity dimensions produce `QA2.INVALID_DIMENSIONS`, leave QA2 blocked, and deny Takeoff/BOQ/Estimate.
 

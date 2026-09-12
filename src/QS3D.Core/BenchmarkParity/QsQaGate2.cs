@@ -51,6 +51,7 @@ namespace QS3D.Core.BenchmarkParity
                     { "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error },
                     { "QA2.MISSING_PSET", QsQaSeverity.Error },
                     { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Critical },
+                    { "QA2.MISSING_STOREY", QsQaSeverity.Critical },
                     { "QA2.SPATIAL_MISMATCH", QsQaSeverity.Critical },
                     { "QA2.TYPE_ASSIGNMENT_MISMATCH", QsQaSeverity.Critical },
                     { "QA2.DUPLICATE_IFC_GUID", QsQaSeverity.Critical },
@@ -176,7 +177,9 @@ namespace QS3D.Core.BenchmarkParity
             var waived = new List<QsQaFinding>();
             foreach (var finding in findings)
             {
-                var structuralIdentityConflict = string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase);
+                var structuralIdentityConflict =
+                    string.Equals(finding.RuleId, "QA2.DUPLICATE_ELEMENT_ID", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(finding.RuleId, "QA2.DUPLICATE_IFC_GUID", StringComparison.OrdinalIgnoreCase);
                 if (!structuralIdentityConflict && waiverList.Any(x => x.Applies(finding, nowUtc))) waived.Add(finding);
                 else active.Add(finding);
             }
@@ -252,10 +255,17 @@ namespace QS3D.Core.BenchmarkParity
                 }
 
                 string spatialContainer;
-                if (element.Storey.Length > 0 && element.Properties.TryGetValue("IfcRel.SpatialContainer", out spatialContainer) && !string.IsNullOrWhiteSpace(spatialContainer))
+                if (element.Properties.TryGetValue("IfcRel.SpatialContainer", out spatialContainer) && !string.IsNullOrWhiteSpace(spatialContainer))
                 {
                     AddIf(result,
-                        !string.Equals(element.Storey, spatialContainer.Trim(), StringComparison.OrdinalIgnoreCase),
+                        element.Storey.Length == 0,
+                        profile,
+                        "QA2.MISSING_STOREY",
+                        QsQaSeverity.Critical,
+                        element.Id,
+                        "Storey identity is required when IFC spatial containment is present.");
+                    AddIf(result,
+                        element.Storey.Length > 0 && !string.Equals(element.Storey, spatialContainer.Trim(), StringComparison.OrdinalIgnoreCase),
                         profile,
                         "QA2.SPATIAL_MISMATCH",
                         QsQaSeverity.Critical,
