@@ -23,6 +23,8 @@ namespace QS3D.BricsCAD.V25
     /// </summary>
     public sealed class BltLegacyCommands
     {
+        private const string StaleGenerationMessage = "BLT legacy import cancelled because the active drawing generation changed.";
+
         [CommandMethod("QS3DBLTPROBE", CommandFlags.UsePickSet)]
         public void Probe()
         {
@@ -102,18 +104,44 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+
+            IntPtr nativeDatabaseIdentity;
             try
             {
+                nativeDatabaseIdentity = document.Database.UnmanagedObject;
+            }
+            catch
+            {
+                return;
+            }
+            if (nativeDatabaseIdentity == IntPtr.Zero) return;
+
+            try
+            {
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 if (!DrawingUnitWorkflow.EnsureResolved(document, "QS3DBLTIMPORT")) return;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
+
                 var candidates = BltLegacyCadInspector.ReadCurrentSpace(document)
                     .Select(BltLegacyEntityAdapter.Adapt)
                     .Where(x => x.HasLegacySignal)
                     .ToList();
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
+
                 var ready = candidates.Where(x => x.CanImport && x.Category.HasValue).ToList();
                 if (ready.Count == 0)
                 {
-                    WriteSummary(document, "BLT Import", candidates);
-                    document.Editor.WriteMessage("\nQS3D BLT Import: chưa có object đủ evidence để import; chạy QS3DBLTPROBE/QS3DBLTAUDIT.");
+                    if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                    try
+                    {
+                        WriteSummary(document, "BLT Import", candidates);
+                    }
+                    catch
+                    {
+                        return;
+                    }
+                    if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                    TryWriteMessage(document, "\nQS3D BLT Import: chưa có object đủ evidence để import; chạy QS3DBLTPROBE/QS3DBLTAUDIT.");
                     return;
                 }
 
@@ -122,24 +150,60 @@ namespace QS3D.BricsCAD.V25
                 {
                     var category = candidate.Category;
                     if (!category.HasValue) continue;
+                    RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                     if (!SemanticCaptureService.CaptureSnapshot(
                             document,
                             candidate.Snapshot,
                             category.Value,
                             project => ApplyLegacyEvidence(project, candidate))) continue;
+                    RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                     imported++;
                 }
 
-                document.Editor.WriteMessage(
-                    "\nQS3D BLT Import: " + imported.ToString(CultureInfo.InvariantCulture) +
-                    "/" + candidates.Count.ToString(CultureInfo.InvariantCulture) +
-                    " legacy object đã được upsert semantic; source Handle giữ nguyên. " +
-                    "Chạy QS3DQUANTITYENGINE2 rồi QS3DEXCEL. Object chưa đủ evidence vẫn bị bỏ qua, không fabricate BT/VK.");
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
+                PublishImportSuccessIfActive(document, nativeDatabaseIdentity, imported, candidates.Count);
             }
             catch (Exception error)
             {
-                Report(document, "QS3DBLTIMPORT", error);
+                ReportIfActive(document, nativeDatabaseIdentity, "QS3DBLTIMPORT", error);
             }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                return ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)
+                       && document.Database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException(StaleGenerationMessage);
+        }
+
+        private static void PublishImportSuccessIfActive(Document document, IntPtr nativeDatabaseIdentity, int imported, int candidateCount)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            var message =
+                "\nQS3D BLT Import: " + imported.ToString(CultureInfo.InvariantCulture) +
+                "/" + candidateCount.ToString(CultureInfo.InvariantCulture) +
+                " legacy object đã được upsert semantic; source Handle giữ nguyên. " +
+                "Chạy QS3DQUANTITYENGINE2 rồi QS3DEXCEL. Object chưa đủ evidence vẫn bị bỏ qua, không fabricate BT/VK.";
+            TryWriteMessage(document, message);
+        }
+
+        private static void ReportIfActive(Document document, IntPtr nativeDatabaseIdentity, string operation, Exception error)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            Report(document, operation, error);
         }
 
         private static void ApplyLegacyEvidence(ProjectState project, BltLegacyElementCandidate candidate)
@@ -220,9 +284,15 @@ namespace QS3D.BricsCAD.V25
                          .OrderBy(x => x.Key.ToString(), StringComparer.Ordinal))
                 document.Editor.WriteMessage("\n  " + group.Key + ": " + group.Count().ToString(CultureInfo.InvariantCulture));
         }
+
         private static void Report(Document document, string operation, Exception error)
         {
-            try { document.Editor.WriteMessage("\nQS3D " + operation + " lỗi: " + error.GetBaseException().Message); }
+            TryWriteMessage(document, "\nQS3D " + operation + " lỗi (" + error.GetType().Name + ").");
+        }
+
+        private static void TryWriteMessage(Document document, string message)
+        {
+            try { document.Editor.WriteMessage(message); }
             catch { }
         }
     }
