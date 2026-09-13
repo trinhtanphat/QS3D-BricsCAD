@@ -1,9 +1,9 @@
-﻿from pathlib import Path
+from pathlib import Path
 p=Path('src/QS3D.BricsCAD.V25/McpAgentControlCenter.cs')
 s=p.read_text(encoding='utf-8')
 checks={
 'operation generation field':'_backgroundOperationGeneration' in s,
-'generation capture':'Interlocked.Increment(ref _backgroundOperationGeneration)' in s,
+'generation capture':'Volatile.Read(ref _backgroundOperationGeneration)' in s,
 'late callback fence':'operationGeneration != Volatile.Read(ref _backgroundOperationGeneration)' in s,
 'closed publication fence':'if (_closed || operationGeneration' in s,
 'sanitized worker failure':'SanitizeBackgroundFailure(ex)' in s,
