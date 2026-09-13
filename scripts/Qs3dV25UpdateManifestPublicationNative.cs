@@ -39,8 +39,6 @@ public static class Qs3dV25UpdateManifestPublicationNative
     private const int FileRenameInfo = 3;
     private const int FileDispositionInfo = 4;
     private const uint FileNameNormalized = 0x0;
-    private const int ErrorAlreadyExists = 183;
-    private const int ErrorFileExists = 80;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct FileTime
@@ -288,15 +286,18 @@ public static class Qs3dV25UpdateManifestPublicationNative
         RequireOwned(generation);
         if (generation.DeletePending) return;
 
-        IntPtr buffer = Marshal.AllocHGlobal(sizeof(int));
+        // FILE_DISPOSITION_INFO contains a single Win32 BOOLEAN (one byte), not a
+        // four-byte BOOL/int. SetFileInformationByHandle requires DELETE access,
+        // which every owned generation handle acquires in OpenOwned* above.
+        IntPtr buffer = Marshal.AllocHGlobal(1);
         try
         {
-            Marshal.WriteInt32(buffer, 1);
+            Marshal.WriteByte(buffer, 0, 1);
             if (!SetFileInformationByHandle(
                     generation.Stream.SafeFileHandle,
                     FileDispositionInfo,
                     buffer,
-                    sizeof(int)))
+                    1))
             {
                 throw LastWin32("Could not mark owned generation for deletion: " + generation.CurrentPath);
             }
