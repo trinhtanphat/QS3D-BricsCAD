@@ -1,11 +1,18 @@
 using System;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class Qs2DQuantityAggregationLayerSmoke
     {
+        [ModuleInitializer]
+        internal static void Initialize()
+        {
+            Run();
+        }
+
         internal static void Run()
         {
             SeparatesLayersWithoutLosingEvidence();
