@@ -29,7 +29,11 @@ def main():
         "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
         "database.UnmanagedObject == _nativeDatabaseIdentity",
         "if (!MatchesNativeDatabase(document))",
-        "if (_attached) return;",
+        "if (_attached)",
+        "if (ReferenceEquals(document, _lifecycleDocument)) return;",
+        "MatchesBoundDocumentAffinity(document)",
+        "DocumentBoundNativeLifecycleCoordinator.Rebind(",
+        "_lifecycleDocument = document;",
         "private IDisposable? _nativeLifecycleSubscription;",
         "_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(",
         "DetachNativeLifecycleSubscription();",
@@ -38,14 +42,20 @@ def main():
     ]
     missing = [needle for needle in required if needle not in text]
     if missing:
-        return fail("modeless lifetime idempotence invariant is incomplete: " + ", ".join(missing))
+        return fail("modeless lifetime idempotence/wrapper-rebind invariant is incomplete: " + ", ".join(missing))
+
+    attach_start = text.find("public void Attach(Document document)")
+    attach_end = text.find("private static IntPtr GetNativeDatabaseIdentity", attach_start)
+    attach = text[attach_start:attach_end]
+    if attach.find("DocumentBoundNativeLifecycleCoordinator.Rebind(") > attach.find("_lifecycleDocument = document;"):
+        return fail("repeated Attach must publish the replacement wrapper only after native rebind succeeds")
 
     for legacy in (
         "ReferenceEquals(e.Document, _document)",
         "ReferenceEquals(document, _document)",
     ):
         if legacy in text:
-            return fail("modeless lifetime idempotence must not depend on managed Document wrapper identity: " + legacy)
+            return fail("modeless lifetime idempotence must not depend on legacy managed Document wrapper identity: " + legacy)
 
     for forbidden in (
         "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
@@ -63,6 +73,8 @@ def main():
         "lifecycleDocument.CloseAborted += OnDocumentCloseAborted;",
         "new WeakReference<Callbacks>(callbacks)",
         "return new Subscription(entry, callbacks);",
+        "entry.EnsureLifecycleDocument(lifecycleDocument, replacementAffinity);",
+        "if (!entry.DetachNativeHandlersIfSafe()) return;",
     ]
     native_missing = [needle for needle in native_required if needle not in native]
     if native_missing:
@@ -74,7 +86,7 @@ def main():
     if "new Registration(window, document).Attach();" in text:
         return fail("Attach still creates an untracked Registration on every call")
 
-    print("PASS: each modeless Window owns one managed subscription token, while native document reactors are centralized by native database identity with weak per-window callbacks and remain idempotent across managed-wrapper drift.")
+    print("PASS: each modeless Window owns one managed subscription token; same-wrapper Attach is idempotent, proven replacement wrappers rebind before publication, and native document reactors remain centralized by native database identity with weak per-window callbacks.")
     return 0
 
 

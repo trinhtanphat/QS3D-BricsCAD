@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Guard host-quiescence race boundaries before native/WPF teardown work."""
 
-# Lane-Key: issue-3621 — H.3 must not dereference BricsCAD wrappers, dispatch modeless
-# callbacks, or unsubscribe native reactors after host quiescence starts.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,7 +26,7 @@ def method_block(source: str, signature: str) -> str:
         elif char == "}":
             depth -= 1
             if depth == 0:
-                return source[start : index + 1]
+                return source[start:index + 1]
     raise AssertionError(f"{signature} body is unterminated.")
 
 
@@ -37,8 +35,6 @@ window_source = WINDOW_SOURCE.read_text(encoding="utf-8")
 native_source = NATIVE_SOURCE.read_text(encoding="utf-8")
 barrier = "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;"
 
-# The native DocumentToBeDestroyed owner sees the event before individual windows. It must stop
-# before reading e.Document because the managed wrapper may already front native teardown state.
 native_destroyed = method_block(native_source, "private static void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
 require(barrier in native_destroyed,
         "Shared DocumentToBeDestroyed must fail closed immediately during host quiescence.")
@@ -49,8 +45,6 @@ require(native_destroyed.index(barrier) < native_destroyed.index("document = e.D
 for marker in ("TrySnapshotDestroyByLifecycleDocument", "TrySnapshotDestroyByNativeIdentity"):
     require(marker in native_destroyed, f"Shared DocumentToBeDestroyed is missing affinity lookup: {marker}")
 
-# Per-document native BeginDocumentClose / CloseAborted handlers must not dispatch callbacks after
-# the host quit boundary. That keeps per-window WPF registrations off native teardown stacks.
 for signature in (
     "private void OnBeginDocumentClose(object sender, DocumentBeginCloseEventArgs e)",
     "private void OnDocumentCloseAborted(object? sender, EventArgs e)",
@@ -60,9 +54,6 @@ for signature in (
     require(block.index(barrier) < block.index("callbacks = SnapshotLiveCallbacks();"),
             f"{signature} must test quiescence before dispatching managed callbacks.")
 
-# Registration itself still re-checks before DocumentManager access; quiescence may arm between
-# native coordinator dispatch and the managed callback's first instruction. The coordinator has
-# already proved affinity, so the per-window callback must not reopen the event Document.
 window_destroyed = method_block(window_source, "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
 require(barrier in window_destroyed,
         "Managed DocumentToBeDestroyed callback must fail closed immediately during host quiescence.")
@@ -77,7 +68,6 @@ require(barrier in window_begin,
 require(window_begin.index(barrier) < window_begin.index("HasAnotherLiveDocument()"),
         "Managed BeginDocumentClose callback must re-check quiescence before DocumentManager enumeration.")
 
-# Project-affinity close can race with host quit between its caller check and helper body.
 project_change = method_block(window_source, "private void CloseForProjectChange()")
 require(barrier in project_change,
         "Project-affinity close must re-check host quiescence at its own boundary.")
@@ -86,7 +76,6 @@ require(project_change.index(barrier) < project_change.index("lock (_documentAcc
 require(project_change.index(barrier) < project_change.index("DetachDocumentLifecycleHandlersIfSafe();"),
         "Project-affinity close must not release the managed native subscription after quiescence starts.")
 
-# Window-side lifecycle detach helpers own their own barriers instead of trusting stale caller checks.
 for signature in (
     "private void DetachDocumentLifecycleHandlersIfSafe()",
     "private void DetachDocumentLifecycleHandlersAfterAbort()",
@@ -96,31 +85,39 @@ for signature in (
     require(block.index(barrier) < block.index("DetachNativeLifecycleSubscription();"),
             f"{signature} must re-check quiescence before releasing the managed native subscription.")
 
-# The shared Subscription.Dispose path can be called from ordinary WPF cleanup. The coordinator
-# itself must refuse native unsubscription if host quiescence races with that call.
 unregister = method_block(native_source, "private static void Unregister(Entry entry, Callbacks callbacks)")
 require("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;" in unregister,
         "Shared native unregister must own a host-quiescence barrier.")
+require("if (!entry.DetachNativeHandlersIfSafe()) return;" in unregister,
+        "Shared native unregister must keep exact coordinator ownership when native detach cannot complete.")
 require(
     unregister.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;")
-    < unregister.index("entry.DetachNativeHandlersIfSafe();"),
+    < unregister.index("if (!entry.DetachNativeHandlersIfSafe()) return;"),
     "Shared native unregister must re-check quiescence before native event unsubscription.",
 )
 
-native_detach = method_block(native_source, "public void DetachNativeHandlersIfSafe()")
-require("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;" in native_detach,
+native_detach = method_block(native_source, "public bool DetachNativeHandlersIfSafe()")
+require("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return false;" in native_detach,
         "Per-document native detach must own a second host-quiescence barrier.")
+require("TryDetachNativeHandlers(lifecycleDocument)" in native_detach,
+        "Per-document detach must use the rollback-aware native unsubscribe helper.")
 require(
-    native_detach.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;")
-    < native_detach.index("lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose;"),
+    native_detach.index("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return false;")
+    < native_detach.index("TryDetachNativeHandlers(lifecycleDocument)"),
     "Per-document native detach must re-check quiescence immediately before native unsubscription.",
 )
 
-# QuitAborted recovery is dispatcher-deferred. A second host quit may begin before it executes.
+try_detach = method_block(native_source, "private bool TryDetachNativeHandlers(Document lifecycleDocument)")
+for marker in (
+    "lifecycleDocument.BeginDocumentClose -= OnBeginDocumentClose;",
+    "lifecycleDocument.CloseAborted -= OnDocumentCloseAborted;",
+):
+    require(marker in try_detach, "Rollback-aware native detach missing unsubscribe marker: " + marker)
+
 recover = method_block(window_source, "private void TryRecoverAfterQuitAbort()")
 require(barrier in recover,
         "Deferred QuitAborted recovery must re-check host quiescence before cleanup.")
 require(recover.index(barrier) < recover.index("DetachDocumentLifecycleHandlersAfterAbort();"),
         "Deferred QuitAborted recovery must re-check quiescence before releasing lifecycle ownership.")
 
-print("[OK] V25 modeless shutdown re-checks global host quiescence before native wrapper access, managed callback dispatch, DocumentManager enumeration, native unsubscription, and deferred abort recovery.")
+print("[OK] V25 modeless shutdown re-checks global host quiescence before native wrapper access, callback dispatch, DocumentManager enumeration, rollback-aware native unsubscription, and deferred abort recovery.")

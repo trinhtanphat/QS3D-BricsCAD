@@ -20,9 +20,22 @@ if not errors:
     bind_start = text.find("private static IntPtr GetNativeDatabaseIdentity", attach_start + 1)
     attach = text[attach_start:bind_start] if attach_start >= 0 and bind_start > attach_start else ""
 
-    required_attach = (
+    for token in (
         "if (!MatchesNativeDatabase(document))",
-        "if (_attached) return;",
+        "if (_attached)",
+        "if (ReferenceEquals(document, _lifecycleDocument)) return;",
+        "if (!MatchesBoundDocumentAffinity(document))",
+        "DocumentBoundNativeLifecycleCoordinator.Rebind(",
+        "_lifecycleDocument = document;",
+        "return;",
+    ):
+        if token not in attach:
+            errors.append("modeless repeated Attach missing wrapper-rebind contract: " + token)
+    if "DocumentBoundNativeLifecycleCoordinator.Rebind(" in attach and "_lifecycleDocument = document;" in attach:
+        if attach.index("DocumentBoundNativeLifecycleCoordinator.Rebind(") > attach.index("_lifecycleDocument = document;"):
+            errors.append("modeless repeated Attach must publish replacement ownership only after coordinator rebind")
+
+    required_initial_attach = (
         "try",
         "ModelessHostQuiescenceCoordinator.EnsureInitialized();",
         "BindProjectAffinityIfPresent();",
@@ -43,11 +56,11 @@ if not errors:
         "_projectId = string.Empty;",
         "throw;",
     )
-    cursor = 0
-    for token in required_attach:
-        pos = attach.find(token, cursor)
+    cursor = attach.find("try")
+    for token in required_initial_attach:
+        pos = attach.find(token, max(0, cursor))
         if pos < 0:
-            errors.append("modeless Attach missing ordered H3 failure-rollback contract: " + token)
+            errors.append("modeless initial Attach missing ordered H3 failure-rollback contract: " + token)
             break
         cursor = pos + len(token)
 
@@ -106,7 +119,6 @@ if not errors:
         "private readonly IntPtr _nativeDatabaseIdentity;",
         "_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
         "database.UnmanagedObject == _nativeDatabaseIdentity",
-        "The shared coordinator has already matched this registration",
         "CloseForProjectChange();",
         "_window.Dispatcher.BeginInvoke(new Action(TryCloseWindowOnDispatcher))",
         "private void TryCloseWindowOnDispatcher()",
@@ -119,7 +131,7 @@ if not errors:
         "ReferenceEquals(document, _document)",
     ):
         if legacy in text:
-            errors.append("modeless lifetime atomicity must not depend on managed Document wrapper identity: " + legacy)
+            errors.append("modeless lifetime atomicity must not depend on legacy managed Document wrapper identity: " + legacy)
 
     for token in (
         "BcadApplication.DocumentManager.DocumentToBeDestroyed += OnDocumentToBeDestroyed;",
@@ -128,12 +140,14 @@ if not errors:
         "new WeakReference<Callbacks>(callbacks)",
         "TrySnapshotDestroyByLifecycleDocument",
         "TrySnapshotDestroyByNativeIdentity",
+        "entry.EnsureLifecycleDocument(lifecycleDocument, replacementAffinity);",
+        "if (!entry.DetachNativeHandlersIfSafe()) return;",
     ):
         if token not in native:
             errors.append("shared H3 native coordinator missing atomic ownership token: " + token)
 
     if attach.count("_attached = true;") != 2:
-        errors.append("Attach must mark successful ownership once and temporarily enable Detach exactly once in rollback")
+        errors.append("initial Attach must mark successful ownership once and temporarily enable Detach exactly once in rollback")
 
 print("QS3D document-bound window attach atomicity preflight")
 if errors:
@@ -142,4 +156,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: document-bound modeless attachment rolls partial H3 managed/native subscriptions back through Detach, keeps native reactor ownership centralized and weak, remains retryable, and preserves source-DWG/project fail-closed identity behavior.")
+print("PASS: same-wrapper Attach is idempotent, proven replacement wrappers rebind before publication, initial attachment rolls partial H3 ownership back through Detach, and native reactor ownership remains centralized and fail-closed.")
