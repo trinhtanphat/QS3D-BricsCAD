@@ -179,6 +179,76 @@ function Read-BoundedStrictUtf8Stream {
     }
 }
 
+function Get-JsonPropertyOccurrenceCount {
+    param(
+        [Parameter(Mandatory = $true)][string]$JsonText,
+        [Parameter(Mandatory = $true)][string]$PropertyName
+    )
+
+    $firstNonWhitespace = 0
+    while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
+    if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') {
+        throw 'V26 release package metadata must have a top-level JSON object.'
+    }
+
+    $count = 0
+    $objectDepth = 0
+    $arrayDepth = 0
+    $index = 0
+    while ($index -lt $JsonText.Length) {
+        $character = $JsonText[$index]
+        if ($character -eq '"') {
+            $tokenStart = $index
+            $index++
+            $closed = $false
+            while ($index -lt $JsonText.Length) {
+                if ($JsonText[$index] -eq '\') { $index += 2; continue }
+                if ($JsonText[$index] -eq '"') { $closed = $true; break }
+                $index++
+            }
+            if (-not $closed) { throw 'V26 release package metadata contains an unterminated JSON string token.' }
+
+            $tokenEnd = $index
+            $lookahead = $tokenEnd + 1
+            while ($lookahead -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$lookahead])) { $lookahead++ }
+            if ($objectDepth -eq 1 -and $arrayDepth -eq 0 -and $lookahead -lt $JsonText.Length -and $JsonText[$lookahead] -eq ':') {
+                $rawPropertyToken = $JsonText.Substring($tokenStart, $tokenEnd - $tokenStart + 1)
+                try { $decodedPropertyName = [string]($rawPropertyToken | ConvertFrom-Json -ErrorAction Stop) }
+                catch { throw 'V26 release package metadata contains malformed JSON property encoding.' }
+                if ([string]::Equals($decodedPropertyName, $PropertyName, [StringComparison]::OrdinalIgnoreCase)) { $count++ }
+            }
+            $index = $tokenEnd + 1
+            continue
+        }
+
+        switch ($character) {
+            '{' { $objectDepth++ }
+            '}' { $objectDepth--; if ($objectDepth -lt 0) { throw 'V26 release package metadata has invalid object nesting.' } }
+            '[' { $arrayDepth++ }
+            ']' { $arrayDepth--; if ($arrayDepth -lt 0) { throw 'V26 release package metadata has invalid array nesting.' } }
+        }
+        $index++
+    }
+    if ($objectDepth -ne 0 -or $arrayDepth -ne 0) { throw 'V26 release package metadata has unbalanced container nesting.' }
+    return $count
+}
+
+function Assert-JsonPropertyCounts {
+    param(
+        [Parameter(Mandatory = $true)][string]$JsonText,
+        [Parameter(Mandatory = $true)][hashtable]$ExpectedPropertyCounts,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    foreach ($propertyName in @($ExpectedPropertyCounts.Keys)) {
+        $expectedCount = [int]$ExpectedPropertyCounts[$propertyName]
+        $actualCount = Get-JsonPropertyOccurrenceCount -JsonText $JsonText -PropertyName $propertyName
+        if ($actualCount -ne $expectedCount) {
+            throw "$Label must contain exactly $expectedCount top-level $propertyName properties; found $actualCount."
+        }
+    }
+}
+
 function Invoke-BoundedTextProcess {
     param(
         [Parameter(Mandatory = $true)][string]$FileName,
@@ -334,6 +404,14 @@ try {
 
     Assert-LockedPathBinding -Held $metadataHeld -Label 'V26 package metadata'
     $metadataText = Read-BoundedStrictUtf8Stream -Held $metadataHeld -Label 'V26 package metadata'
+    $metadataExpectedPropertyCounts = @{
+        product = 1
+        target = 1
+        framework = 1
+        productVersion = 1
+        version = 1
+    }
+    Assert-JsonPropertyCounts -JsonText $metadataText -ExpectedPropertyCounts $metadataExpectedPropertyCounts -Label 'V26 package metadata'
     try {
         $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop
     }
