@@ -324,6 +324,7 @@ if ($ExpectedReleaseTag -notmatch $StrictReleaseTagPattern) { throw "ExpectedRel
 $expectedSource = $ExpectedSourceCommit.ToLowerInvariant()
 $expectedSigner = $ExpectedSignerThumbprint.Replace(' ', '').ToUpperInvariant()
 $expectedProductVersion = $ExpectedReleaseTag.Substring(1)
+$expectedPackageUri = "https://github.com/trinhtanphat/QS3D-BricsCAD/releases/download/$ExpectedReleaseTag/QS3D-BricsCAD-V25.zip"
 
 $zipHeld = $null
 $checksumHeld = $null
@@ -373,7 +374,9 @@ try {
     if (-not [Uri]::TryCreate($updatePackageUriRaw, [UriKind]::Absolute, [ref]$updatePackageUri) -or
         -not [string]::Equals($updatePackageUri.Scheme, [Uri]::UriSchemeHttps, [StringComparison]::OrdinalIgnoreCase) -or
         -not [string]::IsNullOrEmpty($updatePackageUri.UserInfo) -or
-        -not [string]::Equals([IO.Path]::GetFileName($updatePackageUri.AbsolutePath), 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal)) {
+        -not [string]::Equals([IO.Path]::GetFileName($updatePackageUri.AbsolutePath), 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updatePackageUriRaw, $expectedPackageUri, [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updatePackageUri.AbsoluteUri, $expectedPackageUri, [StringComparison]::Ordinal)) {
         throw 'Downloaded V25 draft update manifest packageUri must be an absolute HTTPS package URL without embedded credentials and ending in QS3D-BricsCAD-V25.zip.'
     }
 
