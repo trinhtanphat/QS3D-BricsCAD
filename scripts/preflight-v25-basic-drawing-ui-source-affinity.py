@@ -7,8 +7,8 @@ text = SOURCE.read_text(encoding="utf-8")
 
 finalize_start = text.find("private static void FinalizeSuccess(Document document, ObjectId id, BasicDrawingContext context, string primitiveLabel)")
 active_start = text.find("private static bool IsActiveDocument(Document document)", finalize_start)
-status_start = text.find("private static void TrySetPaletteStatus(Document document, string message)", active_start)
-report_start = text.find("private static void Report(Document document, string message)", status_start)
+status_start = text.find("private static void TrySetPaletteStatus(Document document, IntPtr nativeDatabaseIdentity, string message)", active_start)
+report_start = text.find("private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)", status_start)
 enum_start = text.find("private enum BasicPrimitiveKind", report_start)
 
 if min(finalize_start, active_start, status_start, report_start, enum_start) < 0:
@@ -28,10 +28,11 @@ required = [
     (active, "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)"),
     (active, "catch"),
     (active, "return false;"),
-    (status, "IsActiveDocument(document)"),
+    (status, "IsCurrentDocumentGeneration(document, nativeDatabaseIdentity)"),
     (status, "PaletteCoordinator.SetStatus(message);"),
     (status, "catch"),
-    (report, "TrySetPaletteStatus(document, message);"),
+    (report, "IsCurrentDocumentGeneration(document, nativeDatabaseIdentity)"),
+    (report, "TrySetPaletteStatus(document, nativeDatabaseIdentity, message);"),
     (report, "document.Editor.WriteMessage"),
 ]
 for body, needle in required:
@@ -43,7 +44,7 @@ if "PaletteCoordinator.SetStatus(message);" in report:
     print("ERROR: Report bypasses source-document affinity for process-wide Workspace status")
     sys.exit(1)
 
-if status.find("IsActiveDocument(document)") > status.find("PaletteCoordinator.SetStatus(message);"):
+if status.find("IsCurrentDocumentGeneration(document, nativeDatabaseIdentity)") > status.find("PaletteCoordinator.SetStatus(message);"):
     print("ERROR: Basic Drawing status must reject stale source documents before Workspace publication")
     sys.exit(1)
 
@@ -62,7 +63,7 @@ for forbidden in [
 if "AppendEntity(" not in text or "transaction.Commit();" not in text:
     print("ERROR: Basic Drawing native commit boundary is no longer recognizable")
     sys.exit(1)
-if "Report(document, status + \" \" + UiSyncWarning);" not in finalize or "Report(document, status);" not in finalize:
+if 'Report(document, context.NativeDatabaseIdentity, status + " " + UiSyncWarning);' not in finalize or "Report(document, context.NativeDatabaseIdentity, status);" not in finalize:
     print("ERROR: Basic Drawing post-commit reporting contract changed unexpectedly")
     sys.exit(1)
 
