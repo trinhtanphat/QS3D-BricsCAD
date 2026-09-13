@@ -35,6 +35,7 @@ tag_health_command = read("src/QS3D.BricsCAD.V25/SemanticTagHealthCommands.cs")
 health_smoke = read("tests/QS3D.Core.SmokeTests/GeneratedSemanticTagHealthSmoke.cs")
 registration = read("tests/QS3D.Core.SmokeTests/SmokeTestRegistration.cs")
 audit_trail = read("src/QS3D.Core/Audit/AuditTrail.cs")
+project_state = read("src/QS3D.Core/Domain/ProjectState.cs")
 snapshot_state = read("src/QS3D.Core/Persistence/ProjectStateSnapshot.cs")
 doc = read("docs/SEMANTIC-TAGS.md")
 
@@ -137,7 +138,7 @@ if min(render, validate_previous, erase, metadata, audit, commit, committed, res
     print("[FAIL] native semantic tag builder: render and complete previous-handle validation must precede erase; semantic ownership/audit revision must precede CAD commit and guarded rollback")
     sys.exit(1)
 if "project.Touch();" in builder:
-    print("[FAIL] native semantic tag builder must rely on AuditTrail.Record as the single project revision owner")
+    print("[FAIL] native semantic tag builder must rely on the authoritative audit project revision owner")
     sys.exit(1)
 for forbidden in [
     "allowMissing: true",
@@ -207,7 +208,7 @@ if min(remove_validate, remove_write, remove_clear, remove_audit, remove_commit,
     print("[FAIL] semantic tag removal service: complete live-handle validation must precede writes; metadata/audit revision must precede CAD commit and guarded rollback")
     sys.exit(1)
 if "project.Touch();" in remove_service:
-    print("[FAIL] semantic tag removal service must rely on AuditTrail.Record as the single project revision owner")
+    print("[FAIL] semantic tag removal service must rely on the authoritative audit project revision owner")
     sys.exit(1)
 
 for forbidden in [
@@ -225,7 +226,20 @@ if record_start < 0 or clear_start <= record_start:
     print("[FAIL] semantic tag lifecycle: could not isolate AuditTrail.Record")
     sys.exit(1)
 record = audit_trail[record_start:clear_start]
-require(record, "_project?.Touch();", "semantic tag audit-owned revision")
+legacy_audit_touch = "_project?.Touch();" in record
+ownership_touch = all(
+    token in project_state
+    for token in (
+        "AuditEvents = new CatalogOwnershipList<AuditEvent>(",
+        "AttachAuditEvent",
+        "DetachAuditEvent",
+        "auditEvent.PersistenceMutationRequested += Touch",
+        "auditEvent.PersistenceMutationRequested -= Touch",
+    )
+)
+if legacy_audit_touch == ownership_touch:
+    print("[FAIL] semantic tag audit revision contract must have exactly one project revision owner: legacy AuditTrail.Record Touch or revision-aware ProjectState.AuditEvents ownership")
+    sys.exit(1)
 require(record, "_events.Add(item);", "semantic tag audit append")
 for token in [
     "target.AuditEvents.Clear();",
@@ -300,4 +314,4 @@ for token in [
 ]:
     require(doc, token, "semantic tag lifecycle docs")
 
-print("[PASS] semantic tag rendering remains bounded/model-linked and native MText/MLeader create/refresh/remove/live-health paths preserve complete live-handle prevalidation, audit-owned single revision, guarded ownership, rollback, read-only runtime diagnostics and release wiring; licensed exact-V25/V26 runtime evidence remains a local gate")
+print("[PASS] semantic tag rendering remains bounded/model-linked and native MText/MLeader create/refresh/remove/live-health paths preserve complete live-handle prevalidation, exactly-one authoritative audit revision ownership, guarded ownership, rollback, read-only runtime diagnostics and release wiring; licensed exact-V25/V26 runtime evidence remains a local gate")
