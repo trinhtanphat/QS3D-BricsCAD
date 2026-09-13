@@ -1,5 +1,7 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$selfSource = [IO.File]::ReadAllText($PSCommandPath)
+if ($selfSource -match "Write-Output[^\r\n]*'if[ \t]*\(") { throw 'FAIL: native API wrapper regression test contains a statement joined onto Write-Output.' }
 $wrapperPath = Join-Path $PSScriptRoot '../../scripts/run-local022-ui-qualification.ps1'
 $parseErrors = $null
 $ast = [Management.Automation.Language.Parser]::ParseFile($wrapperPath, [ref]$null, [ref]$parseErrors)
@@ -109,7 +111,8 @@ $unavailable = @($ast.EndBlock.Statements | Where-Object {
     $_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if (26 -eq $HostMajor)')
 })
 if ($unavailable.Count) { throw 'FAIL: matched current V26 package is still hard-blocked before predecessor admission.' }
-Write-Output 'PASS: matched current V26 package reaches the existing predecessor/provenance admission gate.'if ($null -eq $helper) { throw 'FAIL: native V25 predecessor assertion missing.' }
+Write-Output 'PASS: matched current V26 package reaches the existing predecessor/provenance admission gate.'
+if ($null -eq $helper) { throw 'FAIL: native V25 predecessor assertion missing.' }
 . ([scriptblock]::Create($helper.Extent.Text))
 $v26Gate = @($ast.EndBlock.Statements | Where-Object {
     $_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if ($HostMajor -eq 26)')
