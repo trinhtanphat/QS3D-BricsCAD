@@ -16,423 +16,161 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.IO.Compression.FileSystem
+$wrapperCmdlet = $PSCmdlet
 
-$script:MaxMetadataBytes = 65536
-$SignedPayloadNames = @(
-    'QS3D.BricsCAD.V25.dll',
-    'QS3D.Core.dll',
-    'install-v25-autoload.ps1',
-    'uninstall-v25-autoload.ps1',
-    'update-v25.ps1'
-)
-
-function Assert-NoReparseDirectoryChain {
-    param([Parameter(Mandatory = $true)][IO.DirectoryInfo]$Directory, [Parameter(Mandatory = $true)][string]$Label)
-    $cursor = $Directory
-    while ($null -ne $cursor) {
-        if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "$Label path contains a reparse-point directory: $($cursor.FullName)"
-        }
-        $cursor = $cursor.Parent
-    }
+if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
+    throw 'V25 update-manifest publication requires Windows for generation-owned Win32 publication semantics.'
 }
 
-function Resolve-OrdinaryNonReparseDirectory {
-    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
-    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
-    if (-not $item.PSIsContainer) { throw "$Label must be a directory: $Path" }
-    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Label must not be a reparse-point directory: $Path" }
-    Assert-NoReparseDirectoryChain -Directory $item -Label $Label
-    return $item
+$validationCorePath = Join-Path $PSScriptRoot 'new-v25-update-manifest-validation-core.ps1'
+$nativeHelperPath = Join-Path $PSScriptRoot 'Qs3dV25UpdateManifestPublicationNative.cs'
+if (-not (Test-Path -LiteralPath $validationCorePath -PathType Leaf)) {
+    throw "V25 update-manifest validation core is missing: $validationCorePath"
+}
+if (-not (Test-Path -LiteralPath $nativeHelperPath -PathType Leaf)) {
+    throw "V25 update-manifest owned-publication helper is missing: $nativeHelperPath"
 }
 
-function Resolve-OrdinaryNonReparseFile {
-    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
-    $item = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
-    if ($item.PSIsContainer) { throw "$Label must be an ordinary file: $Path" }
-    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw "$Label must not be a reparse-point file: $Path" }
-    Assert-NoReparseDirectoryChain -Directory $item.Directory -Label $Label
-    return $item
+# Preserve the existing package/signature/version admission logic byte-for-byte.
+# -WhatIf is mandatory here: the validation core's legacy pathname publication
+# block must never become the authority that writes the caller's OutputPath.
+. $validationCorePath `
+    -PackageDirectory $PackageDirectory `
+    -PackageZip $PackageZip `
+    -PackageUri $PackageUri `
+    -ExpectedSignerThumbprint $ExpectedSignerThumbprint `
+    -OutputPath $OutputPath `
+    -WhatIf 6>$null
+
+# The core defines the hardened filesystem resolvers used below. Validate the two
+# implementation files through the same ordinary/non-reparse policy before loading
+# native code or treating the copied validation core as admitted release logic.
+$validationCoreFile = Resolve-OrdinaryNonReparseFile -Path $validationCorePath -Label 'V25 update-manifest validation core'
+$nativeHelperFile = Resolve-OrdinaryNonReparseFile -Path $nativeHelperPath -Label 'V25 update-manifest owned-publication helper'
+
+if ($null -eq ('Qs3dV25UpdateManifestPublicationNative' -as [type])) {
+    Add-Type -Path $nativeHelperFile.FullName
 }
 
-function Get-StreamingSha256 {
-    param([Parameter(Mandatory = $true)][IO.FileInfo]$File, [Parameter(Mandatory = $true)][string]$Label)
-    $stream = [IO.File]::Open($File.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+function Get-ByteArraySha256Hex {
+    param([Parameter(Mandatory = $true)][byte[]]$Bytes)
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
-        $bytes = $sha.ComputeHash($stream)
-        return ([BitConverter]::ToString($bytes)).Replace('-', '').ToUpperInvariant()
+        return ([BitConverter]::ToString($sha.ComputeHash($Bytes))).Replace('-', '').ToUpperInvariant()
     }
-    catch { throw "$Label SHA-256 could not be read safely: $($_.Exception.Message)" }
-    finally { $sha.Dispose(); $stream.Dispose() }
+    finally { $sha.Dispose() }
 }
 
-function Get-StableFileState {
-    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
-    $file = Resolve-OrdinaryNonReparseFile -Path $Path -Label $Label
-    $firstLength = [long]$file.Length
-    $firstLastWriteUtcTicks = [long]$file.LastWriteTimeUtc.Ticks
-    $hash = Get-StreamingSha256 -File $file -Label $Label
-    $current = Resolve-OrdinaryNonReparseFile -Path $file.FullName -Label $Label
-    $currentHash = Get-StreamingSha256 -File $current -Label $Label
-    if ($firstLength -ne [long]$current.Length -or $firstLastWriteUtcTicks -ne [long]$current.LastWriteTimeUtc.Ticks -or -not [string]::Equals($hash, $currentHash, [StringComparison]::Ordinal)) {
-        throw "$Label changed while its stable input state was being captured."
+function Test-ExactByteArray {
+    param([Parameter(Mandatory = $true)][byte[]]$Expected, [Parameter(Mandatory = $true)][byte[]]$Actual)
+    if ($Expected.Length -ne $Actual.Length) { return $false }
+    $difference = 0
+    for ($index = 0; $index -lt $Expected.Length; $index++) {
+        $difference = $difference -bor ($Expected[$index] -bxor $Actual[$index])
     }
-    return [pscustomobject]@{
-        Path = $current.FullName
-        Length = [long]$current.Length
-        LastWriteUtcTicks = [long]$current.LastWriteTimeUtc.Ticks
-        Sha256 = $currentHash
-    }
+    return $difference -eq 0
 }
 
-function Assert-StableFileState {
-    param([Parameter(Mandatory = $true)]$Expected, [Parameter(Mandatory = $true)][string]$Label)
-    $current = Resolve-OrdinaryNonReparseFile -Path ([string]$Expected.Path) -Label $Label
-    $currentHash = Get-StreamingSha256 -File $current -Label $Label
-    if ([long]$Expected.Length -ne [long]$current.Length -or
-        [long]$Expected.LastWriteUtcTicks -ne [long]$current.LastWriteTimeUtc.Ticks -or
-        -not [string]::Equals([string]$Expected.Sha256, $currentHash, [StringComparison]::Ordinal)) {
-        throw "$Label changed after its admitted input generation was captured."
-    }
-    return $current
+if (-not $wrapperCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
+    return
 }
 
-function Read-BoundedStrictUtf8File {
-    param([Parameter(Mandatory = $true)][IO.FileInfo]$File, [Parameter(Mandatory = $true)][string]$Label)
-    $stream = [IO.File]::Open($File.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+$utf8NoBom = [Text.UTF8Encoding]::new($false, $true)
+$manifestJson = $manifest | ConvertTo-Json
+$expectedManifestBytes = $utf8NoBom.GetBytes($manifestJson + [Environment]::NewLine)
+if ($expectedManifestBytes.Length -gt $script:MaxMetadataBytes) {
+    throw "Generated update manifest exceeds the $($script:MaxMetadataBytes)-byte safety limit."
+}
+
+$nonce = [Guid]::NewGuid().ToString('N')
+$stagePath = Join-Path $outputParent.FullName (([IO.Path]::GetFileName($outputFull)) + ".tmp-$nonce")
+$backupPath = Join-Path $outputParent.FullName (([IO.Path]::GetFileName($outputFull)) + ".bak-$nonce")
+if (Test-Path -LiteralPath $stagePath) { throw "Refusing to reuse update-manifest staging path: $stagePath" }
+if (Test-Path -LiteralPath $backupPath) { throw "Refusing to reuse update-manifest backup path: $backupPath" }
+
+$stageOwned = $null
+$priorOwned = $null
+$publicationCommitted = $false
+try {
+    $stageOwned = [Qs3dV25UpdateManifestPublicationNative]::OpenOwnedStaging($stagePath)
+    [Qs3dV25UpdateManifestPublicationNative]::WriteOwnedGeneration($stageOwned, $expectedManifestBytes)
+    [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($stageOwned, $stagePath)
+    $stageIdentity = [Qs3dV25UpdateManifestPublicationNative]::GetOwnedGenerationIdentity($stageOwned)
+
+    if ($hadExistingOutput) {
+        $priorOwned = [Qs3dV25UpdateManifestPublicationNative]::OpenOwnedExisting($outputFull)
+        [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($priorOwned, $outputFull)
+        $priorBytes = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($priorOwned, [int]$script:MaxMetadataBytes)
+        $priorHash = Get-ByteArraySha256Hex -Bytes $priorBytes
+        if ([long]$priorBytes.Length -ne [long]$existingOutputState.Length -or
+            -not [string]::Equals($priorHash, [string]$existingOutputState.Sha256, [StringComparison]::Ordinal)) {
+            throw 'Existing update manifest changed before its exact generation could be acquired for publication.'
+        }
+    }
+    elseif (Test-Path -LiteralPath $outputFull) {
+        throw 'Update manifest destination appeared after admission; refusing to replace an unowned generation.'
+    }
+
+    [Qs3dV25UpdateManifestPublicationNative]::PublishOwnedGeneration($stageOwned, $outputFull, $priorOwned, $backupPath)
+
+    if (-not [string]::Equals(
+        $stageIdentity,
+        [Qs3dV25UpdateManifestPublicationNative]::GetOwnedGenerationIdentity($stageOwned),
+        [StringComparison]::Ordinal)) {
+        throw 'Published update manifest generation identity changed across held-handle publication.'
+    }
+    [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($stageOwned, $outputFull)
+    $publishedBytes = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($stageOwned, [int]$script:MaxMetadataBytes)
+    if (-not (Test-ExactByteArray -Expected $expectedManifestBytes -Actual $publishedBytes)) {
+        throw 'Published update manifest bytes differ from the exact generated bytes.'
+    }
+
     try {
-        if ($stream.Length -gt $script:MaxMetadataBytes) { throw "$Label exceeds the $($script:MaxMetadataBytes)-byte safety limit." }
-        $bytes = [byte[]]::new([int]$stream.Length)
-        $offset = 0
-        while ($offset -lt $bytes.Length) {
-            $read = $stream.Read($bytes, $offset, $bytes.Length - $offset)
-            if ($read -le 0) { throw "$Label ended before its declared length." }
-            $offset += $read
-        }
-        if ($stream.ReadByte() -ne -1) { throw "$Label changed while it was being read." }
-        try { return [Text.UTF8Encoding]::new($false, $true).GetString($bytes) }
-        catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
-    }
-    finally { $stream.Dispose() }
-}
-
-function Normalize-Thumbprint {
-    param([string]$Thumbprint)
-    return $Thumbprint.Replace(' ', '').ToUpperInvariant()
-}
-
-function Convert-ToStrictSemVerText {
-    param([string]$Value, [string]$Label)
-
-    if ([string]::IsNullOrWhiteSpace($Value)) { throw "$Label is missing." }
-    $text = $Value.Trim()
-    $match = [regex]::Match(
-        $text,
-        '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$',
-        [Text.RegularExpressions.RegexOptions]::CultureInvariant)
-    if (-not $match.Success) { throw "$Label is not strict SemVer: $text" }
-
-    foreach ($index in 1..3) {
-        $parsed = 0
-        if (-not [int]::TryParse($match.Groups[$index].Value, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed)) {
-            throw "$Label numeric component is outside the supported range: $text"
-        }
-    }
-
-    if ($match.Groups[4].Success) {
-        foreach ($identifier in $match.Groups[4].Value.Split('.')) {
-            if ($identifier -match '^[0-9]+$' -and $identifier.Length -gt 1 -and $identifier[0] -eq '0') {
-                throw "$Label has a numeric prerelease identifier with a leading zero: $text"
-            }
-        }
-    }
-    return $text
-}
-
-function Assert-AuthenticodeSigner {
-    param([string]$Path, [string]$ExpectedSigner, [string]$Label)
-    $signature = Get-AuthenticodeSignature -FilePath $Path
-    if ($signature.Status -ne [System.Management.Automation.SignatureStatus]::Valid) { throw "$Label signature is not valid: $($signature.Status)" }
-    if (-not $signature.SignerCertificate) { throw "$Label signature has no signer certificate." }
-    $actualSigner = Normalize-Thumbprint $signature.SignerCertificate.Thumbprint
-    if ($actualSigner -ne $ExpectedSigner) { throw "$Label signer mismatch. Expected $ExpectedSigner, got $actualSigner." }
-}
-
-function Read-ManagedAssemblyVersion {
-    param([string]$Path, [string]$Label)
-    try {
-        $version = [Reflection.AssemblyName]::GetAssemblyName($Path).Version
-        if (-not $version) { throw 'assembly version is missing' }
-        return $version
-    }
-    catch { throw "$Label assembly version is unreadable: $($_.Exception.Message)" }
-}
-
-function Read-ManagedProductVersion {
-    param([string]$Path, [string]$Label)
-    try {
-        $productVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($Path).ProductVersion
-        return Convert-ToStrictSemVerText -Value ([string]$productVersion) -Label ("$Label product version")
-    }
-    catch { throw "$Label product version is unreadable: $($_.Exception.Message)" }
-}
-
-function Get-ZipEntrySha256 {
-    param([System.IO.Compression.ZipArchiveEntry]$Entry)
-    $input = $Entry.Open()
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try {
-        $bytes = $sha.ComputeHash($input)
-        return ([BitConverter]::ToString($bytes)).Replace('-', '').ToUpperInvariant()
-    }
-    finally { $sha.Dispose(); $input.Dispose() }
-}
-
-function Get-SafeStagedFiles {
-    param([Parameter(Mandatory = $true)][IO.DirectoryInfo]$Root)
-    $rootDirectory = Resolve-OrdinaryNonReparseDirectory -Path $Root.FullName -Label 'Signed staging package root'
-    $pending = [Collections.Generic.Stack[string]]::new()
-    $files = [Collections.Generic.List[IO.FileInfo]]::new()
-    $pending.Push($rootDirectory.FullName)
-    while ($pending.Count -gt 0) {
-        $directoryPath = $pending.Pop()
-        $directory = Resolve-OrdinaryNonReparseDirectory -Path $directoryPath -Label 'Signed staging package directory'
-        foreach ($item in @(Get-ChildItem -LiteralPath $directory.FullName -Force -ErrorAction Stop)) {
-            if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                throw "Signed staging package contains a reparse-backed entry: $($item.FullName)"
-            }
-            if ($item.PSIsContainer) {
-                $pending.Push($item.FullName)
-                continue
-            }
-            if (-not ($item -is [IO.FileInfo])) {
-                throw "Signed staging package contains a non-regular filesystem entry: $($item.FullName)"
-            }
-            $safeFile = Resolve-OrdinaryNonReparseFile -Path $item.FullName -Label 'Signed staging package file'
-            $files.Add($safeFile)
-        }
-    }
-    return @($files | Sort-Object FullName)
-}
-
-function Assert-ZipPayloadMatchesSignedStaging {
-    param([IO.FileInfo]$ZipFile, [IO.DirectoryInfo]$PackageRoot, [string]$ExpectedSigner)
-    $tempParent = Resolve-OrdinaryNonReparseDirectory -Path ([IO.Path]::GetTempPath()) -Label 'Manifest verification temp parent'
-    $temp = Join-Path $tempParent.FullName ('qs3d-manifest-verify-' + [Guid]::NewGuid().ToString('N'))
-    if (Test-Path -LiteralPath $temp) { throw "Manifest verification workspace already exists: $temp" }
-    New-Item -ItemType Directory -Path $temp | Out-Null
-    $tempDirectory = Resolve-OrdinaryNonReparseDirectory -Path $temp -Label 'Manifest verification workspace'
-    $archive = $null
-    try {
-        $archive = [System.IO.Compression.ZipFile]::OpenRead($ZipFile.FullName)
-        $packageRootPath = $PackageRoot.FullName.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-        $packageRootPrefix = $packageRootPath + [IO.Path]::DirectorySeparatorChar
-        $stagedFiles = @(Get-SafeStagedFiles -Root $PackageRoot)
-        if ($stagedFiles.Count -eq 0) { throw 'Signed staging package contains no regular files.' }
-
-        $stagedByName = [Collections.Generic.Dictionary[string,string]]::new([StringComparer]::OrdinalIgnoreCase)
-        $stagedStates = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::OrdinalIgnoreCase)
-        foreach ($stagedFile in $stagedFiles) {
-            $safeStagedFile = Resolve-OrdinaryNonReparseFile -Path $stagedFile.FullName -Label 'Signed staging package file'
-            $fullPath = $safeStagedFile.FullName
-            if (-not $fullPath.StartsWith($packageRootPrefix, [StringComparison]::OrdinalIgnoreCase)) { throw "Staged package file escaped package root: $fullPath" }
-            $relative = $fullPath.Substring($packageRootPrefix.Length).Replace([IO.Path]::DirectorySeparatorChar, '/').Replace([IO.Path]::AltDirectorySeparatorChar, '/')
-            if ($stagedByName.ContainsKey($relative)) { throw "Duplicate/case-colliding staged package path: $relative" }
-            $state = Get-StableFileState -Path $fullPath -Label ("Signed staging package file " + $relative)
-            $stagedByName.Add($relative, $state.Path)
-            $stagedStates.Add($relative, $state)
-        }
-
-        $zipByName = [Collections.Generic.Dictionary[string,System.IO.Compression.ZipArchiveEntry]]::new([StringComparer]::OrdinalIgnoreCase)
-        foreach ($entry in $archive.Entries) {
-            if ([string]::IsNullOrEmpty([string]$entry.Name)) { continue }
-            $name = [string]$entry.FullName
-            if ([string]::IsNullOrWhiteSpace($name) -or $name.IndexOf([char]0) -ge 0 -or [IO.Path]::IsPathRooted($name) -or $name.Contains('\') -or $name.Contains(':')) { throw "Unsafe package ZIP entry: $name" }
-            $segments = @($name.Split('/'))
-            if (@($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -eq '.' -or $_ -eq '..' }).Count -gt 0) { throw "Unsafe package ZIP entry: $name" }
-            if ($zipByName.ContainsKey($name)) { throw "Duplicate/case-colliding package ZIP path: $name" }
-            if (-not $stagedByName.ContainsKey($name)) { throw "Package ZIP contains file not present in signed staging: $name" }
-            $zipByName.Add($name, $entry)
-        }
-
-        foreach ($name in $stagedByName.Keys) {
-            if (-not $zipByName.ContainsKey($name)) { throw "Package ZIP is missing signed staging file: $name" }
-            $stagedState = $stagedStates[$name]
-            $null = Assert-StableFileState -Expected $stagedState -Label ("Signed staging package file " + $name)
-            $stagedHash = [string]$stagedState.Sha256
-            $zippedHash = Get-ZipEntrySha256 -Entry $zipByName[$name]
-            $null = Assert-StableFileState -Expected $stagedState -Label ("Signed staging package file " + $name)
-            if ($stagedHash -ne $zippedHash) { throw "Package ZIP payload does not match signed staging file: $name" }
-        }
-        if ($zipByName.Count -ne $stagedByName.Count) { throw "Package ZIP/staging file-count mismatch. ZIP=$($zipByName.Count), staging=$($stagedByName.Count)." }
-
-        foreach ($name in $SignedPayloadNames) {
-            if (-not $zipByName.ContainsKey($name)) { throw "Package ZIP is missing signed executable payload: $name" }
-            $destination = Join-Path $tempDirectory.FullName $name
-            if (Test-Path -LiteralPath $destination) { throw "Manifest verification destination already exists: $destination" }
-            $input = $zipByName[$name].Open()
-            $output = [IO.File]::CreateNew($destination)
-            try { $input.CopyTo($output) }
-            finally { $output.Dispose(); $input.Dispose() }
-            $verified = Resolve-OrdinaryNonReparseFile -Path $destination -Label 'Extracted manifest verification payload'
-            Assert-AuthenticodeSigner -Path $verified.FullName -ExpectedSigner $ExpectedSigner -Label ("Zipped QS3D executable payload " + $name)
-        }
-    }
-    finally {
-        if ($archive) { $archive.Dispose() }
-        if (Test-Path -LiteralPath $temp) {
-            $workspace = Resolve-OrdinaryNonReparseDirectory -Path $temp -Label 'Manifest verification workspace cleanup'
-            foreach ($child in @(Get-ChildItem -LiteralPath $workspace.FullName -Force)) {
-                if ($child.PSIsContainer) { throw "Unexpected directory in manifest verification workspace: $($child.FullName)" }
-                $safeChild = Resolve-OrdinaryNonReparseFile -Path $child.FullName -Label 'Manifest verification cleanup file'
-                Remove-Item -LiteralPath $safeChild.FullName -Force
-            }
-            if (@(Get-ChildItem -LiteralPath $workspace.FullName -Force).Count -ne 0) { throw 'Manifest verification workspace was not empty after bounded cleanup.' }
-            Remove-Item -LiteralPath $workspace.FullName -Force
-        }
-    }
-}
-
-$uri = $null
-if (-not [Uri]::TryCreate($PackageUri, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -ne [Uri]::UriSchemeHttps -or [string]::IsNullOrWhiteSpace($uri.Host)) { throw 'PackageUri must be an absolute HTTPS URI.' }
-if ($uri.UserInfo) { throw 'PackageUri must not contain embedded credentials.' }
-
-$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory -Label 'Signed package directory'
-$packagePath = $package.FullName.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar
-$zip = Resolve-OrdinaryNonReparseFile -Path $PackageZip -Label 'Signed package ZIP'
-$zipPath = $zip.FullName
-$outputFull = [IO.Path]::GetFullPath($OutputPath)
-if (-not [string]::Equals([IO.Path]::GetExtension($outputFull), '.json', [StringComparison]::OrdinalIgnoreCase)) { throw "OutputPath must use the .json extension: $outputFull" }
-if ([string]::Equals($outputFull, $packagePath, [StringComparison]::OrdinalIgnoreCase) -or $outputFull.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)) { throw 'OutputPath must be outside PackageDirectory so manifest generation cannot overwrite signed staging.' }
-if ([string]::Equals($outputFull, $zipPath, [StringComparison]::OrdinalIgnoreCase)) { throw 'OutputPath must not alias PackageZip.' }
-$outputParentPath = Split-Path -Parent $outputFull
-if ([string]::IsNullOrWhiteSpace($outputParentPath)) { throw 'OutputPath must have a parent directory.' }
-$outputParent = Resolve-OrdinaryNonReparseDirectory -Path $outputParentPath -Label 'Update manifest output parent'
-$hadExistingOutput = $false
-$existingOutputState = $null
-if (Test-Path -LiteralPath $outputFull) {
-    $existingOutputState = Get-StableFileState -Path $outputFull -Label 'Existing update manifest'
-    $hadExistingOutput = $true
-}
-
-$metadataFile = Resolve-OrdinaryNonReparseFile -Path (Join-Path $package.FullName 'PACKAGE-METADATA.json') -Label 'PACKAGE-METADATA.json'
-$metadataState = Get-StableFileState -Path $metadataFile.FullName -Label 'PACKAGE-METADATA.json'
-$zipState = Get-StableFileState -Path $zip.FullName -Label 'Signed package ZIP'
-$payloadFiles = @{}
-$payloadStates = @{}
-foreach ($name in $SignedPayloadNames) {
-    $payloadFiles[$name] = Resolve-OrdinaryNonReparseFile -Path (Join-Path $package.FullName $name) -Label ("Signed payload " + $name)
-    $payloadStates[$name] = Get-StableFileState -Path $payloadFiles[$name].FullName -Label ("Signed payload " + $name)
-}
-
-$metadataText = Read-BoundedStrictUtf8File -File $metadataFile -Label 'PACKAGE-METADATA.json'
-$metadataFile = Assert-StableFileState -Expected $metadataState -Label 'PACKAGE-METADATA.json'
-try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }
-catch { throw "PACKAGE-METADATA.json is invalid JSON: $($_.Exception.Message)" }
-if ([string]$metadata.product -ne 'QS3D') { throw 'PACKAGE-METADATA product must be QS3D.' }
-if ([string]$metadata.target -ne 'BricsCAD V25 x64') { throw 'PACKAGE-METADATA target must be BricsCAD V25 x64.' }
-if (-not $metadata.PSObject.Properties['version']) { throw 'PACKAGE-METADATA is missing version.' }
-if (-not $metadata.PSObject.Properties['productVersion']) { throw 'PACKAGE-METADATA is missing productVersion.' }
-try { $version = [Version]::Parse([string]$metadata.version) }
-catch { throw "PACKAGE-METADATA version is invalid: $($metadata.version)" }
-$productVersion = Convert-ToStrictSemVerText -Value ([string]$metadata.productVersion) -Label 'PACKAGE-METADATA productVersion'
-
-$expectedSigner = Normalize-Thumbprint $ExpectedSignerThumbprint
-foreach ($name in $SignedPayloadNames) {
-    Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName -ExpectedSigner $expectedSigner -Label ("QS3D executable payload " + $name)
-    $payloadFiles[$name] = Assert-StableFileState -Expected $payloadStates[$name] -Label ("Signed payload " + $name)
-}
-$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')
-$managedIdentities = @{}
-foreach ($name in $managedIdentityNames) {
-    $path = $payloadFiles[$name].FullName
-    $assemblyVersion = Read-ManagedAssemblyVersion -Path $path -Label $name
-    $payloadFiles[$name] = Assert-StableFileState -Expected $payloadStates[$name] -Label ("Signed payload " + $name)
-    if ($version -ne $assemblyVersion) { throw "PACKAGE-METADATA version $version does not match signed $name assembly version $assemblyVersion." }
-    $managedProductVersion = Read-ManagedProductVersion -Path $payloadFiles[$name].FullName -Label $name
-    $payloadFiles[$name] = Assert-StableFileState -Expected $payloadStates[$name] -Label ("Signed payload " + $name)
-    if (-not [string]::Equals($productVersion, $managedProductVersion, [StringComparison]::Ordinal)) { throw "PACKAGE-METADATA productVersion $productVersion does not match signed $name product version $managedProductVersion." }
-    $managedIdentities[$name] = [pscustomobject]@{ AssemblyVersion = $assemblyVersion; ProductVersion = $managedProductVersion }
-}
-$signedPluginVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].AssemblyVersion
-$signedPluginProductVersion = $managedIdentities['QS3D.BricsCAD.V25.dll'].ProductVersion
-Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package -ExpectedSigner $expectedSigner
-$zip = Assert-StableFileState -Expected $zipState -Label 'Signed package ZIP'
-
-$zipHash = [string]$zipState.Sha256
-$manifest = [ordered]@{
-    schemaVersion = 2
-    product = 'QS3D'
-    target = 'BricsCAD V25 x64'
-    productVersion = $signedPluginProductVersion
-    version = $signedPluginVersion.ToString()
-    packageUri = $uri.AbsoluteUri
-    sha256 = $zipHash
-    signerThumbprint = $expectedSigner
-    generatedUtc = [DateTime]::UtcNow.ToString('o')
-}
-
-if ($PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
-    $manifestJson = $manifest | ConvertTo-Json
-    $utf8NoBom = [Text.UTF8Encoding]::new($false, $true)
-    $nonce = [Guid]::NewGuid().ToString('N')
-    $stagePath = Join-Path $outputParent.FullName (([IO.Path]::GetFileName($outputFull)) + ".tmp-$nonce")
-    $backupPath = Join-Path $outputParent.FullName (([IO.Path]::GetFileName($outputFull)) + ".bak-$nonce")
-    if (Test-Path -LiteralPath $stagePath) { throw "Refusing to reuse update-manifest staging path: $stagePath" }
-    if (Test-Path -LiteralPath $backupPath) { throw "Refusing to reuse update-manifest backup path: $backupPath" }
-    $preserveBackup = $false
-    try {
-        [IO.File]::WriteAllText($stagePath, $manifestJson + [Environment]::NewLine, $utf8NoBom)
-        $stage = Resolve-OrdinaryNonReparseFile -Path $stagePath -Label 'Update manifest staging file'
-        if ($hadExistingOutput) {
-            $null = Assert-StableFileState -Expected $existingOutputState -Label 'Existing update manifest before publication'
-            [IO.File]::Replace($stage.FullName, $outputFull, $backupPath, $true)
-        }
-        else { [IO.File]::Move($stage.FullName, $outputFull) }
-        $published = Resolve-OrdinaryNonReparseFile -Path $outputFull -Label 'Published update manifest'
-        $publishedText = Read-BoundedStrictUtf8File -File $published -Label 'Published update manifest'
+        $publishedText = [Text.UTF8Encoding]::new($false, $true).GetString($publishedBytes)
         $null = $publishedText | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
-        $publishFailure = $_
+        throw "Published update manifest failed strict UTF-8/JSON verification through the owned generation: $($_.Exception.Message)"
+    }
+
+    if ($priorOwned) {
+        [Qs3dV25UpdateManifestPublicationNative]::DeleteOwnedGeneration($priorOwned)
+    }
+    $publicationCommitted = $true
+}
+catch {
+    $publishFailure = $_
+    if ($stageOwned) {
         try {
-            if ($hadExistingOutput) {
-                $backup = Resolve-OrdinaryNonReparseFile -Path $backupPath -Label 'Update manifest rollback backup'
-                if (Test-Path -LiteralPath $outputFull) {
-                    $null = Resolve-OrdinaryNonReparseFile -Path $outputFull -Label 'Failed published update manifest'
-                    [IO.File]::Replace($backup.FullName, $outputFull, $null, $true)
+            [Qs3dV25UpdateManifestPublicationNative]::RollbackOwnedGeneration(
+                $stageOwned,
+                $priorOwned,
+                $outputFull,
+                $stagePath)
+            if ($priorOwned) {
+                [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($priorOwned, $outputFull)
+                $restoredBytes = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($priorOwned, [int]$script:MaxMetadataBytes)
+                $restoredHash = Get-ByteArraySha256Hex -Bytes $restoredBytes
+                if ([long]$restoredBytes.Length -ne [long]$existingOutputState.Length -or
+                    -not [string]::Equals($restoredHash, [string]$existingOutputState.Sha256, [StringComparison]::Ordinal)) {
+                    throw 'Rollback restored a generation whose exact bytes do not match the admitted prior manifest.'
                 }
-                else {
-                    [IO.File]::Move($backup.FullName, $outputFull)
-                }
-                $null = Assert-StableFileState -Expected $existingOutputState -Label 'Restored update manifest'
-            }
-            elseif (Test-Path -LiteralPath $outputFull) {
-                $failedOutput = Resolve-OrdinaryNonReparseFile -Path $outputFull -Label 'Failed published update manifest'
-                [IO.File]::Delete($failedOutput.FullName)
-                if (Test-Path -LiteralPath $outputFull) { throw 'Failed published update manifest remained after rollback cleanup.' }
             }
         }
         catch {
-            $preserveBackup = $hadExistingOutput -and (Test-Path -LiteralPath $backupPath)
-            $backupHint = if ($preserveBackup) { " Backup retained at $backupPath." } else { '' }
-            throw "Update manifest publication failed and rollback could not restore the prior generation: $($_.Exception.Message).$backupHint"
-        }
-        throw $publishFailure
-    }
-    finally {
-        if (Test-Path -LiteralPath $stagePath) {
-            $stage = Resolve-OrdinaryNonReparseFile -Path $stagePath -Label 'Update manifest staging cleanup'
-            [IO.File]::Delete($stage.FullName)
-        }
-        if (-not $preserveBackup -and (Test-Path -LiteralPath $backupPath)) {
-            $backup = Resolve-OrdinaryNonReparseFile -Path $backupPath -Label 'Update manifest backup cleanup'
-            [IO.File]::Delete($backup.FullName)
+            $priorHint = if ($priorOwned) { " Prior held generation path: $($priorOwned.CurrentPath)." } else { '' }
+            throw "Update manifest publication failed and generation-owned rollback could not prove restoration: $($_.Exception.Message).$priorHint"
         }
     }
+    throw $publishFailure
+}
+finally {
+    if ($stageOwned) { $stageOwned.Dispose() }
+    if ($priorOwned) { $priorOwned.Dispose() }
+}
+
+if (-not $publicationCommitted) {
+    throw 'Update manifest publication did not reach a committed held-generation state.'
 }
 
 Write-Host "Update manifest: $outputFull"
