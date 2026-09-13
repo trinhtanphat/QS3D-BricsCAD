@@ -95,11 +95,7 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
-            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
-            {
-                ShowUnavailable("Bản vẽ đã đổi generation; Project Information đã xóa dữ liệu cũ.");
-                return;
-            }
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
 
             try
             {
@@ -125,11 +121,7 @@ namespace QS3D.BricsCAD.V25.UI
                     project.Zones.Count, project.Floors.Count, project.Families.Count,
                     project.Elements.Count, project.QuantityRules.Count);
 
-                if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
-                {
-                    ShowUnavailable("Bản vẽ đã đổi generation trong lúc refresh; dữ liệu cũ đã được xóa.");
-                    return;
-                }
+                if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
 
                 _heading.Text = heading;
                 _status.Text = "Chỉ đọc • dữ liệu được resolve lại từ project của bản vẽ active mỗi lần mở/chuyển bản vẽ.";
@@ -147,8 +139,6 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
                     ShowUnavailable("Không thể đọc Project Information an toàn từ bản vẽ hiện hành. Dữ liệu cũ đã được xóa; hãy kiểm tra project/sidecar rồi thử lại.");
-                else
-                    ShowUnavailable("Bản vẽ đã đổi generation trong lúc refresh; dữ liệu cũ đã được xóa.");
             }
         }
 
