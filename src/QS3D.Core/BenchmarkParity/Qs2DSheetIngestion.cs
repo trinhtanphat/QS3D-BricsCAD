@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -39,6 +40,7 @@ namespace QS3D.Core.BenchmarkParity
         {
             RequirePayload(payload);
             if (pageNumber < 1) throw new ArgumentOutOfRangeException("pageNumber");
+            ValidateRecognizedSourceReference(sourceReference, DrawingSheetSourceKind.Pdf);
             ValidatePdfPayload(payload);
 
             var sheet = new DrawingSheet2D(id, name, DrawingSheetSourceKind.Pdf, sourceReference, revision, calibration);
@@ -48,6 +50,7 @@ namespace QS3D.Core.BenchmarkParity
         public IngestedDrawingSheet2D IngestRaster(string id, string name, string sourceReference, string revision, DrawingCalibration calibration, byte[] payload)
         {
             RequirePayload(payload);
+            ValidateRecognizedSourceReference(sourceReference, DrawingSheetSourceKind.RasterImage);
             RasterSheetFormat format;
             int width;
             int height;
@@ -63,6 +66,39 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (payload == null) throw new ArgumentNullException("payload");
             if (payload.Length == 0) throw new ArgumentException("Sheet payload cannot be empty.", "payload");
+        }
+
+        private static void ValidateRecognizedSourceReference(string sourceReference, DrawingSheetSourceKind sourceKind)
+        {
+            var reference = QsModelElementSnapshot.Require(sourceReference, "sourceReference");
+            var path = SourcePath(reference);
+            var extension = Path.GetExtension(path);
+            if (string.IsNullOrWhiteSpace(extension)) return;
+
+            var isPdf = string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase);
+            var isRaster = string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase);
+            if (!isPdf && !isRaster) return;
+
+            if (sourceKind == DrawingSheetSourceKind.Pdf && !isPdf)
+                throw new ArgumentException("PDF sheet ingestion cannot use a recognized raster-image source reference.", "sourceReference");
+            if (sourceKind == DrawingSheetSourceKind.RasterImage && !isRaster)
+                throw new ArgumentException("Raster sheet ingestion cannot use a recognized PDF source reference.", "sourceReference");
+        }
+
+        private static string SourcePath(string sourceReference)
+        {
+            Uri uri;
+            if (Uri.TryCreate(sourceReference, UriKind.Absolute, out uri) && !string.IsNullOrEmpty(uri.AbsolutePath))
+                return uri.AbsolutePath;
+
+            var end = sourceReference.Length;
+            var query = sourceReference.IndexOf('?');
+            if (query >= 0 && query < end) end = query;
+            var fragment = sourceReference.IndexOf('#');
+            if (fragment >= 0 && fragment < end) end = fragment;
+            return sourceReference.Substring(0, end);
         }
 
         private static void ValidatePdfPayload(byte[] payload)
