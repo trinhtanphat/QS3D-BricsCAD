@@ -169,7 +169,7 @@ namespace QS3D.Core.BenchmarkParity
                 {
                     var classification = g.Select(x => x.InventoryClassification).OrderBy(x => x, StringComparer.Ordinal).First();
                     var unit = g.Select(x => x.Unit).OrderBy(x => x, StringComparer.Ordinal).First();
-                    var quantity = CompensatedSum(g.Select(x => x.Quantity), classification + "/" + unit);
+                    var quantity = CubicostQuantityAggregation.SumFinite(g.Select(x => x.Quantity), classification + "/" + unit);
                     var count = g.Select(x => x.ComponentId).Distinct(StringComparer.OrdinalIgnoreCase).Count();
                     return new TakeoffInventoryLine(classification, unit, quantity, count);
                 })
@@ -196,26 +196,6 @@ namespace QS3D.Core.BenchmarkParity
                 var key = new DownstreamLineKey(line.ComponentId, line.InventoryClassification, line.Unit);
                 if (!keys.Add(key)) throw new InvalidOperationException("Duplicate Cubicost downstream line: " + line.ComponentId + "/" + line.InventoryClassification + ".");
             }
-        }
-
-        private static double CompensatedSum(IEnumerable<double> values, string label)
-        {
-            var sum = 0d;
-            var compensation = 0d;
-            foreach (var value in values)
-            {
-                if (double.IsNaN(value) || double.IsInfinity(value)) throw new InvalidOperationException("Invalid Cubicost inventory quantity for " + label + ".");
-                var next = sum + value;
-                if (double.IsNaN(next) || double.IsInfinity(next)) throw new InvalidOperationException("Cubicost inventory quantity overflow for " + label + ".");
-                var correction = Math.Abs(sum) >= Math.Abs(value) ? (sum - next) + value : (value - next) + sum;
-                compensation += correction;
-                if (double.IsNaN(compensation) || double.IsInfinity(compensation)) throw new InvalidOperationException("Cubicost inventory compensation overflow for " + label + ".");
-                sum = next;
-            }
-
-            var result = sum + compensation;
-            if (double.IsNaN(result) || double.IsInfinity(result)) throw new InvalidOperationException("Cubicost inventory quantity overflow for " + label + ".");
-            return result == 0d ? 0d : result;
         }
 
         private static void ValidateQuantity(double quantity, string componentId, string kind)
