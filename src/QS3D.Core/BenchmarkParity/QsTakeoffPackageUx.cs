@@ -220,7 +220,21 @@ namespace QS3D.Core.BenchmarkParity
             if (issues.Any(x => x.Severity == TakeoffPackageValidationSeverity.Error))
                 return new TakeoffPackageBuildResult(package, TakeoffPackageReadiness.Blocked, sources, issues, Enumerable.Empty<TakeoffWorkflowLine>());
 
-            var inventory = new AutodeskTakeoffWorkflow().BuildInventoryAndEstimate(evidence, bim, formula, rateProvider);
+            IReadOnlyList<TakeoffWorkflowLine> inventory;
+            try
+            {
+                inventory = new AutodeskTakeoffWorkflow().BuildInventoryAndEstimate(evidence, bim, formula, rateProvider);
+            }
+            catch (Exception ex) when (!(ex is OutOfMemoryException) && !(ex is StackOverflowException))
+            {
+                issues.Add(new TakeoffPackageValidationIssue(
+                    "PKG.EVALUATION_FAILED",
+                    TakeoffPackageValidationSeverity.Error,
+                    package.Id,
+                    "Takeoff package formula/rate evaluation failed: " + ex.Message));
+                return new TakeoffPackageBuildResult(package, TakeoffPackageReadiness.Blocked, sources, issues, Enumerable.Empty<TakeoffWorkflowLine>());
+            }
+
             var readiness = inventory.Count == 0 ? TakeoffPackageReadiness.Draft : TakeoffPackageReadiness.Ready;
             return new TakeoffPackageBuildResult(package, readiness, sources, issues, inventory);
         }
