@@ -128,6 +128,7 @@ namespace QS3D.BricsCAD.V25
         private TextBlock _openAiClientPathText = new TextBlock();
         private McpTransportProvider? _renderedConnectionProvider;
         private int _localOperationActive;
+        private int _backgroundOperationGeneration;
         private DispatcherTimer? _quickUrlTimer;
         private DispatcherTimer? _liveRefreshTimer;
         private int _quickUrlPollTicks;
@@ -152,6 +153,7 @@ namespace QS3D.BricsCAD.V25
         private void OnWindowClosed(object? sender, EventArgs e)
         {
             _closed = true;
+            Interlocked.Increment(ref _backgroundOperationGeneration);
             StopQuickUrlPolling();
             StopLiveRefresh();
             ClearVisibleToasts();
@@ -1791,20 +1793,21 @@ namespace QS3D.BricsCAD.V25
                 }
                 ownsSlot = true;
             }
+            var operationGeneration = Volatile.Read(ref _backgroundOperationGeneration);
             McpAgentExperience.ActionStarted("agent", pendingMessage, "Chờ local loopback operation hoàn tất.");
             ShowToast(ToastKind.Info, "MCP local check", pendingMessage);
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 string message;
+                var failed = false;
                 try
                 {
                     message = action();
-                    McpAgentExperience.Success("agent", message, "Refresh status hoặc tiếp tục workflow.");
                 }
                 catch (Exception ex)
                 {
-                    message = "MCP local operation FAIL: " + ex.Message;
-                    McpAgentExperience.Error("agent", message, "Kiểm tra embedded MCP/tunnel và thử lại.");
+                    failed = true;
+                    message = "MCP local operation FAIL: " + SanitizeBackgroundFailure(ex);
                 }
                 finally
                 {
@@ -1814,8 +1817,11 @@ namespace QS3D.BricsCAD.V25
                 {
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        var failed = message.IndexOf("FAIL", StringComparison.OrdinalIgnoreCase) >= 0
-                                     || message.IndexOf("ERROR", StringComparison.OrdinalIgnoreCase) >= 0;
+                        if (_closed || operationGeneration != Volatile.Read(ref _backgroundOperationGeneration)) return;
+                        if (failed)
+                            McpAgentExperience.Error("agent", message, "Kiểm tra embedded MCP/tunnel và thử lại.");
+                        else
+                            McpAgentExperience.Success("agent", message, "Refresh status hoặc tiếp tục workflow.");
                         ShowToast(failed ? ToastKind.Error : ToastKind.Success,
                             failed ? "MCP operation thất bại" : "MCP operation hoàn tất", message);
                         RefreshStatus();
@@ -1823,6 +1829,12 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch { }
             });
+        }
+
+        private static string SanitizeBackgroundFailure(Exception ex)
+        {
+            var message = ex == null ? string.Empty : ex.Message;
+            return McpPublicTextSanitizer.Sanitize(string.IsNullOrWhiteSpace(message) ? "Background MCP operation failed." : message);
         }
 
         private void OpenAuditFolder()
