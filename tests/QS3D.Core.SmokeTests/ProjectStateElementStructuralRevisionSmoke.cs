@@ -176,16 +176,30 @@ namespace QS3D.Core.SmokeTests
             var project = Project();
             var first = Audit("first");
             project.AuditEvents.Add(first);
-            var invalid = new AuditEvent
+            var invalidAdd = new AuditEvent
             {
                 Utc = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Local),
-                Action = " invalid "
+                Action = " invalid-add "
+            };
+            var invalidInsert = new AuditEvent
+            {
+                Utc = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Local),
+                Action = " invalid-insert "
+            };
+            var invalidReplacement = new AuditEvent
+            {
+                Utc = new DateTime(2026, 9, 12, 0, 0, 0, DateTimeKind.Local),
+                Action = " invalid-replacement "
             };
             var version = project.ChangeVersion;
             var count = project.AuditEvents.Count;
 
-            Throws<ArgumentException>(() => project.AuditEvents.Add(invalid));
+            Throws<ArgumentException>(() => project.AuditEvents.Add(invalidAdd));
             AssertAuditUnchanged(project, version, count, first, "audit invalid structural Add");
+            Throws<ArgumentException>(() => project.AuditEvents.Insert(0, invalidInsert));
+            AssertAuditUnchanged(project, version, count, first, "audit invalid structural Insert");
+            Throws<ArgumentException>(() => project.AuditEvents[0] = invalidReplacement);
+            AssertAuditUnchanged(project, version, count, first, "audit invalid structural index replacement");
         }
 
         private static void AuditEventPropertyMutationsAdvanceExactlyOnce()
