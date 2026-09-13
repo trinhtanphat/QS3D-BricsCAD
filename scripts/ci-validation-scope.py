@@ -223,6 +223,32 @@ def classify_paths(paths: list[str]) -> tuple[bool, bool]:
     return source, build
 
 
+def validate_agent_pr_candidate_ancestry() -> None:
+    """Run the exact-head agent ancestry admission before any PR scope can be downgraded."""
+    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
+        return
+    guard = ROOT / "scripts" / "preflight-pr-candidate-ancestry.py"
+    result = run_bounded_process(
+        [sys.executable, str(guard), "--verify-runtime"],
+        cwd=ROOT,
+        timeout_seconds=GIT_DIFF_TIMEOUT_SECONDS,
+        max_stdout_bytes=MAX_GIT_DIAGNOSTIC_BYTES,
+        max_stderr_bytes=MAX_GIT_DIAGNOSTIC_BYTES,
+    )
+    stdout = result.stdout.decode("utf-8", errors="replace").strip()
+    stderr = result.stderr.decode("utf-8", errors="replace").strip()
+    if result.returncode != 0:
+        detail = "\n".join(part for part in (stdout, stderr) if part)
+        raise ScopeError(
+            "agent PR candidate ancestry admission failed"
+            + (f": {detail}" if detail else f" (exit={result.returncode})")
+        )
+    if stdout:
+        print(stdout)
+    if stderr:
+        print(stderr, file=sys.stderr)
+
+
 def changed_paths(base_ref: str, head_ref: str = "HEAD", root: Path = ROOT) -> list[str]:
     result = run_bounded_process(
         [
@@ -274,6 +300,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
+        validate_agent_pr_candidate_ancestry()
         if args.all:
             paths: list[str] = []
             source, build = True, True

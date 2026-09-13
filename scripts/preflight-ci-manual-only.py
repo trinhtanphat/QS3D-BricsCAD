@@ -551,12 +551,13 @@ for path, text in workflow_sources:
             "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}",
             "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "autoMergeRequest",
             "no-automerge", "head.repo.full_name", "base.ref", "draft", "dependabot[bot]",
-            "/update-branch", "expected_head_sha", "update_method=rebase", "update_method=merge",
-            "Update with rebase", "Update with main", "HTTP (409|422)",
+            "/update-branch", "expected_head_sha", "update_method=rebase",
+            "Update with rebase", "HTTP (409|422)", "clean replay/rebuild",
         ), path.name)
         for forbidden in (
             "workflow_dispatch", "workflow_run", "pull_request_target", "contents: write", "issues: write",
             "gh pr merge", "git push", "git reset", "--force", "gh workflow run", "gh release",
+            "update_method=merge",
         ):
             if forbidden in text:
                 errors.append(f"{path.name}: hybrid coordinator contains forbidden token: {forbidden}")
@@ -572,14 +573,20 @@ for path, text in workflow_sources:
         refresh_block = "\n".join(refresh_lines)
         require_tokens(
             arm_block,
-            ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "update_method=merge"),
+            ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "clean replay/rebuild"),
             f"{path.name}/arm-native-automerge",
         )
         require_tokens(
             refresh_block,
-            ("github.event_name == 'push'", "github.ref == 'refs/heads/main'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "update_method=merge"),
+            ("github.event_name == 'push'", "github.ref == 'refs/heads/main'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "clean replay/rebuild"),
             f"{path.name}/refresh-branches",
         )
+        if "update_method=merge" in arm_block or "update_method=merge" in refresh_block:
+            errors.append(f"{path.name}: coordinator jobs must never merge protected main into an active PR carrier")
+        if text.count("update_method=rebase") != 2:
+            errors.append(f"{path.name}: coordinator must expose exactly two rebase-only update paths")
+        if text.count("clean replay/rebuild") != 2:
+            errors.append(f"{path.name}: each declined rebase path must require clean replay/rebuild")
         if normalize_expression(extract_job_if_expression(arm_lines)) != "github.event_name == 'pull_request'":
             errors.append(f"{path.name}/arm-native-automerge: job must be pull_request-only")
         if normalize_expression(extract_job_if_expression(refresh_lines)) != "github.event_name == 'push' && github.ref == 'refs/heads/main'":
@@ -643,5 +650,5 @@ if errors:
 
 print(
     "PASS: every agent/integration push produces exact-head branch CI, every PR emits stable required contexts, governance/docs-only candidates remain lightweight through internal scope classification, "
-    "build-relevant candidates run Core plus V25 compile, the protected Hybrid PR Coordinator is rebase-first with merge-main fallback and native auto-merge only, main owns exact-source V25 dispatch with a bounded successful-release wakeup, and releases retain explicit confirmation."
+    "build-relevant candidates run Core plus V25 compile, the protected Hybrid PR Coordinator is rebase-only and leaves declined updates unchanged for clean replay/rebuild while native auto-merge owns final main integration, main owns exact-source V25 dispatch with a bounded successful-release wakeup, and releases retain explicit confirmation."
 )

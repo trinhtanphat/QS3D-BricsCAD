@@ -106,20 +106,8 @@ jobs:
             fi
 
             if grep -Eq 'HTTP (409|422)' <<<"$rebase_output"; then
-              echo "::notice::Rebase update declined for PR #${PR_NUMBER}; trying Update with main (merge): ${rebase_output}"
-              merge_output=""
-              if merge_output="$(gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/update-branch" \
-                -f expected_head_sha="$api_head_sha" \
-                -f update_method=merge 2>&1)"; then
-                echo "Update with main accepted for PR #${PR_NUMBER}; fresh synchronize CI owns the new head."
-                exit 0
-              fi
-              if grep -Eq 'HTTP (409|422)' <<<"$merge_output"; then
-                echo "::notice::PR #${PR_NUMBER} has a real unresolved update conflict; both rebase and merge-main were safely declined: ${merge_output}"
-                exit 0
-              fi
-              echo "::error::Unexpected merge-main update failure for PR #${PR_NUMBER}: ${merge_output}"
-              exit 1
+              echo "::notice::Rebase update declined for PR #${PR_NUMBER}; leaving the topic branch unchanged. Use a clean replay/rebuild from current protected main instead of merging main into the carrier: ${rebase_output}"
+              exit 0
             fi
 
             echo "::error::Unexpected rebase update failure for PR #${PR_NUMBER}: ${rebase_output}"
@@ -281,20 +269,8 @@ jobs:
             fi
 
             if grep -Eq 'HTTP (409|422)' <<<"$rebase_output"; then
-              echo "::notice::Rebase update declined for PR #${number}; trying Update with main (merge): ${rebase_output}"
-              merge_output=""
-              if merge_output="$(gh api --method PUT "repos/${GITHUB_REPOSITORY}/pulls/${number}/update-branch" \
-                -f expected_head_sha="$current_head_sha" \
-                -f update_method=merge 2>&1)"; then
-                echo "Update with main accepted for PR #${number}."
-                continue
-              fi
-              if grep -Eq 'HTTP (409|422)' <<<"$merge_output"; then
-                echo "::notice::PR #${number} has a real unresolved update conflict; both rebase and merge-main were safely declined: ${merge_output}"
-                continue
-              fi
-              echo "::error::Unexpected merge-main update failure for PR #${number}: ${merge_output}"
-              exit 1
+              echo "::notice::Rebase update declined for PR #${number}; leaving the topic branch unchanged. Use a clean replay/rebuild from current protected main instead of merging main into the carrier: ${rebase_output}"
+              continue
             fi
 
             echo "::error::Unexpected rebase update failure for PR #${number}: ${rebase_output}"
