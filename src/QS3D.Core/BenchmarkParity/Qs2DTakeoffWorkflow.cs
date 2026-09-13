@@ -150,6 +150,7 @@ namespace QS3D.Core.BenchmarkParity
             if (previous == null) throw new ArgumentNullException("previous");
             if (current == null) throw new ArgumentNullException("current");
             if (!string.Equals(previous.Sheet.Id, current.Sheet.Id, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Revision compare requires the same logical sheet id.");
+            if (string.Equals(previous.Sheet.Revision, current.Sheet.Revision, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Revision compare requires distinct drawing revision identifiers.");
             var oldById = previous.Evidence.ToDictionary(x => x.MarkupId, StringComparer.OrdinalIgnoreCase);
             var newById = current.Evidence.ToDictionary(x => x.MarkupId, StringComparer.OrdinalIgnoreCase);
             var ids = oldById.Keys.Union(newById.Keys, StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase);
