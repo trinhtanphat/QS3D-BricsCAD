@@ -37,11 +37,9 @@ if ($RenderExperiment -and ($NativeApi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) 
 }
 $operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$source = 'af6c585190efb80581e286add7027540e7cc7c52'
-$v25PackageSha256 = '039c0db69bf735ff3811cfbfb8dddfcc67deaaf87fa4c8bf8d29c189bc206b21'
-# V25 can qualify its reporting cell independently. Never admit the historical
-# V26 archive as this source: its actual SDK build currently fails CA2255.
-if (26 -eq $HostMajor) { throw 'Current-source V26 package unavailable: CA2255 in UiInfoTooltipBootstrap. No allocation or mutation.' }
+$source = 'd5e5e3851125b279bc6807074a34f8de2700cef5'
+$v25PackageSha256 = 'e27d645b88af709369ac8c04b96fff43b8c688496b8908694825b7491efc2633'
+# Matched V25/V26 identities are frozen; V26 still requires a cleaned V25 predecessor.
 $base = Join-Path $taskRepo 'artifacts\issue-5718-local022'
 $runRoot = Join-Path $base $AllocationName
 $restoreRoot = Join-Path $base ($AllocationName + '-autostart-recovery')
@@ -170,7 +168,7 @@ try {
     $parameters = @{
         ProductDir = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor"
         PackageZip = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor.zip"
-        PackageSha256 = if ($HostMajor -eq 25) { $v25PackageSha256 } else { '30a0a6a99875468ac5063f2397903cc913089f84410bf9d57bc3901ab2d04c1b' }
+        PackageSha256 = if ($HostMajor -eq 25) { $v25PackageSha256 } else { 'a2e358d3aa5c661249f4df00631506c3773efe7e8e26f47a8187b4b600820ec2' }
         ProductSourceSha = $source
         ProbeDll = Join-Path $taskRepo "tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$framework\QS3D.LocalQualification.V$HostMajor.dll"
         ArtifactDir = $runRoot

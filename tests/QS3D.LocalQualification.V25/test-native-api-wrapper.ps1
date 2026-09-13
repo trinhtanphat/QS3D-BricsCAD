@@ -80,11 +80,11 @@ foreach ($HostMajor in @(25,26)) {
                     $UiDriver -cne $mode.UiDriver -or $PauseForOperator -ne $mode.Pause -or -not $ConfirmDisposableCopy) {
                     throw 'FAIL: wrapper changed runner mode or disposable authorization.'
                 }
-                $expectedHash = if ($HostMajor -eq 25) { '039c0db69bf735ff3811cfbfb8dddfcc67deaaf87fa4c8bf8d29c189bc206b21' }
-                    else { '30a0a6a99875468ac5063f2397903cc913089f84410bf9d57bc3901ab2d04c1b' }
+                $expectedHash = if ($HostMajor -eq 25) { 'e27d645b88af709369ac8c04b96fff43b8c688496b8908694825b7491efc2633' }
+                    else { 'a2e358d3aa5c661249f4df00631506c3773efe7e8e26f47a8187b4b600820ec2' }
                 $expectedTimeout = if ($mode.UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
                 $expectedFramework = if ($HostMajor -eq 25) { 'net48' } else { 'net8.0-windows' }
-                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne 'af6c585190efb80581e286add7027540e7cc7c52' -or
+                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne 'd5e5e3851125b279bc6807074a34f8de2700cef5' -or
                     $ProductDir -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor" -or
                     $PackageZip -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor.zip" -or
                     $ProbeDll -cne "C:\host-free-harness\tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$expectedFramework\QS3D.LocalQualification.V$HostMajor.dll" -or
@@ -103,24 +103,13 @@ foreach ($HostMajor in @(25,26)) {
 $helper = $ast.Find({ param($node)
     $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Assert-Local022NativeV25Predecessor'
 }, $true)
-# The archived V26 forwarding branch below remains for future exact-pair
-# admission, but the actual entry point must reject V26 before machine setup.
+# A matched current V26 package exists. The wrapper must not refuse V26 before
+# the existing cleaned-V25 predecessor/provenance gate is evaluated.
 $unavailable = @($ast.EndBlock.Statements | Where-Object {
     $_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if (26 -eq $HostMajor)')
 })
-if ($unavailable.Count -ne 1 -or $unavailable[0].Extent.EndOffset -gt (Get-WrapperAssignment 'base').Extent.StartOffset) {
-    throw 'FAIL: current-source V26 must refuse before allocation and machine setup.'
-}
-$refusal = [scriptblock]::Create($unavailable[0].Extent.Text)
-& { $HostMajor = 25; & $refusal }
-$refused = $false
-try { & { $HostMajor = 26; & $refusal } } catch {
-    if ($_.Exception.Message -cne 'Current-source V26 package unavailable: CA2255 in UiInfoTooltipBootstrap. No allocation or mutation.') { throw }
-    $refused = $true
-}
-if (-not $refused) { throw 'FAIL: unmatched V26 package was admitted.' }
-Write-Output 'PASS: current V26 build failure refuses before machine setup; V25 remains admitted.'
-if ($null -eq $helper) { throw 'FAIL: native V25 predecessor assertion missing.' }
+if ($unavailable.Count) { throw 'FAIL: matched current V26 package is still hard-blocked before predecessor admission.' }
+Write-Output 'PASS: matched current V26 package reaches the existing predecessor/provenance admission gate.'if ($null -eq $helper) { throw 'FAIL: native V25 predecessor assertion missing.' }
 . ([scriptblock]::Create($helper.Extent.Text))
 $v26Gate = @($ast.EndBlock.Statements | Where-Object {
     $_ -is [Management.Automation.Language.IfStatementAst] -and $_.Extent.Text.StartsWith('if ($HostMajor -eq 26)')
@@ -131,7 +120,7 @@ function New-NativePredecessor {
     [pscustomobject]@{
         Receipt = [pscustomobject]@{
             schema='QS3D_LOCAL022_RECEIPT_V1'; run_id=('a' * 32); status='LOCAL_PASS_BOUNDED'
-            product_source_sha='e768d19f967e010d0343f446b98b561dce7c24bb'; phases_verified=3
+            product_source_sha='d5e5e3851125b279bc6807074a34f8de2700cef5'; phases_verified=3
             interactive_ui_executed=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
             private_cleanup_verified=$true; protected_state_unchanged=$true
             profile_cleanup=[pscustomobject]@{
@@ -141,8 +130,8 @@ function New-NativePredecessor {
         }
         Allocation = [pscustomobject]@{
             schema='QS3D_LOCAL022_ALLOCATION_V1'; run_id=('a' * 32); host_version='25.2.10'
-            product_source_sha='e768d19f967e010d0343f446b98b561dce7c24bb'
-            package_sha256='15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa'
+            product_source_sha='d5e5e3851125b279bc6807074a34f8de2700cef5'
+            package_sha256='e27d645b88af709369ac8c04b96fff43b8c688496b8908694825b7491efc2633'
             interactive_ui=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
         }
         Restoration = [pscustomobject]@{ restored=$true }
@@ -151,8 +140,8 @@ function New-NativePredecessor {
 function Invoke-PredecessorGate($Fixture, [bool]$Native=$true) {
     $HostMajor=26; $NativeApi=$Native; $UiDriver='NATIVE_V1'; $operatorWaitPolicy='WALL_CLOCK_V1'; $QuantityUi=$false
     $PrecedingV25Receipt='C:\host-free-receipts\native-v25\receipt.json'; $V26ProvenancePath='C:\host-free-provenance.json'
-    $source='e768d19f967e010d0343f446b98b561dce7c24bb'
-    $v25PackageSha256='15b86bcdacdd614fb785143f49e4d51e90bc380c2b216c583acebcc35abccdaa'
+    $source='d5e5e3851125b279bc6807074a34f8de2700cef5'
+    $v25PackageSha256='e27d645b88af709369ac8c04b96fff43b8c688496b8908694825b7491efc2633'
     $script:phaseAdmissionCalled=$false
     function Assert-Local022NativeV25Phases($RunnerPath,$EvidenceRoot,$ExpectedRunId) {
         if ((Split-Path $RunnerPath -Leaf) -cne 'test-bricscad-v25-single-footing.ps1' -or
