@@ -35,15 +35,18 @@ for label, start, parse in (
     if "Get-JsonPropertyOccurrenceCount" not in segment:
         raise SystemExit(f"ERROR: {label} identity cardinality must be proved before ConvertFrom-Json")
 
+# PowerShell single-quoted strings do not use backslash as an escape character.
+# Keep these fixtures as literal valid JSON so the behavioral probe tests the
+# path-scoped parser rather than failing on malformed C-style escaped text.
 probe = helper_block + r'''
 $cases = @(
-    @{ Json='{"product":"QS3D"}'.Replace('\"','"'); Name='product'; Expected=1 },
-    @{ Json='{"product":"QS3D","PRODUCT":"evil"}'.Replace('\"','"'); Name='product'; Expected=2 },
-    @{ Json='{"product":"QS3D","pro\u0064uct":"evil"}'.Replace('\"','"'); Name='product'; Expected=2 },
-    @{ Json='{"product":"QS3D","extension":{"product":"diagnostic"}}'.Replace('\"','"'); Name='product'; Expected=1 },
-    @{ Json='{"sourceCommit":"0123456789012345678901234567890123456789","extension":{"sourceCommit":"ignored"}}'.Replace('\"','"'); Name='sourceCommit'; Expected=1 },
-    @{ Json='{"framework":"net8.0-windows","extension":[{"framework":"ignored"}]}'.Replace('\"','"'); Name='framework'; Expected=1 },
-    @{ Json='{"schemaVersion":2,"extension":{"schemaVersion":999}}'.Replace('\"','"'); Name='schemaVersion'; Expected=1 }
+    @{ Json='{"product":"QS3D"}'; Name='product'; Expected=1 },
+    @{ Json='{"product":"QS3D","PRODUCT":"evil"}'; Name='product'; Expected=2 },
+    @{ Json='{"product":"QS3D","pro\u0064uct":"evil"}'; Name='product'; Expected=2 },
+    @{ Json='{"product":"QS3D","extension":{"product":"diagnostic"}}'; Name='product'; Expected=1 },
+    @{ Json='{"sourceCommit":"0123456789012345678901234567890123456789","extension":{"sourceCommit":"ignored"}}'; Name='sourceCommit'; Expected=1 },
+    @{ Json='{"framework":"net8.0-windows","extension":[{"framework":"ignored"}]}'; Name='framework'; Expected=1 },
+    @{ Json='{"schemaVersion":2,"extension":{"schemaVersion":999}}'; Name='schemaVersion'; Expected=1 }
 )
 foreach ($case in $cases) {
     $actual = Get-JsonPropertyOccurrenceCount -JsonText $case.Json -PropertyName $case.Name
