@@ -29,12 +29,20 @@ def fake_gate(module, name="preflight-fake-budget-probe.py"):
 
 
 def test_budget_math(module):
-    require(module.AGGREGATE_TIMEOUT_SECONDS == 15 * 60, "aggregate budget must remain 15 minutes")
+    require(module.AGGREGATE_TIMEOUT_SECONDS == 15 * 60, "historical aggregate baseline must remain 15 minutes")
+    require(module.AGGREGATE_TIMEOUT_GATE_BASELINE == 1024, "aggregate gate baseline must remain the historical 1024-gate capacity")
+    require(module.AGGREGATE_TIMEOUT_SECONDS_PER_EXCESS_GATE == 0.5, "aggregate scale headroom must remain 0.5 seconds per excess gate")
+    require(module.MAX_AGGREGATE_TIMEOUT_SECONDS == 25 * 60, "aggregate hard ceiling must remain 25 minutes")
+    require(module.MAX_AGGREGATE_TIMEOUT_SECONDS < 30 * 60, "aggregate hard ceiling must stay below the enclosing 30-minute job")
+    require(module.aggregate_timeout_for_gate_count(0) == float(module.AGGREGATE_TIMEOUT_SECONDS), "empty inventory helper must retain the baseline")
+    require(module.aggregate_timeout_for_gate_count(1024) == float(module.AGGREGATE_TIMEOUT_SECONDS), "historical gate scale must retain 15 minutes")
+    require(module.aggregate_timeout_for_gate_count(1937) == 1356.5, "current repository scale must receive deterministic headroom")
+    require(module.aggregate_timeout_for_gate_count(module.MAX_FEATURE_GATES) == 1412.0, "maximum admitted inventory must remain below the hard ceiling")
     require(module.CHILD_TIMEOUT_SECONDS == 180, "per-child timeout must remain 180 seconds")
     require(module.PROCESS_TREE_CLEANUP_TIMEOUT_SECONDS == 10, "tree cleanup must remain separately bounded")
     require(module.remaining_child_timeout(100.0, 100.0) == float(module.CHILD_TIMEOUT_SECONDS), "fresh child must retain normal timeout")
-    require(module.remaining_child_timeout(100.0, 850.0) == 150.0, "child timeout must be clipped to remaining aggregate budget")
-    require(module.remaining_child_timeout(100.0, 1000.0) == 0.0, "expired aggregate budget must return zero")
+    require(module.remaining_child_timeout(100.0, 850.0) == 150.0, "child timeout must be clipped to remaining aggregate baseline")
+    require(module.remaining_child_timeout(100.0, 1000.0) == 0.0, "expired aggregate baseline must return zero")
     require(module.remaining_child_timeout(100.0, 99.0) == float(module.CHILD_TIMEOUT_SECONDS), "monotonic anomaly must not enlarge child timeout")
 
 
@@ -194,6 +202,34 @@ def test_remaining_budget_clips_gate_timeout(module):
     require(observed[0][0][2] <= module.CHILD_TIMEOUT_SECONDS, "aggregate clipping must never weaken child timeout ceiling")
 
 
+def test_main_uses_derived_aggregate_budget(module):
+    gate = fake_gate(module, "preflight-fake-scaled-budget.py")
+    module.discover = lambda: [gate]
+    module.build_child_env = lambda source=None: {}
+    derived = []
+
+    def fake_budget(gate_count):
+        derived.append(gate_count)
+        return 901.0
+
+    module.aggregate_timeout_for_gate_count = fake_budget
+    ticks = iter([100.0, 1000.25])
+    module.time.monotonic = lambda: next(ticks)
+    observed = []
+
+    def fake_run_gate(*args, **kwargs):
+        observed.append((args, kwargs))
+        return 0
+
+    module.run_gate = fake_run_gate
+    with redirect_stdout(StringIO()):
+        result = module.main()
+    require(result == 0, "derived aggregate budget must permit a gate after the legacy 900-second boundary")
+    require(derived == [1], "main must derive the aggregate budget exactly once from admitted gate count")
+    require(len(observed) == 1, "scaled-budget probe must launch exactly one gate")
+    require(observed[0][0][2] == 0.75, "child clipping must use the derived aggregate budget rather than the legacy fixed baseline")
+
+
 def test_timeout_at_budget_edge_stops_following_children(module):
     first = fake_gate(module, "preflight-fake-first.py")
     second = fake_gate(module, "preflight-fake-second.py")
@@ -264,6 +300,9 @@ def main():
 
     module = load_target()
     test_remaining_budget_clips_gate_timeout(module)
+
+    module = load_target()
+    test_main_uses_derived_aggregate_budget(module)
 
     module = load_target()
     test_timeout_at_budget_edge_stops_following_children(module)

@@ -66,8 +66,16 @@ namespace QS3D.Core.SmokeTests
 
             Equal(TakeoffPackageReadiness.Ready, result.Readiness, "mixed package readiness");
             Equal(2, result.Sources.Count, "mixed package source count");
-            Equal(1, result.Inventory.Count, "mixed package inventory count");
-            Near(26.25d, result.Inventory[0].FormulaQuantity, 1e-12, "mixed package formula quantity");
+            Equal(2, result.Inventory.Count, "mixed package inventory count");
+            var drawing = result.Inventory.Single(x => x.Layer == "A-WALL");
+            var model = result.Inventory.Single(x => x.Layer == string.Empty);
+            Near(20d, drawing.MeasuredQuantity, 1e-12, "mixed drawing measured quantity");
+            Near(21d, drawing.FormulaQuantity, 1e-12, "mixed drawing formula quantity");
+            Equal(1, drawing.EvidenceCount, "mixed drawing evidence count");
+            Near(5d, model.MeasuredQuantity, 1e-12, "mixed BIM measured quantity");
+            Near(5.25d, model.FormulaQuantity, 1e-12, "mixed BIM formula quantity");
+            Equal(1, model.EvidenceCount, "mixed BIM evidence count");
+            Near(26.25d, result.Inventory.Sum(x => x.FormulaQuantity), 1e-12, "mixed package total formula quantity");
             Near(2625d, result.EstimatedCost, 1e-12, "mixed package estimated cost");
             True(result.CanEstimate, "mixed package can estimate");
         }

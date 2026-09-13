@@ -91,11 +91,20 @@ namespace QS3D.Core.SmokeTests
                 (classification, quantity) => classification == "WALL" ? quantity * 1.1d : quantity,
                 (classification, unit) => classification == "WALL" && unit == "m" ? 100d : 10d);
 
-            var wall = inventory.Single(x => x.Classification == "WALL" && x.Zone == "ZONE-A" && x.Unit == "m");
-            Expect(Math.Abs(wall.MeasuredQuantity - 10d) < 1e-12, "drawing+BIM inventory aggregation");
-            Expect(Math.Abs(wall.FormulaQuantity - 11d) < 1e-12, "formula stage");
-            Expect(Math.Abs(wall.EstimatedCost - 1100d) < 1e-12, "estimate stage");
-            Expect(wall.EvidenceCount == 2, "drawing+BIM evidence count");
+            var wallRows = inventory.Where(x => x.Classification == "WALL" && x.Zone == "ZONE-A" && x.Unit == "m").ToList();
+            Expect(wallRows.Count == 2, "drawing and BIM rows remain layer-segmented");
+            var drawingWall = wallRows.Single(x => x.Layer == "Takeoff-Wall");
+            var bimWall = wallRows.Single(x => x.Layer == string.Empty);
+            Expect(Math.Abs(drawingWall.MeasuredQuantity - 2.5d) < 1e-12, "drawing layer measured quantity");
+            Expect(Math.Abs(drawingWall.FormulaQuantity - 2.75d) < 1e-12, "drawing layer formula stage");
+            Expect(Math.Abs(drawingWall.EstimatedCost - 275d) < 1e-12, "drawing layer estimate stage");
+            Expect(drawingWall.EvidenceCount == 1, "drawing layer evidence count");
+            Expect(Math.Abs(bimWall.MeasuredQuantity - 7.5d) < 1e-12, "BIM empty-layer measured quantity");
+            Expect(Math.Abs(bimWall.FormulaQuantity - 8.25d) < 1e-12, "BIM empty-layer formula stage");
+            Expect(Math.Abs(bimWall.EstimatedCost - 825d) < 1e-12, "BIM empty-layer estimate stage");
+            Expect(bimWall.EvidenceCount == 1, "BIM empty-layer evidence count");
+            Expect(Math.Abs(wallRows.Sum(x => x.MeasuredQuantity) - 10d) < 1e-12, "segmentation preserves total measured quantity");
+            Expect(Math.Abs(wallRows.Sum(x => x.EstimatedCost) - 1100d) < 1e-12, "segmentation preserves total estimate");
 
             var precisionInventory = workflow.BuildInventoryAndEstimate(
                 new[]
@@ -109,11 +118,18 @@ namespace QS3D.Core.SmokeTests
                 },
                 (classification, quantity) => quantity,
                 (classification, unit) => 2d);
-            var precision = precisionInventory.Single(x => x.Classification == "PRECISION" && x.Zone == "ZONE-P" && x.Unit == "m");
-            Expect(precision.MeasuredQuantity == 10000000000000002d, "compensated Drawing+BIM aggregation");
-            Expect(precision.FormulaQuantity == 10000000000000002d, "formula receives compensated quantity");
-            Expect(precision.EstimatedCost == 20000000000000004d, "estimate uses compensated quantity");
-            Expect(precision.EvidenceCount == 3, "precision evidence count");
+            var precisionDrawing = precisionInventory.Single(x => x.Classification == "PRECISION" && x.Zone == "ZONE-P" && x.Layer == "Takeoff" && x.Unit == "m");
+            var precisionBim = precisionInventory.Single(x => x.Classification == "PRECISION" && x.Zone == "ZONE-P" && x.Layer == string.Empty && x.Unit == "m");
+            Expect(precisionDrawing.MeasuredQuantity == 1e16d, "precision drawing layer quantity");
+            Expect(precisionDrawing.FormulaQuantity == 1e16d, "precision drawing formula quantity");
+            Expect(precisionDrawing.EstimatedCost == 2e16d, "precision drawing estimate");
+            Expect(precisionDrawing.EvidenceCount == 1, "precision drawing evidence count");
+            Expect(precisionBim.MeasuredQuantity == 2d, "compensated BIM empty-layer aggregation");
+            Expect(precisionBim.FormulaQuantity == 2d, "formula receives compensated BIM quantity");
+            Expect(precisionBim.EstimatedCost == 4d, "estimate uses compensated BIM quantity");
+            Expect(precisionBim.EvidenceCount == 2, "precision BIM evidence count");
+            Expect(precisionDrawing.MeasuredQuantity + precisionBim.MeasuredQuantity == 10000000000000002d, "layer segmentation preserves high-dynamic-range total quantity");
+            Expect(precisionDrawing.EstimatedCost + precisionBim.EstimatedCost == 20000000000000004d, "layer segmentation preserves high-dynamic-range total estimate");
 
             var ordered = workflow.BuildInventoryAndEstimate(
                 new[]
