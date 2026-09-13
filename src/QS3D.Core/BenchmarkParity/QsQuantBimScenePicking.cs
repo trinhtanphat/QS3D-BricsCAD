@@ -76,7 +76,7 @@ namespace QS3D.Core.BenchmarkParity
         private const double ParallelTolerance = 1e-12;
         private const double AmbiguityTolerance = 1e-9;
 
-        public IfcScenePickHit PickNearest(IfcStandaloneScene scene, IfcSceneRay ray)
+        public IfcScenePickHit? PickNearest(IfcStandaloneScene scene, IfcSceneRay ray)
         {
             if (scene == null) throw new ArgumentNullException("scene");
             if (ray == null) throw new ArgumentNullException("ray");
@@ -90,7 +90,7 @@ namespace QS3D.Core.BenchmarkParity
                 if (!seen.Add(node.Guid)) throw new InvalidOperationException("Scene picking requires unique IFC guid: " + node.Guid + ".");
                 if (node.Mesh == null) throw new InvalidOperationException("Scene picking node has no mesh: " + node.Guid + ".");
 
-                IfcScenePickHit nearestForNode = null;
+                IfcScenePickHit? nearestForNode = null;
                 for (var i = 0; i < node.Mesh.TriangleIndices.Count; i += 3)
                 {
                     var a = node.Mesh.Vertices[node.Mesh.TriangleIndices[i]];
