@@ -8,4 +8,8 @@ for x in raw:
         raise SystemExit('FAIL raw public exception sink: '+x)
 if not any(x in s for x in need):
     raise SystemExit('FAIL canonical sanitizer missing')
+if 'var publicMessage = ok ? message : McpPublicTextSanitizer.Sanitize(message);' not in s:
+    raise SystemExit('FAIL tunnel Start failure message is not sanitized before public sinks')
+if 'McpAgentExperience.Error("onboarding", message,' in s:
+    raise SystemExit('FAIL raw tunnel Start failure message reaches Agent Experience')
 print('PASS: MCP transport public exception sinks are sanitized')
