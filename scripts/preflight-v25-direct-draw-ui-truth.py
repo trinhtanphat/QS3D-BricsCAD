@@ -48,7 +48,7 @@ if "DirectDrawUiFailureReporter.ReportPostCommitWarning(document);" not in final
 if "PaletteCoordinator.SetStatus(status);" in finalize:
     raise SystemExit("Direct Draw post-commit UI finalization must not publish unfenced process-wide palette status")
 
-guard_start = text.find("private static void Guard(Document document, string operation, Action action)")
+guard_start = text.find("private static void Guard(Document document, string operation, Action<IntPtr> action)")
 if guard_start < 0:
     raise SystemExit("Direct Draw operation guard structure changed")
 guard = text[guard_start:]

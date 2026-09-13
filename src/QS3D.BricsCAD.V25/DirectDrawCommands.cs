@@ -453,11 +453,11 @@ namespace QS3D.BricsCAD.V25
                 {
                     try { EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles); }
                     catch (Exception ex) { cadCleanupError = ex; }
+                    try { rollback.Restore(project); }
+                    catch (Exception ex) { restoreError = ex; }
+                    if (!projectExistedBeforeAuthoring && IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                        ProjectContextCoordinator.Forget(document);
                 }
-                try { rollback.Restore(project); }
-                catch (Exception ex) { restoreError = ex; }
-                if (!projectExistedBeforeAuthoring && generationIsCurrent)
-                    ProjectContextCoordinator.Forget(document);
                 if (generationIsCurrent)
                 {
                     try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
