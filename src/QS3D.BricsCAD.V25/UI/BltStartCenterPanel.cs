@@ -66,14 +66,16 @@ namespace QS3D.BricsCAD.V25.UI
 
         public void RefreshFromDocument(Document? document, IntPtr nativeDatabaseIdentity)
         {
-            if (document != null && !DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
-
-            ResetDocumentScopedDisplay();
             if (document == null)
             {
+                _floorText.Text = "Tầng —";
+                _elevationText.Text = "•  Cao độ 0.000 m";
                 RefreshRecentProjects(null, IntPtr.Zero);
                 return;
             }
+
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+            ResetDocumentScopedDisplay();
 
             string? normalized = null;
             try
