@@ -76,7 +76,19 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class RevisionPackageGroupSummary2D
     {
-        internal RevisionPackageGroupSummary2D(string classification, string zone, string layer, string unit, double previousQuantity, double currentQuantity, double quantityDelta, double estimateEligibleCurrentQuantity)
+        internal RevisionPackageGroupSummary2D(
+            string classification,
+            string zone,
+            string layer,
+            string unit,
+            double previousQuantity,
+            double currentQuantity,
+            double quantityDelta,
+            double estimateEligibleCurrentQuantity,
+            int addedCount,
+            int removedCount,
+            int changedCount,
+            int unchangedCount)
         {
             Classification = QsModelElementSnapshot.Require(classification, "classification");
             Zone = QsModelElementSnapshot.Optional(zone);
@@ -88,6 +100,12 @@ namespace QS3D.Core.BenchmarkParity
             EstimateEligibleCurrentQuantity = QsModelElementSnapshot.Finite(estimateEligibleCurrentQuantity, "estimateEligibleCurrentQuantity");
             if (PreviousQuantity < 0d || CurrentQuantity < 0d || EstimateEligibleCurrentQuantity < 0d)
                 throw new InvalidOperationException("Revision package group summary cannot contain negative absolute quantities.");
+            AddedCount = NonNegative(addedCount, "addedCount");
+            RemovedCount = NonNegative(removedCount, "removedCount");
+            ChangedCount = NonNegative(changedCount, "changedCount");
+            UnchangedCount = NonNegative(unchangedCount, "unchangedCount");
+            MarkupCount = checked(checked(AddedCount + RemovedCount) + checked(ChangedCount + UnchangedCount));
+            if (MarkupCount == 0) throw new InvalidOperationException("Revision package group summary cannot be empty.");
         }
 
         public string Classification { get; private set; }
@@ -98,6 +116,17 @@ namespace QS3D.Core.BenchmarkParity
         public double CurrentQuantity { get; private set; }
         public double QuantityDelta { get; private set; }
         public double EstimateEligibleCurrentQuantity { get; private set; }
+        public int AddedCount { get; private set; }
+        public int RemovedCount { get; private set; }
+        public int ChangedCount { get; private set; }
+        public int UnchangedCount { get; private set; }
+        public int MarkupCount { get; private set; }
+
+        private static int NonNegative(int value, string name)
+        {
+            if (value < 0) throw new ArgumentOutOfRangeException(name);
+            return value;
+        }
     }
 
     public sealed class RevisionPackageReviewResult2D
@@ -176,7 +205,11 @@ namespace QS3D.Core.BenchmarkParity
                     SumFinite(x.Select(r => r.PreviousQuantity)),
                     SumFinite(x.Select(r => r.CurrentQuantity)),
                     SumFinite(x.Select(r => r.QuantityDelta)),
-                    SumFinite(x.Where(r => r.EstimateEligible).Select(r => r.CurrentQuantity))))
+                    SumFinite(x.Where(r => r.EstimateEligible).Select(r => r.CurrentQuantity)),
+                    x.Count(r => r.Kind == RevisionMarkupChangeKind.Added),
+                    x.Count(r => r.Kind == RevisionMarkupChangeKind.Removed),
+                    x.Count(r => r.Kind == RevisionMarkupChangeKind.Changed),
+                    x.Count(r => r.Kind == RevisionMarkupChangeKind.Unchanged)))
                 .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Zone, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Layer, StringComparer.OrdinalIgnoreCase)
