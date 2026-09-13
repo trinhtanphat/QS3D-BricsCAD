@@ -66,13 +66,24 @@ for token, message in (
     ("ReadOwnedGenerationBytes", "held exact-byte verification API is missing"),
     ("RollbackOwnedGeneration", "generation-bound rollback API is missing"),
     ("DeleteOwnedGeneration", "generation-bound deletion API is missing"),
+    ("FileDispositionInfo", "handle-bound delete information class is missing"),
+    ("Marshal.AllocHGlobal(1)", "FILE_DISPOSITION_INFO must allocate its one-byte BOOLEAN payload"),
+    ("Marshal.WriteByte(buffer, 0, 1)", "FILE_DISPOSITION_INFO.DeleteFile is not marshalled as BOOLEAN"),
 ):
     require(helper, token, message)
 
+for unsafe in (
+    "Marshal.AllocHGlobal(sizeof(int))",
+    "Marshal.WriteInt32(buffer, 1)",
+    "System.IO.File.Delete(",
+):
+    if unsafe in helper:
+        raise SystemExit(f"ERROR: owned-generation deletion regressed to unsafe disposition/path semantics: {unsafe}")
+
 
 # Exercise actual Win32 layout/rename/rollback semantics on hosted Windows. This
-# catches FILE_RENAME_INFO alignment or sharing mistakes that lexical source guards
-# cannot detect.
+# catches FILE_RENAME_INFO alignment, FILE_DISPOSITION_INFO ABI, or sharing mistakes
+# that lexical source guards cannot detect.
 if os.name == "nt":
     smoke = r'''
 $ErrorActionPreference = 'Stop'
@@ -109,6 +120,13 @@ try {
     for ($i = 0; $i -lt $expectedPrior.Length; $i++) {
         if ($expectedPrior[$i] -ne $restored[$i]) { throw 'rollback did not restore exact prior generation bytes' }
     }
+
+    # DeletePending must be bound to the held staging handle and take effect when
+    # that exact generation handle closes; no pathname delete may be used.
+    $quarantinePath = [Qs3dV25UpdateManifestPublicationNative]::GetOwnedCurrentPath($stage)
+    $stage.Dispose()
+    $stage = $null
+    if (Test-Path -LiteralPath $quarantinePath) { throw 'generation-bound rollback deletion did not remove the quarantined staging generation' }
 }
 finally {
     if ($stage) { $stage.Dispose() }
