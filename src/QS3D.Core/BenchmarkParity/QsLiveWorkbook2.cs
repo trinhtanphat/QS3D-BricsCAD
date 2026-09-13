@@ -246,22 +246,22 @@ namespace QS3D.Core.BenchmarkParity
                     trace.Add("source:" + key + "@" + source.Revision);
                 }
 
-                var dependencyValues = new List<double>();
+                var aggregateInputs = new List<double> { sourceValue };
                 foreach (var dependencyId in binding.DependsOnBindingIds.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
                 {
                     var dependency = results[dependencyId];
-                    dependencyValues.Add(dependency.Value);
+                    aggregateInputs.Add(dependency.Value);
                     trace.Add("binding:" + dependencyId + "=" + dependency.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
                 }
 
-                double dependencyValue;
-                if (!TryCompensatedSum(dependencyValues, out dependencyValue))
+                double aggregateValue;
+                if (!TryCompensatedSum(aggregateInputs, out aggregateValue))
                 {
-                    results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh dependency aggregation produced a non-finite value.");
+                    results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh source/dependency aggregation produced a non-finite value.");
                     continue;
                 }
 
-                var value = (sourceValue + dependencyValue) * binding.Multiplier + binding.Offset;
+                var value = aggregateValue * binding.Multiplier + binding.Offset;
                 if (double.IsNaN(value) || double.IsInfinity(value))
                 {
                     results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh arithmetic produced a non-finite value.");
