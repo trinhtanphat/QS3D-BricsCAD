@@ -49,6 +49,36 @@ namespace QS3D.Core.SmokeTests
             var degenerate = viewport.Fit(new[] { new IfcSceneNode("P", "ifc-step://#3", pointMesh, true) }, 45.0);
             True(degenerate.Radius > 0.0, "degenerate radius floor");
 
+            // Same-sign finite endpoints used to overflow center via (min + max) / 2.
+            var hugeBase = 1.2e308;
+            var hugeDelta = 2.0e292;
+            var hugeSameSign = viewport.Fit(
+                new[] { new IfcSceneNode("H", "ifc-step://#4", Box(hugeBase, 0.0, 0.0, hugeBase + hugeDelta, 2.0, 2.0), true) },
+                45.0);
+            Finite(hugeSameSign.Bounds.CenterX, "same-sign extreme midpoint");
+            Finite(hugeSameSign.Radius, "same-sign extreme radius");
+            Finite(hugeSameSign.Distance, "same-sign extreme distance");
+            Finite(hugeSameSign.FarPlane, "same-sign extreme far plane");
+
+            // Opposite-sign endpoints can overflow max-min even when the half extent and
+            // complete viewport frame remain finite.
+            var hugeOpposite = viewport.Fit(
+                new[] { new IfcSceneNode("O", "ifc-step://#5", Box(-1.0e307, 0.0, 0.0, 1.0e307, 1.0, 1.0), true) },
+                45.0);
+            NearRelative(0.0, hugeOpposite.Bounds.CenterX, 1.0, "opposite-sign extreme midpoint");
+            Finite(hugeOpposite.Radius, "opposite-sign extreme radius");
+            Finite(hugeOpposite.Distance, "opposite-sign extreme distance");
+            Finite(hugeOpposite.NearPlane, "opposite-sign extreme near plane");
+            Finite(hugeOpposite.FarPlane, "opposite-sign extreme far plane");
+            True(hugeOpposite.FarPlane > hugeOpposite.NearPlane, "opposite-sign clipping order");
+
+            // Large finite half-extents must not overflow merely because x*x does.
+            var largeNorm = viewport.Fit(
+                new[] { new IfcSceneNode("N", "ifc-step://#6", Box(-1.0e153, -1.0e153, -1.0e153, 1.0e153, 1.0e153, 1.0e153), true) },
+                45.0);
+            Finite(largeNorm.Radius, "scaled hypot radius");
+            True(largeNorm.Radius > 1.0e153, "scaled hypot preserves diagonal radius");
+
             Reject("empty scene", delegate { viewport.Fit(new IfcSceneNode[0], 45.0); });
             Reject("empty selection", delegate
             {
@@ -97,6 +127,16 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual, string label)
         {
             if (Math.Abs(expected - actual) > 1e-9) throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+
+        private static void NearRelative(double expected, double actual, double tolerance, string label)
+        {
+            if (Math.Abs(expected - actual) > tolerance) throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+
+        private static void Finite(double value, string label)
+        {
+            True(!double.IsNaN(value) && !double.IsInfinity(value), label + " is finite");
         }
 
         private static void True(bool value, string label)

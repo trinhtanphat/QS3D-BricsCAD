@@ -24,12 +24,34 @@ namespace QS3D.Core.BenchmarkParity
         public double MaxX { get; private set; }
         public double MaxY { get; private set; }
         public double MaxZ { get; private set; }
-        public double CenterX { get { return (MinX + MaxX) / 2.0; } }
-        public double CenterY { get { return (MinY + MaxY) / 2.0; } }
-        public double CenterZ { get { return (MinZ + MaxZ) / 2.0; } }
+        public double CenterX { get { return StableMidpoint(MinX, MaxX); } }
+        public double CenterY { get { return StableMidpoint(MinY, MaxY); } }
+        public double CenterZ { get { return StableMidpoint(MinZ, MaxZ); } }
         public double SizeX { get { return MaxX - MinX; } }
         public double SizeY { get { return MaxY - MinY; } }
         public double SizeZ { get { return MaxZ - MinZ; } }
+
+        internal double HalfExtentX { get { return StableHalfExtent(MinX, MaxX); } }
+        internal double HalfExtentY { get { return StableHalfExtent(MinY, MaxY); } }
+        internal double HalfExtentZ { get { return StableHalfExtent(MinZ, MaxZ); } }
+
+        private static double StableMidpoint(double minimum, double maximum)
+        {
+            // Same-sign subtraction cannot overflow. Opposite-sign addition is performed
+            // after halving so valid finite coordinates never overflow just to find center.
+            if ((minimum >= 0.0 && maximum >= 0.0) || (minimum <= 0.0 && maximum <= 0.0))
+                return minimum + ((maximum - minimum) / 2.0);
+            return (minimum / 2.0) + (maximum / 2.0);
+        }
+
+        private static double StableHalfExtent(double minimum, double maximum)
+        {
+            // For opposite signs, maximum - minimum may overflow even though the half-span
+            // is finite. Halve each endpoint before subtraction to preserve that result.
+            if (minimum < 0.0 && maximum > 0.0)
+                return (maximum / 2.0) - (minimum / 2.0);
+            return (maximum - minimum) / 2.0;
+        }
     }
 
     public sealed class IfcViewportFrame
@@ -98,23 +120,41 @@ namespace QS3D.Core.BenchmarkParity
             var maxZ = vertices.Max(x => x.Z);
             var bounds = new IfcViewportBounds(minX, minY, minZ, maxX, maxY, maxZ);
 
-            var halfX = bounds.SizeX / 2.0;
-            var halfY = bounds.SizeY / 2.0;
-            var halfZ = bounds.SizeZ / 2.0;
-            var radius = Math.Sqrt((halfX * halfX) + (halfY * halfY) + (halfZ * halfZ));
+            var halfX = bounds.HalfExtentX;
+            var halfY = bounds.HalfExtentY;
+            var halfZ = bounds.HalfExtentZ;
+            var radius = ScaledHypot(halfX, halfY, halfZ);
             if (!IsFinite(radius)) throw new InvalidOperationException("Viewport radius is not finite.");
             if (radius < MinimumRadius) radius = MinimumRadius;
 
             var halfFovRadians = fieldOfViewDegrees * Math.PI / 360.0;
-            var distance = (radius / Math.Sin(halfFovRadians)) * FitMargin;
+            var distanceFactor = FitMargin / Math.Sin(halfFovRadians);
+            var distance = radius * distanceFactor;
             if (!IsFinite(distance) || distance <= radius) throw new InvalidOperationException("Viewport camera distance is invalid.");
 
-            var nearPlane = Math.Max(MinimumRadius, distance - (radius * 2.0));
-            var farPlane = distance + (radius * 2.0);
+            var radiusPadding = radius * 2.0;
+            if (!IsFinite(radiusPadding)) throw new InvalidOperationException("Viewport clipping range is invalid.");
+            var nearPlane = Math.Max(MinimumRadius, distance - radiusPadding);
+            var farPlane = distance + radiusPadding;
             if (!IsFinite(nearPlane) || !IsFinite(farPlane) || farPlane <= nearPlane)
                 throw new InvalidOperationException("Viewport clipping range is invalid.");
 
             return new IfcViewportFrame(bounds, radius, distance, nearPlane, farPlane);
+        }
+
+        private static double ScaledHypot(double x, double y, double z)
+        {
+            x = Math.Abs(x);
+            y = Math.Abs(y);
+            z = Math.Abs(z);
+            var scale = Math.Max(x, Math.Max(y, z));
+            if (scale == 0.0) return 0.0;
+            if (!IsFinite(scale)) return double.PositiveInfinity;
+
+            var scaledX = x / scale;
+            var scaledY = y / scale;
+            var scaledZ = z / scale;
+            return scale * Math.Sqrt((scaledX * scaledX) + (scaledY * scaledY) + (scaledZ * scaledZ));
         }
 
         private static bool IsFinite(double value)
