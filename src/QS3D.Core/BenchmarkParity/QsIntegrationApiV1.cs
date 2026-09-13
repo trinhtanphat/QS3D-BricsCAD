@@ -77,8 +77,8 @@ namespace QS3D.Core.BenchmarkParity
             new QsApiEndpointDescriptor("GET", "/api/v1/projects/{projectId}/revisions", QsApiResourceKind.Revision, "qs3d.revision.read", true),
             new QsApiEndpointDescriptor("GET", "/api/v1/projects/{projectId}/snapshots", QsApiResourceKind.Snapshot, "qs3d.revision.read", true),
             new QsApiEndpointDescriptor("GET", "/api/v1/projects/{projectId}/diffs", QsApiResourceKind.Diff, "qs3d.revision.read", true),
-            new QsApiEndpointDescriptor("GET", "/api/v1/projects/{projectId}/tenders", QsApiResourceKind.Tender, "qs3d.tender.read", true),
-            new QsApiEndpointDescriptor("GET", "/api/v1/projects/{projectId}/procurement", QsApiResourceKind.Procurement, "qs3d.procurement.read", true),
+            new QsApiEndpointDescriptor("GET", "/api/v1/projects/{projectId}/tenders", QsApiResourceKind.Tender, "qs3d.tender.read", false),
+            new QsApiEndpointDescriptor("GET", "/api/v1/projects/{projectId}/procurement", QsApiResourceKind.Procurement, "qs3d.procurement.read", false),
             new QsApiEndpointDescriptor("POST", "/api/v1/projects/{projectId}/workbooks/{workbookId}/refresh", QsApiResourceKind.WorkbookRefresh, "qs3d.workbook.refresh", false)
         });
 
