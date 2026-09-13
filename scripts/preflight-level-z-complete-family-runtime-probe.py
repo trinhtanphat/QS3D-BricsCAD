@@ -25,9 +25,16 @@ if COMMAND.is_file():
         'OpeningBooleanService.CutLinkedOpenings', 'ElementCategory.Door', 'ElementCategory.WallOpening',
         'FailureKind.TopOnly', 'FailureKind.MissingLevel', 'FailureKind.AmbiguousLevel',
         'FailureKind.NonFiniteOffset', 'FailureKind.InvalidVerticalRange',
+        'failure_stage=', 'failure_case=',
+        'failureStage = "admission"', 'failureStage = "matrix_configure"',
+        'failureStage = "family_build"', 'failureStage = "family_range"',        'failureStage = "family_snapshot"', 'failureStage = "hosted_openings"',
+        'failureStage = "fail_closed"', 'failureStage = "level_health"',
     ):
         if token not in text:
             errors.append("complete-family command missing contract token: " + token)
+    for forbidden in ('error.Message', 'error.ToString()', 'error.StackTrace', 'GeneratedSolidHandle=" +'):
+        if forbidden in text:
+            errors.append("complete-family failure taxonomy leaks forbidden detail token: " + forbidden)
 
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8-sig")
@@ -49,4 +56,4 @@ if errors:
         print("FAIL: " + error)
     sys.exit(1)
 
-print("PASS: LOCAL-003 complete-family runtime contract covers all 10 Level-aware host families, straight hosted openings, refusal rows, exact-SHA identity, dual native units and disposable cleanup boundaries.")
+print("PASS: LOCAL-003 complete-family runtime contract covers all 10 Level-aware host families, straight hosted openings, refusal rows, exact-SHA identity, dual native units, bounded failure taxonomy and disposable cleanup boundaries.")
