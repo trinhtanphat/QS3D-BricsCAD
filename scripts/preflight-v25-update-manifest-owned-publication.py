@@ -87,7 +87,9 @@ for unsafe in (
 if os.name == "nt":
     smoke = r'''
 $ErrorActionPreference = 'Stop'
-Add-Type -Path $args[0]
+$helperPath = [Environment]::GetEnvironmentVariable('QS3D_V25_PUBLICATION_HELPER')
+if ([string]::IsNullOrWhiteSpace($helperPath)) { throw 'owned-publication helper path environment variable is missing' }
+Add-Type -Path $helperPath
 $root = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-owned-publish-' + [Guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($root) | Out-Null
 $stagePath = Join-Path $root 'manifest.tmp'
@@ -134,8 +136,11 @@ finally {
     if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
 }
 '''
+    smoke_env = os.environ.copy()
+    smoke_env["QS3D_V25_PUBLICATION_HELPER"] = str(HELPER)
     completed = subprocess.run(
-        ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", smoke, str(HELPER)],
+        ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", smoke],
+        env=smoke_env,
         cwd=ROOT,
         capture_output=True,
         text=True,
