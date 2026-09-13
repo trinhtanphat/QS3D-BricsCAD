@@ -43,7 +43,8 @@ namespace QS3D.Core.SmokeTests
                 new IfcQtoItem("G3", "IfcWall", "L1", "Z", "Count", 1d, "ea"),
                 new IfcQtoItem("G4", "IfcSlab", "L1", "A", "Count", 2d, "ea")
             };
-            var reverse = forward.Reverse().ToArray();
+            var reverse = forward.ToArray();
+            Array.Reverse(reverse);
             var workbench = new IfcQtoWorkbench();
             AssertInventory(workbench.Aggregate(forward), 10000000000000002d, "ifc forward");
             AssertInventory(workbench.Aggregate(reverse), 10000000000000002d, "ifc reverse");
@@ -59,7 +60,8 @@ namespace QS3D.Core.SmokeTests
                 Evidence("G3", "Z", 1d),
                 Evidence("G4", "A", 2d)
             };
-            var reverse = forward.Reverse().ToArray();
+            var reverse = forward.ToArray();
+            Array.Reverse(reverse);
             var a = engine.BuildBoq(forward);
             var b = engine.BuildBoq(reverse);
             AssertInventory(a, 10000000000000002d, "quantbim forward");
