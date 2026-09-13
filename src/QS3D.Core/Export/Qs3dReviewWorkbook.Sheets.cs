@@ -317,15 +317,14 @@ namespace QS3D.Core.Export
         private static double? Sum(IReadOnlyList<QuantityReportRow> rows, Func<QuantityReportRow, double> value, Func<QuantityReportRow, bool> evidence)
         {
             var found = false;
-            var total = 0d;
+            var accumulator = new QuantityReportMath.FiniteAccumulator();
             foreach (var row in rows)
             {
                 if (!evidence(row)) continue;
                 found = true;
-                total += value(row);
-                if (!Qs3dReviewXlsx.Finite(total)) throw new InvalidDataException("QS3D Review summary total overflowed a finite double.");
+                accumulator.Add(value(row), "QS3D Review summary total");
             }
-            return found ? total : (double?)null;
+            return found ? accumulator.Value("QS3D Review summary total") : (double?)null;
         }
 
         private static string Join(IEnumerable<string> values) =>
