@@ -54,7 +54,7 @@ function Assert-NoReparseAncestor {
     $cursor = [IO.Directory]::GetParent((Get-CanonicalFullPath -LiteralPath $LiteralPath))
     while ($null -ne $cursor) {
         if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "$Label must be an ordinary non-reparse file: $canonical"
+            throw "Downloaded V25 draft input traverses a reparse-point ancestor: $($cursor.FullName)"
         }
         $cursor = $cursor.Parent
     }
