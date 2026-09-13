@@ -118,7 +118,7 @@ namespace QS3D.Core.BenchmarkParity
 
             return new ReadOnlyCollection<TakeoffInventoryLine>(lines
                 .GroupBy(x => new { x.Classification, x.Unit })
-                .Select(g => new TakeoffInventoryLine(g.Key.Classification, g.Key.Unit, g.Sum(x => x.Quantity), g.Select(x => x.Guid).Distinct(StringComparer.OrdinalIgnoreCase).Count()))
+                .Select(g => new TakeoffInventoryLine(g.Key.Classification, g.Key.Unit, QsModelElementSnapshot.SumFiniteQuantities(g.Select(x => x.Quantity), "QuantBIM BOQ quantity"), g.Select(x => x.Guid).Distinct(StringComparer.OrdinalIgnoreCase).Count()))
                 .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase)
                 .ToList());

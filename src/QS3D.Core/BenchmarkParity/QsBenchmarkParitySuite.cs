@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using QS3D.Core.Reporting;
 
 namespace QS3D.Core.BenchmarkParity
 {
@@ -49,6 +50,14 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (double.IsNaN(value) || double.IsInfinity(value)) throw new ArgumentOutOfRangeException(name);
             return value;
+        }
+
+        internal static double SumFiniteQuantities(IEnumerable<double> values, string label)
+        {
+            if (values == null) throw new ArgumentNullException("values");
+            var accumulator = new QuantityReportMath.FiniteAccumulator();
+            foreach (var value in values) accumulator.Add(value, label);
+            return accumulator.Value(label);
         }
     }
 
@@ -182,7 +191,7 @@ namespace QS3D.Core.BenchmarkParity
         public string Revision { get; private set; }
         public IReadOnlyList<TakeoffMeasurement2D> Measurements { get { return new ReadOnlyCollection<TakeoffMeasurement2D>(_measurements); } }
         public void Add(TakeoffMeasurement2D measurement) { if (measurement == null) throw new ArgumentNullException("measurement"); if (_measurements.Any(x => string.Equals(x.Id, measurement.Id, StringComparison.OrdinalIgnoreCase))) throw new InvalidOperationException("Duplicate measurement id."); _measurements.Add(measurement); }
-        public IReadOnlyList<TakeoffInventoryLine> BuildInventory() { return _measurements.GroupBy(x => new { x.Classification, x.Unit }).Select(g => new TakeoffInventoryLine(g.Key.Classification, g.Key.Unit, g.Sum(x => x.Quantity), g.Count())).OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).ToList(); }
+        public IReadOnlyList<TakeoffInventoryLine> BuildInventory() { return _measurements.GroupBy(x => new { x.Classification, x.Unit }).Select(g => new TakeoffInventoryLine(g.Key.Classification, g.Key.Unit, QsModelElementSnapshot.SumFiniteQuantities(g.Select(x => x.Quantity), "takeoff inventory quantity"), g.Count())).OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase).ToList(); }
     }
 
     public sealed class TakeoffInventoryLine
@@ -290,7 +299,7 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (items == null) throw new ArgumentNullException("items");
             var snapshot = items.ToList();
-            return snapshot.GroupBy(x => new { Key = x.Classification.Length == 0 ? x.Entity : x.Classification, x.Unit }).Select(g => new TakeoffInventoryLine(g.Key.Key, g.Key.Unit, g.Sum(x => x.Quantity), g.Count())).ToList();
+            return snapshot.GroupBy(x => new { Key = x.Classification.Length == 0 ? x.Entity : x.Classification, x.Unit }).Select(g => new TakeoffInventoryLine(g.Key.Key, g.Key.Unit, QsModelElementSnapshot.SumFiniteQuantities(g.Select(x => x.Quantity), "IFC QTO inventory quantity"), g.Count())).OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase).ToList();
         }
     }
 
