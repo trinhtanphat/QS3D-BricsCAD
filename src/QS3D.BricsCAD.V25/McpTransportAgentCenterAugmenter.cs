@@ -472,11 +472,12 @@ namespace QS3D.BricsCAD.V25
                 McpOpenAiSecureTunnelManager.StopForHostShutdown();
                 string message;
                 var ok = McpOpenAiSecureTunnelManager.Start(McpOpenAiSecureTunnelManager.SavedTunnelId, string.Empty, out message);
+                var publicMessage = ok ? message : McpPublicTextSanitizer.Sanitize(message);
                 if (ok)
-                    McpAgentExperience.Success("onboarding", message, "Chờ tunnel-client READY rồi tiếp tục ChatGPT.");
+                    McpAgentExperience.Success("onboarding", publicMessage, "Chờ tunnel-client READY rồi tiếp tục ChatGPT.");
                 else
-                    McpAgentExperience.Error("onboarding", message, "Kiểm tra saved/environment key, Tunnel ID, trust verification và diagnostics.");
-                MessageBox.Show(message, "QS3D MCP", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                    McpAgentExperience.Error("onboarding", publicMessage, "Kiểm tra saved/environment key, Tunnel ID, trust verification và diagnostics.");
+                MessageBox.Show(publicMessage, "QS3D MCP", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
             }
             catch (Exception ex)
             {
