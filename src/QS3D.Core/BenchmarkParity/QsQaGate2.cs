@@ -63,6 +63,8 @@ namespace QS3D.Core.BenchmarkParity
                     { "QA2.MISSING_CLASSIFICATION", QsQaSeverity.Error },
                     { "QA2.INVALID_DIMENSIONS", QsQaSeverity.Error },
                     { "QA2.MISSING_PSET", QsQaSeverity.Error },
+                    { "QA2.MISSING_IFC_ENTITY", QsQaSeverity.Error },
+                    { "QA2.MISSING_QUANTITY_UNIT", QsQaSeverity.Error },
                     { "QA2.MISSING_RELATIONSHIP", QsQaSeverity.Critical },
                     { "QA2.MISSING_STOREY", QsQaSeverity.Critical },
                     { "QA2.SPATIAL_MISMATCH", QsQaSeverity.Critical },
@@ -183,6 +185,10 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class QsQaGate2
     {
+        private static readonly HashSet<string> InvalidPsetEvidence = new HashSet<string>(
+            new[] { "0", "false", "missing", "none", "n/a", "na", "null", "absent", "no" },
+            StringComparer.OrdinalIgnoreCase);
+
         public QsQaGate2Decision Evaluate(
             IEnumerable<QsModelElementSnapshot> elements,
             QsQaRuleProfile profile,
@@ -263,17 +269,37 @@ namespace QS3D.Core.BenchmarkParity
                     element.Id,
                     "IFC GUID must be unique.");
 
+                string ifcEntity;
+                AddIf(
+                    result,
+                    !element.Properties.TryGetValue("IfcEntity", out ifcEntity) || string.IsNullOrWhiteSpace(ifcEntity),
+                    profile,
+                    "QA2.MISSING_IFC_ENTITY",
+                    QsQaSeverity.Error,
+                    element.Id,
+                    "IFC entity is required before quantity workflows can interpret element semantics.");
+
+                string quantityUnit;
+                AddIf(
+                    result,
+                    !element.Properties.TryGetValue("QuantityUnit", out quantityUnit) || string.IsNullOrWhiteSpace(quantityUnit),
+                    profile,
+                    "QA2.MISSING_QUANTITY_UNIT",
+                    QsQaSeverity.Error,
+                    element.Id,
+                    "Quantity unit is required before takeoff, BOQ and estimate workflows can run safely.");
+
                 foreach (var pset in profile.RequiredPsets)
                 {
                     string value;
                     var key = "IfcPset." + pset;
                     AddIf(result,
-                        !element.Properties.TryGetValue(key, out value) || string.IsNullOrWhiteSpace(value),
+                        !element.Properties.TryGetValue(key, out value) || !HasUsablePsetEvidence(value),
                         profile,
                         "QA2.MISSING_PSET",
                         QsQaSeverity.Error,
                         element.Id,
-                        "Required IFC property set is missing: " + pset + ".");
+                        "Required IFC property set is missing or has unusable evidence: " + pset + ".");
                 }
 
                 foreach (var relationship in profile.RequiredRelationships)
@@ -332,6 +358,12 @@ namespace QS3D.Core.BenchmarkParity
             string guid;
             if (!element.Properties.TryGetValue("IfcGuid", out guid) || string.IsNullOrWhiteSpace(guid)) return null;
             return guid.Trim();
+        }
+
+        private static bool HasUsablePsetEvidence(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            return !InvalidPsetEvidence.Contains(value.Trim());
         }
 
         private static bool IsFinitePositive(double value)

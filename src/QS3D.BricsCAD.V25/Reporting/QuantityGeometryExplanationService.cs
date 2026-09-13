@@ -86,19 +86,19 @@ namespace QS3D.BricsCAD.V25.Reporting
                     candidates.AddRange(CloneSolids(document, ids, element.Id, ElementName(project, element), handles));
                 }
 
-                var individualVolumeCad = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-                var individualAreaCad = new Dictionary<string, Dictionary<int, double>>(StringComparer.OrdinalIgnoreCase);
+                var individualVolumeAccumulators = new Dictionary<string, QuantityReportMath.FiniteAccumulator>(StringComparer.OrdinalIgnoreCase);
+                var individualAreaAccumulators = new Dictionary<string, Dictionary<int, QuantityReportMath.FiniteAccumulator>>(StringComparer.OrdinalIgnoreCase);
                 var relation = new Dictionary<string, QuantityGeometryRelation>(StringComparer.OrdinalIgnoreCase);
                 var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 var faceSeeds = new List<FaceSeed>();
-                var grossVolumeCad = 0d;
-                var netVolumeCad = 0d;
+                var grossVolumeAccumulator = new QuantityReportMath.FiniteAccumulator();
+                var netVolumeAccumulator = new QuantityReportMath.FiniteAccumulator();
 
                 for (var componentIndex = 0; componentIndex < targetSolids.Count; componentIndex++)
                 {
                     var targetOwned = targetSolids[componentIndex];
                     var target = targetOwned.Solid;
-                    grossVolumeCad += SafeVolumeCad(target);
+                    grossVolumeAccumulator.Add(SafeVolumeCad(target), "quantity geometry gross volume");
                     faceSeeds.AddRange(ReadFaces(
                         document,
                         targetOwned,
@@ -123,13 +123,13 @@ namespace QS3D.BricsCAD.V25.Reporting
                                 var intersectionVolumeCad = intersection == null ? 0d : SafeVolumeCad(intersection);
                                 if (intersection != null && intersectionVolumeCad > volumeCadTolerance)
                                 {
-                                    Add(individualVolumeCad, candidate.ElementId, intersectionVolumeCad);
+                                    Add(individualVolumeAccumulators, candidate.ElementId, intersectionVolumeCad, "quantity geometry individual volume/" + candidate.ElementId);
                                     relation[candidate.ElementId] = QuantityGeometryRelation.VolumeIntersection;
                                     AccumulateFaceCoverage(
                                         intersection,
                                         componentIndex,
                                         faceSeeds,
-                                        individualAreaCad,
+                                        individualAreaAccumulators,
                                         candidate.ElementId,
                                         areaCadTolerance,
                                         distanceCad,
@@ -150,7 +150,7 @@ namespace QS3D.BricsCAD.V25.Reporting
                                         contact,
                                         componentIndex,
                                         faceSeeds,
-                                        individualAreaCad,
+                                        individualAreaAccumulators,
                                         candidate.ElementId,
                                         areaCadTolerance,
                                         distanceCad,
@@ -161,9 +161,14 @@ namespace QS3D.BricsCAD.V25.Reporting
                                 }
                             }
                         }
-                        netVolumeCad += SafeVolumeCad(volumeResidual);
+                        netVolumeAccumulator.Add(SafeVolumeCad(volumeResidual), "quantity geometry net volume");
                     }
                 }
+
+                var grossVolumeCad = grossVolumeAccumulator.Value("quantity geometry gross volume");
+                var netVolumeCad = netVolumeAccumulator.Value("quantity geometry net volume");
+                var individualVolumeCad = FinalizeAccumulators(individualVolumeAccumulators, "quantity geometry individual volume");
+                var individualAreaCad = FinalizeNestedAccumulators(individualAreaAccumulators, "quantity geometry individual area");
 
                 var faces = BuildFaceResults(
                     targetElement.Id,
@@ -180,9 +185,10 @@ namespace QS3D.BricsCAD.V25.Reporting
                     diagnostics);
                 var deductions = BuildVolumeDeductions(targetElement.Id, candidates, individualVolumeCad, relation, volumeScale);
                 var deductionVolumeCad = Math.Max(0d, grossVolumeCad - netVolumeCad);
-                if (individualVolumeCad.Values.Sum() + volumeCadTolerance < deductionVolumeCad)
+                var individualVolumeTotalCad = SumFinite(individualVolumeCad.Values, "quantity geometry individual volume total");
+                if (individualVolumeTotalCad + volumeCadTolerance < deductionVolumeCad)
                     diagnostics.Add("Union deduction exceeded the sum of individual intersections; geometry was retained fail-closed for review.");
-                if (individualVolumeCad.Values.Sum() > deductionVolumeCad + volumeCadTolerance)
+                if (individualVolumeTotalCad > deductionVolumeCad + volumeCadTolerance)
                     diagnostics.Add("Các vùng giao chồng nhau đã được trừ đúng một lần bằng residual boolean semantics.");
 
                 var dependencyIds = dependencies.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -278,7 +284,7 @@ namespace QS3D.BricsCAD.V25.Reporting
             double distanceCad,
             ICollection<string> diagnostics)
         {
-            var residualAreasCad = new double[seeds.Count];
+            var residualAreaAccumulators = new QuantityReportMath.FiniteAccumulator[seeds.Count];
             for (var componentIndex = 0; componentIndex < residuals.Count; componentIndex++)
             {
                 using (var brep = new Brep(residuals[componentIndex]))
@@ -289,7 +295,12 @@ namespace QS3D.BricsCAD.V25.Reporting
                         if (plane == null) continue;
                         var areaCad = SafeAreaCad(face);
                         var best = FindMatchingFace(seeds, componentIndex, plane, distanceCad);
-                        if (best >= 0) residualAreasCad[best] += areaCad;
+                        if (best >= 0)
+                        {
+                            var accumulator = residualAreaAccumulators[best];
+                            accumulator.Add(areaCad, "quantity geometry residual face area/" + best);
+                            residualAreaAccumulators[best] = accumulator;
+                        }
                     }
                 }
             }
@@ -301,7 +312,8 @@ namespace QS3D.BricsCAD.V25.Reporting
             {
                 var seed = seeds[index];
                 if (!IncludeFormworkFace(targetCategory, seed.Type, seed.IsOuterHorizontal)) continue;
-                var netCad = seed.Plane == null ? seed.GrossAreaCad : Math.Min(seed.GrossAreaCad, residualAreasCad[index]);
+                var residualAreaCad = residualAreaAccumulators[index].Value("quantity geometry residual face area/" + index);
+                var netCad = seed.Plane == null ? seed.GrossAreaCad : Math.Min(seed.GrossAreaCad, residualAreaCad);
                 if (seed.Plane == null)
                     diagnostics.Add(seed.Id + ": mặt không phẳng được giữ nguyên diện tích; cần native curved-face probe nếu phải khấu trừ mặt cong.");
                 var deductionCad = Math.Max(0d, seed.GrossAreaCad - netCad);
@@ -497,13 +509,13 @@ namespace QS3D.BricsCAD.V25.Reporting
             Solid3d intersection,
             int componentIndex,
             IReadOnlyList<FaceSeed> seeds,
-            IDictionary<string, Dictionary<int, double>> accumulator,
+            IDictionary<string, Dictionary<int, QuantityReportMath.FiniteAccumulator>> accumulator,
             string elementId,
             double areaCadTolerance,
             double distanceCad,
             ICollection<string> diagnostics)
         {
-            var totalCad = 0d;
+            var contributions = new List<KeyValuePair<int, double>>();
             try
             {
                 using (var brep = new Brep(intersection))
@@ -516,15 +528,24 @@ namespace QS3D.BricsCAD.V25.Reporting
                         if (seedIndex < 0) continue;
                         var areaCad = SafeAreaCad(face);
                         if (areaCad <= areaCadTolerance) continue;
-                        if (!accumulator.TryGetValue(elementId, out var byFace))
-                            accumulator[elementId] = byFace = new Dictionary<int, double>();
-                        Add(byFace, seedIndex, areaCad);
-                        totalCad += areaCad;
+                        contributions.Add(new KeyValuePair<int, double>(seedIndex, areaCad));
                     }
                 }
             }
-            catch (Exception ex) when (Recoverable(ex)) { diagnostics.Add("BREP coverage/" + elementId + ": " + ex.Message); }
-            return totalCad;
+            catch (Exception ex) when (Recoverable(ex))
+            {
+                diagnostics.Add("BREP coverage/" + elementId + ": " + ex.Message);
+            }
+
+            var coverageAccumulator = new QuantityReportMath.FiniteAccumulator();
+            foreach (var contribution in contributions)
+            {
+                if (!accumulator.TryGetValue(elementId, out var byFace))
+                    accumulator[elementId] = byFace = new Dictionary<int, QuantityReportMath.FiniteAccumulator>();
+                Add(byFace, contribution.Key, contribution.Value, "quantity geometry individual area/" + elementId + "/" + contribution.Key);
+                coverageAccumulator.Add(contribution.Value, "quantity geometry face coverage total/" + elementId);
+            }
+            return coverageAccumulator.Value("quantity geometry face coverage total/" + elementId);
         }
 
         private static int FindMatchingFace(IReadOnlyList<FaceSeed> seeds, int componentIndex, PlanarEntity plane, double toleranceCad)
@@ -779,8 +800,57 @@ namespace QS3D.BricsCAD.V25.Reporting
 
         private static Solid3d Clone(Solid3d source) => (Solid3d)source.Clone();
         private static bool Recoverable(Exception ex) => !(ex is OutOfMemoryException) && !(ex is StackOverflowException) && !(ex is AccessViolationException);
-        private static void Add(IDictionary<string, double> values, string key, double value) => values[key] = (values.TryGetValue(key, out var current) ? current : 0d) + value;
-        private static void Add(IDictionary<int, double> values, int key, double value) => values[key] = (values.TryGetValue(key, out var current) ? current : 0d) + value;
+        private static void Add(IDictionary<string, QuantityReportMath.FiniteAccumulator> values, string key, double value, string label)
+        {
+            var accumulator = values.TryGetValue(key, out var current) ? current : new QuantityReportMath.FiniteAccumulator();
+            accumulator.Add(value, label);
+            values[key] = accumulator;
+        }
+
+        private static void Add(IDictionary<int, QuantityReportMath.FiniteAccumulator> values, int key, double value, string label)
+        {
+            var accumulator = values.TryGetValue(key, out var current) ? current : new QuantityReportMath.FiniteAccumulator();
+            accumulator.Add(value, label);
+            values[key] = accumulator;
+        }
+
+        private static Dictionary<string, double> FinalizeAccumulators(
+            IReadOnlyDictionary<string, QuantityReportMath.FiniteAccumulator> values,
+            string label)
+        {
+            var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in values)
+            {
+                var accumulator = pair.Value;
+                result[pair.Key] = accumulator.Value(label + "/" + pair.Key);
+            }
+            return result;
+        }
+
+        private static Dictionary<string, Dictionary<int, double>> FinalizeNestedAccumulators(
+            IReadOnlyDictionary<string, Dictionary<int, QuantityReportMath.FiniteAccumulator>> values,
+            string label)
+        {
+            var result = new Dictionary<string, Dictionary<int, double>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var outer in values)
+            {
+                var byFace = new Dictionary<int, double>();
+                foreach (var inner in outer.Value)
+                {
+                    var accumulator = inner.Value;
+                    byFace[inner.Key] = accumulator.Value(label + "/" + outer.Key + "/" + inner.Key);
+                }
+                result[outer.Key] = byFace;
+            }
+            return result;
+        }
+
+        private static double SumFinite(IEnumerable<double> values, string label)
+        {
+            var accumulator = new QuantityReportMath.FiniteAccumulator();
+            foreach (var value in values) accumulator.Add(value, label);
+            return accumulator.Value(label);
+        }
 
         private static string ElementName(ProjectState project, ProjectElement element)
         {

@@ -50,49 +50,81 @@ namespace QS3D.BricsCAD.V25.UI
         {
             Background = ShellBrush;
             Content = BuildShell();
-            Loaded += (_, __) => RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);
+            Loaded += (_, __) => RefreshFromActiveDocument();
         }
 
         public void RefreshFromActiveDocument()
         {
-            RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);
+            var document = Application.DocumentManager.MdiActiveDocument;
+            RefreshFromDocument(document, DocumentGenerationGuard.CaptureCurrent(document));
         }
 
         public void RefreshFromDocument(Document? document)
         {
-            if (document != null)
+            RefreshFromDocument(document, DocumentGenerationGuard.CaptureCurrent(document));
+        }
+
+        public void RefreshFromDocument(Document? document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null)
+            {
+                _floorText.Text = "Tầng —";
+                _elevationText.Text = "•  Cao độ 0.000 m";
+                RefreshRecentProjects(null, IntPtr.Zero);
+                return;
+            }
+
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+            ResetDocumentScopedDisplay();
+
+            string? normalized = null;
+            try
             {
                 var path = document.Name ?? string.Empty;
-                if (StartCenterUserStateStore.TryNormalizeDwgPath(path, out var normalized))
-                    StartCenterUserStateStore.RecordProject(normalized);
+                if (StartCenterUserStateStore.TryNormalizeDwgPath(path, out var normalizedPath))
+                    normalized = normalizedPath;
+            }
+            catch
+            {
+                normalized = null;
             }
 
-            _floorText.Text = "Tầng —";
-            _elevationText.Text = "•  Cao độ 0.000 m";
-            if (document != null)
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+            if (!string.IsNullOrWhiteSpace(normalized))
+                StartCenterUserStateStore.RecordProject(normalized!);
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+
+            var floorText = "Tầng —";
+            var elevationText = "•  Cao độ 0.000 m";
+            try
             {
-                try
+                if (ProjectContextCoordinator.TryGetReadOnly(document, out var project) &&
+                    !string.IsNullOrWhiteSpace(project.ActiveFloorId))
                 {
-                    if (ProjectContextCoordinator.TryGetReadOnly(document, out var project) &&
-                        !string.IsNullOrWhiteSpace(project.ActiveFloorId))
+                    var floor = project.FindFloor(project.ActiveFloorId);
+                    if (floor != null)
                     {
-                        var floor = project.FindFloor(project.ActiveFloorId);
-                        if (floor != null)
-                        {
-                            if (!string.IsNullOrWhiteSpace(floor.Name))
-                                _floorText.Text = "Tầng " + floor.Name;
-                            _elevationText.Text = "•  Cao độ " + floor.ElevationM.ToString("0.000", CultureInfo.InvariantCulture) + " m";
-                        }
+                        if (!string.IsNullOrWhiteSpace(floor.Name)) floorText = "Tầng " + floor.Name;
+                        elevationText = "•  Cao độ " + floor.ElevationM.ToString("0.000", CultureInfo.InvariantCulture) + " m";
                     }
                 }
-                catch
-                {
-                    // Start Center is display-only. A project read failure must never mutate CAD state.
-                }
+            }
+            catch
+            {
+                // Start Center is display-only. A project read failure must never mutate CAD state.
             }
 
-            RefreshStatusControls();
-            RefreshRecentProjects();
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+            _floorText.Text = floorText;
+            _elevationText.Text = elevationText;
+            RefreshStatusControls(document, nativeDatabaseIdentity);
+            RefreshRecentProjects(document, nativeDatabaseIdentity);
+        }
+
+        private void ResetDocumentScopedDisplay()
+        {
+            _floorText.Text = "Tầng —";
+            _elevationText.Text = "•  Cao độ 0.000 m";
         }
 
         private UIElement BuildShell()
@@ -538,16 +570,25 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshStatusControls()
         {
-            SetStatusLabelState(_lightThemeStatusText,
-                TryReadSystemVariableInt("COLORTHEME", out var colorTheme) && colorTheme == 1);
-            SetStatusLabelState(_contrastStatusText,
-                TryReadSystemVariableInt("LINEARCONTRAST", out var contrast) && contrast != 0);
-            SetStatusLabelState(_orthoStatusText,
-                TryReadSystemVariableInt("ORTHOMODE", out var orthoMode) && orthoMode != 0);
-            SetStatusLabelState(_snapStatusText,
-                TryReadSystemVariableInt("OSMODE", out var osMode) &&
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            RefreshStatusControls(document, DocumentGenerationGuard.CaptureCurrent(document));
+        }
+
+        private void RefreshStatusControls(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            var light = TryReadSystemVariableInt("COLORTHEME", out var colorTheme) && colorTheme == 1;
+            var contrastOn = TryReadSystemVariableInt("LINEARCONTRAST", out var contrast) && contrast != 0;
+            var ortho = TryReadSystemVariableInt("ORTHOMODE", out var orthoMode) && orthoMode != 0;
+            var snap = TryReadSystemVariableInt("OSMODE", out var osMode) &&
                 (osMode & ObjectSnapSuppressedBit) == 0 &&
-                (osMode & ~ObjectSnapSuppressedBit) != 0);
+                (osMode & ~ObjectSnapSuppressedBit) != 0;
+
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+            SetStatusLabelState(_lightThemeStatusText, light);
+            SetStatusLabelState(_contrastStatusText, contrastOn);
+            SetStatusLabelState(_orthoStatusText, ortho);
+            SetStatusLabelState(_snapStatusText, snap);
         }
 
         private static void SetStatusLabelState(TextBlock label, bool active)
@@ -644,11 +685,20 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshRecentProjects()
         {
-            _recentPanel.Children.Clear();
+            var document = Application.DocumentManager.MdiActiveDocument;
+            RefreshRecentProjects(document, DocumentGenerationGuard.CaptureCurrent(document));
+        }
+
+        private void RefreshRecentProjects(Document? document, IntPtr nativeDatabaseIdentity)
+        {
             var projects = StartCenterUserStateStore.GetSnapshot().RecentProjects
                 .OrderByDescending(item => item.IsPinned)
                 .ThenByDescending(item => item.LastOpenedUtc)
                 .ToList();
+
+            if (document != null && !DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+            if (document == null && Application.DocumentManager.MdiActiveDocument != null) return;
+            _recentPanel.Children.Clear();
 
             if (projects.Count == 0)
             {

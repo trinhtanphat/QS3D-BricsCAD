@@ -43,10 +43,11 @@ for token in (
     "SubscribeToDocumentActivation();",
     "Application.DocumentManager.DocumentActivated += OnDocumentActivated;",
     "Application.DocumentManager.DocumentActivated -= OnDocumentActivated;",
-    "panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);",
-    "panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);",
+    "document = e.Document ?? Application.DocumentManager.MdiActiveDocument;",
+    "nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);",
+    "panel.RefreshFromDocument(document, nativeDatabaseIdentity);",
     "UnsubscribeFromDocumentActivation();",
-    "panel.ShowUnavailable(\"Project Information không thể đọc bản vẽ vừa kích hoạt; dữ liệu cũ đã được xóa.\")",
+    "ShowUnavailableIfCurrent(",
 ):
     if token not in coordinator:
         raise SystemExit(f"Project Information palette lifecycle missing token: {token}")

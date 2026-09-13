@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
+using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
@@ -83,44 +84,61 @@ namespace QS3D.BricsCAD.V25.UI
 
         public void RefreshFromDocument(Document? document)
         {
+            RefreshFromDocument(document, DocumentGenerationGuard.CaptureCurrent(document));
+        }
+
+        public void RefreshFromDocument(Document? document, IntPtr nativeDatabaseIdentity)
+        {
             if (document == null)
             {
                 ShowUnavailable("Không có bản vẽ đang active; Project Information đã xóa dữ liệu cũ.");
                 return;
             }
 
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+
             try
             {
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 {
-                    ShowUnavailable("Bản vẽ hiện hành chưa có QS3D project. Project Information chỉ đọc và không tự tạo project.");
+                    if (DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
+                        ShowUnavailable("Bản vẽ hiện hành chưa có QS3D project. Project Information chỉ đọc và không tự tạo project.");
                     return;
                 }
 
                 var activeZone = ResolveActiveZone(project);
                 var activeFloor = ResolveActiveFloor(project);
-                _heading.Text = project.Name;
-                _status.Text = "Chỉ đọc • dữ liệu được resolve lại từ project của bản vẽ active mỗi lần mở/chuyển bản vẽ.";
-                _projectId.Text = Display(project.ProjectId);
-                _drawing.Text = Display(DrawingLabel(document, project));
-                _fingerprint.Text = Display(project.DrawingFingerprint);
-                _activeZone.Text = activeZone;
-                _activeFloor.Text = activeFloor;
-                _schema.Text = project.SchemaVersion.ToString(CultureInfo.InvariantCulture);
-                _changeVersion.Text = project.ChangeVersion.ToString(CultureInfo.InvariantCulture);
-                _updatedUtc.Text = project.UpdatedUtc.ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
-                _counts.Text = string.Format(
+                var heading = project.Name;
+                var projectId = Display(project.ProjectId);
+                var drawing = Display(DrawingLabel(document, project));
+                var fingerprint = Display(project.DrawingFingerprint);
+                var schema = project.SchemaVersion.ToString(CultureInfo.InvariantCulture);
+                var changeVersion = project.ChangeVersion.ToString(CultureInfo.InvariantCulture);
+                var updatedUtc = project.UpdatedUtc.ToString("yyyy-MM-dd HH:mm:ss 'UTC'", CultureInfo.InvariantCulture);
+                var counts = string.Format(
                     CultureInfo.InvariantCulture,
                     "Zone {0} • Tầng {1} • Family {2} • Element {3} • Rule KL {4}",
-                    project.Zones.Count,
-                    project.Floors.Count,
-                    project.Families.Count,
-                    project.Elements.Count,
-                    project.QuantityRules.Count);
+                    project.Zones.Count, project.Floors.Count, project.Families.Count,
+                    project.Elements.Count, project.QuantityRules.Count);
+
+                if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+
+                _heading.Text = heading;
+                _status.Text = "Chỉ đọc • dữ liệu được resolve lại từ project của bản vẽ active mỗi lần mở/chuyển bản vẽ.";
+                _projectId.Text = projectId;
+                _drawing.Text = drawing;
+                _fingerprint.Text = fingerprint;
+                _activeZone.Text = activeZone;
+                _activeFloor.Text = activeFloor;
+                _schema.Text = schema;
+                _changeVersion.Text = changeVersion;
+                _updatedUtc.Text = updatedUtc;
+                _counts.Text = counts;
             }
             catch (Exception)
             {
-                ShowUnavailable("Không thể đọc Project Information an toàn từ bản vẽ hiện hành. Dữ liệu cũ đã được xóa; hãy kiểm tra project/sidecar rồi thử lại.");
+                if (DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
+                    ShowUnavailable("Không thể đọc Project Information an toàn từ bản vẽ hiện hành. Dữ liệu cũ đã được xóa; hãy kiểm tra project/sidecar rồi thử lại.");
             }
         }
 
@@ -206,4 +224,39 @@ namespace QS3D.BricsCAD.V25.UI
 
         private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "—" : value!.Trim();
     }
+
+    internal static class DocumentGenerationGuard
+    {
+        public static IntPtr CaptureCurrent(Document? document)
+        {
+            if (document == null) return IntPtr.Zero;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) return IntPtr.Zero;
+                var database = document.Database;
+                return database == null ? IntPtr.Zero : database.UnmanagedObject;
+            }
+            catch
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        public static bool IsCurrent(Document? document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+            try
+            {
+                if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) return false;
+                var database = document.Database;
+                return database != null && database.UnmanagedObject != IntPtr.Zero &&
+                       database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+    }
+
 }
