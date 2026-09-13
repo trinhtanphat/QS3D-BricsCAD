@@ -12,7 +12,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+SCOPE_CLASSIFIER = ROOT / "scripts" / "ci-validation-scope.py"
 HYBRID_WORKFLOW = ROOT / ".github" / "workflows" / "hybrid-pr-coordinator.yml"
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -91,18 +91,16 @@ def self_test() -> None:
 
 
 def validate_workflow_contracts() -> None:
-    ci_source = CI_WORKFLOW.read_text(encoding="utf-8")
-    required_ci_tokens = (
-        "- name: Agent PR candidate ancestry gate",
-        "github.event_name == 'pull_request'",
-        "startsWith(github.event.pull_request.head.ref, 'agent/')",
-        "github.event.pull_request.head.repo.full_name == github.repository",
-        "github.actor != 'dependabot[bot]'",
-        "python scripts/preflight-pr-candidate-ancestry.py --verify-runtime",
+    classifier_source = SCOPE_CLASSIFIER.read_text(encoding="utf-8")
+    required_classifier_tokens = (
+        "def validate_agent_pr_candidate_ancestry()",
+        "preflight-pr-candidate-ancestry.py",
+        "--verify-runtime",
+        "validate_agent_pr_candidate_ancestry()",
     )
-    for token in required_ci_tokens:
-        if token not in ci_source:
-            raise RuntimeError(f"Shared CI ancestry hook is missing required token {token!r}")
+    for token in required_classifier_tokens:
+        if token not in classifier_source:
+            raise RuntimeError(f"unconditional validation-scope ancestry hook is missing {token!r}")
 
     hybrid_source = HYBRID_WORKFLOW.read_text(encoding="utf-8")
     if "update_method=merge" in hybrid_source:
@@ -210,7 +208,7 @@ def main() -> int:
         return 1
 
     if not args.verify_runtime:
-        print("PASS: agent PR ancestry deterministic regression and workflow contracts are valid.")
+        print("PASS: agent PR ancestry deterministic regression and admission contracts are valid.")
     return 0
 
 
