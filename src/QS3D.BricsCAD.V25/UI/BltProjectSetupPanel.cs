@@ -6,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using Bricscad.ApplicationServices;
 using QS3D.Core.Domain;
+using Application = Bricscad.ApplicationServices.Application;
 
 namespace QS3D.BricsCAD.V25.UI
 {
