@@ -319,12 +319,14 @@ namespace QS3D.Core.Domain
         private readonly Action<T> _attach;
         private readonly Action<T> _detach;
         private readonly Action _beforeMutation;
+        private readonly Action<T>? _validateCandidate;
 
-        internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation)
+        internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation, Action<T>? validateCandidate = null)
         {
             _attach = attach ?? throw new ArgumentNullException(nameof(attach));
             _detach = detach ?? throw new ArgumentNullException(nameof(detach));
             _beforeMutation = beforeMutation ?? throw new ArgumentNullException(nameof(beforeMutation));
+            _validateCandidate = validateCandidate;
         }
 
         public T this[int index]
@@ -335,6 +337,7 @@ namespace QS3D.Core.Domain
                 if (value == null) throw new ArgumentNullException(nameof(value));
                 var previous = _items[index];
                 if (ReferenceEquals(previous, value)) return;
+                _validateCandidate?.Invoke(value);
                 var previousWasLastReference = CountReferences(previous) == 1;
                 var valueAlreadyOwned = ContainsReference(value);
                 _beforeMutation();
@@ -350,6 +353,7 @@ namespace QS3D.Core.Domain
         public void Add(T item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
+            _validateCandidate?.Invoke(item);
             var alreadyOwned = ContainsReference(item);
             _beforeMutation();
             _items.Add(item);
@@ -387,6 +391,7 @@ namespace QS3D.Core.Domain
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (index < 0 || index > _items.Count) throw new ArgumentOutOfRangeException(nameof(index));
+            _validateCandidate?.Invoke(item);
             var alreadyOwned = ContainsReference(item);
             _beforeMutation();
             _items.Insert(index, item);
@@ -516,7 +521,7 @@ namespace QS3D.Core.Domain
             QuantityRules = new StructuralRevisionList<QuantityRule>(Touch);
             Metadata = new ProjectMetadataDictionary();
             MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(this, Metadata);
-            AuditEvents = new List<AuditEvent>();
+            AuditEvents = new CatalogOwnershipList<AuditEvent>(AttachAuditEvent, DetachAuditEvent, Touch, ValidateAuditEventCandidate);
         }
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -614,6 +619,18 @@ namespace QS3D.Core.Domain
         private void DetachFloor(FloorDefinition floor) => floor.PersistenceMutationRequested -= Touch;
         private void AttachFamily(ProjectFamily family) => family.PersistenceMutationRequested += Touch;
         private void DetachFamily(ProjectFamily family) => family.PersistenceMutationRequested -= Touch;
+        private void AttachAuditEvent(AuditEvent auditEvent) => auditEvent.PersistenceMutationRequested += Touch;
+        private void DetachAuditEvent(AuditEvent auditEvent) => auditEvent.PersistenceMutationRequested -= Touch;
+
+        private static void ValidateAuditEventCandidate(AuditEvent auditEvent)
+        {
+            AuditTrail.ValidateOwnedUtcMutation(auditEvent.Utc);
+            AuditTrail.ValidateOwnedActionMutation(auditEvent.Action);
+            AuditTrail.ValidateOwnedOptionalIdentityMutation(auditEvent.ElementId, nameof(AuditEvent.ElementId), "Audit element id");
+            AuditTrail.ValidateOwnedXmlTextMutation(auditEvent.Detail, nameof(AuditEvent.Detail), "Audit detail");
+            AuditTrail.ValidateOwnedXmlTextMutation(auditEvent.Actor, nameof(AuditEvent.Actor), "Audit actor");
+            AuditTrail.ValidateOwnedOptionalIdentityMutation(auditEvent.CorrelationId, nameof(AuditEvent.CorrelationId), "Audit correlation id");
+        }
 
         private void SetActiveContextId(ref string field, string? value)
         {

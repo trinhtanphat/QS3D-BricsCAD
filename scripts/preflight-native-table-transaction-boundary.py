@@ -4,6 +4,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIT = ROOT / "src/QS3D.Core/Audit/AuditTrail.cs"
+PROJECT_STATE = ROOT / "src/QS3D.Core/Domain/ProjectState.cs"
 SNAPSHOT_STATE = ROOT / "src/QS3D.Core/Persistence/ProjectStateSnapshot.cs"
 TARGETS = [
     (
@@ -42,6 +43,20 @@ TARGETS = [
 
 errors = []
 
+
+def has_revision_aware_audit_events(project_text):
+    return all(
+        token in project_text
+        for token in (
+            "AuditEvents = new CatalogOwnershipList<AuditEvent>(",
+            "AttachAuditEvent",
+            "DetachAuditEvent",
+            "auditEvent.PersistenceMutationRequested += Touch",
+            "auditEvent.PersistenceMutationRequested -= Touch",
+        )
+    )
+
+
 for path, start_token, end_token, audit_token, label, requires_model_space in TARGETS:
     if not path.is_file():
         errors.append("missing " + str(path.relative_to(ROOT)))
@@ -71,7 +86,7 @@ for path, start_token, end_token, audit_token, label, requires_model_space in TA
         errors.append(path.name + ": expected snapshot -> audit/revision -> CAD commit -> committed flag -> rollback catch in " + label)
 
     if "project.Touch();" in method:
-        errors.append(path.name + ": " + label + " must not duplicate the audit-owned project Touch")
+        errors.append(path.name + ": " + label + " must not duplicate the authoritative audit project revision owner")
     if "if (!committed)" not in method and "if (!cadCommitted)" not in method:
         errors.append(path.name + ": " + label + " rollback must remain guarded by CAD commit state")
     if "if (!ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))" not in method:
@@ -91,8 +106,14 @@ else:
         errors.append("could not isolate AuditTrail.Record")
     else:
         record = audit_text[record_start:clear_start]
-        if "_project?.Touch();" not in record:
-            errors.append("AuditTrail.Record must remain the native Table project revision owner")
+        project_text = PROJECT_STATE.read_text(encoding="utf-8") if PROJECT_STATE.is_file() else ""
+        legacy_audit_touch = "_project?.Touch();" in record
+        ownership_touch = has_revision_aware_audit_events(project_text)
+        if legacy_audit_touch == ownership_touch:
+            errors.append(
+                "native Table project revision contract must have exactly one owner: legacy AuditTrail.Record Touch "
+                "or revision-aware ProjectState.AuditEvents ownership"
+            )
         if "_events.Add(item);" not in record:
             errors.append("AuditTrail.Record must continue appending the audit event")
 
@@ -114,4 +135,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: native table build/remove stays document-bound and rollback-safe while AuditTrail.Record owns the single project revision touch before CAD commit.")
+print("PASS: native table build/remove stays document-bound and rollback-safe with exactly one authoritative audit project revision owner before CAD commit.")
