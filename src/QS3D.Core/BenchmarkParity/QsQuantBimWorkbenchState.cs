@@ -106,8 +106,9 @@ namespace QS3D.Core.BenchmarkParity
             foreach (var element in document.Elements)
             {
                 if (element == null) throw new InvalidOperationException("IFC document contains a null element.");
-                if (!byGuid.TryAdd(element.Guid, element))
+                if (byGuid.ContainsKey(element.Guid))
                     throw new InvalidOperationException("IFC document contains duplicate element GUID: " + element.Guid + ".");
+                byGuid.Add(element.Guid, element);
             }
 
             foreach (var guid in selection.Guids)
