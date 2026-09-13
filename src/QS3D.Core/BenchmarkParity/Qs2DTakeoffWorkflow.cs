@@ -37,6 +37,8 @@ namespace QS3D.Core.BenchmarkParity
             if (kind != TakeoffMeasurementKind.Count && kind != TakeoffMeasurementKind.Length && kind != TakeoffMeasurementKind.Area) throw new ArgumentOutOfRangeException("kind");
             Kind = kind;
             RawValue = DrawingCalibration.Positive(rawValue, "rawValue");
+            if (kind == TakeoffMeasurementKind.Count && RawValue != Math.Truncate(RawValue))
+                throw new ArgumentOutOfRangeException("rawValue", "Count markup value must be a whole number of discrete items.");
             Classification = QsModelElementSnapshot.Require(classification, "classification");
             Zone = QsModelElementSnapshot.Optional(zone);
             Layer = QsModelElementSnapshot.Optional(layer);

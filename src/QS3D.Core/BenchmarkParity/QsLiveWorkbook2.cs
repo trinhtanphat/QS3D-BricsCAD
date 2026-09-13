@@ -67,8 +67,8 @@ namespace QS3D.Core.BenchmarkParity
             SourceRevision = QsModelElementSnapshot.Optional(sourceRevision);
             DependsOnBindingIds = new ReadOnlyCollection<string>((dependsOnBindingIds ?? Enumerable.Empty<string>())
                 .Select(x => QsModelElementSnapshot.Require(x, "dependsOnBindingIds"))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(x => x, StringComparer.Ordinal)
                 .ToList());
             Multiplier = QsModelElementSnapshot.Finite(multiplier, "multiplier");
             Offset = QsModelElementSnapshot.Finite(offset, "offset");
@@ -176,9 +176,9 @@ namespace QS3D.Core.BenchmarkParity
             var sourceList = sources.ToList();
             if (sourceList.Any(x => x == null)) throw new ArgumentException("Source collection contains null.", "sources");
 
-            var bindingGroups = bindingList.GroupBy(x => x.BindingId, StringComparer.OrdinalIgnoreCase).ToList();
-            var duplicateBindingIds = new HashSet<string>(bindingGroups.Where(x => x.Count() > 1).Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
-            var distinctBindings = bindingGroups.Select(x => x.OrderBy(y => y.CellKey, StringComparer.OrdinalIgnoreCase).First()).ToDictionary(x => x.BindingId, StringComparer.OrdinalIgnoreCase);
+            var bindingGroups = bindingList.GroupBy(x => x.BindingId, StringComparer.Ordinal).ToList();
+            var duplicateBindingIds = new HashSet<string>(bindingGroups.Where(x => x.Count() > 1).Select(x => x.Key), StringComparer.Ordinal);
+            var distinctBindings = bindingGroups.Select(x => x.OrderBy(y => y.CellKey, StringComparer.OrdinalIgnoreCase).First()).ToDictionary(x => x.BindingId, StringComparer.Ordinal);
 
             var cellConflicts = new HashSet<string>(bindingList
                 .GroupBy(x => x.CellKey, StringComparer.OrdinalIgnoreCase)
@@ -191,7 +191,7 @@ namespace QS3D.Core.BenchmarkParity
                 .Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
 
             var orderedIds = TopologicalOrder(distinctBindings);
-            var results = new Dictionary<string, LiveWorkbookRefreshResult>(StringComparer.OrdinalIgnoreCase);
+            var results = new Dictionary<string, LiveWorkbookRefreshResult>(StringComparer.Ordinal);
 
             foreach (var id in orderedIds)
             {
@@ -246,22 +246,22 @@ namespace QS3D.Core.BenchmarkParity
                     trace.Add("source:" + key + "@" + source.Revision);
                 }
 
-                var dependencyValues = new List<double>();
-                foreach (var dependencyId in binding.DependsOnBindingIds.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                var aggregateInputs = new List<double> { sourceValue };
+                foreach (var dependencyId in binding.DependsOnBindingIds.OrderBy(x => x, StringComparer.Ordinal))
                 {
                     var dependency = results[dependencyId];
-                    dependencyValues.Add(dependency.Value);
+                    aggregateInputs.Add(dependency.Value);
                     trace.Add("binding:" + dependencyId + "=" + dependency.Value.ToString("R", System.Globalization.CultureInfo.InvariantCulture));
                 }
 
-                double dependencyValue;
-                if (!TryCompensatedSum(dependencyValues, out dependencyValue))
+                double aggregateValue;
+                if (!TryCompensatedSum(aggregateInputs, out aggregateValue))
                 {
-                    results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh dependency aggregation produced a non-finite value.");
+                    results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh source/dependency aggregation produced a non-finite value.");
                     continue;
                 }
 
-                var value = (sourceValue + dependencyValue) * binding.Multiplier + binding.Offset;
+                var value = aggregateValue * binding.Multiplier + binding.Offset;
                 if (double.IsNaN(value) || double.IsInfinity(value))
                 {
                     results[id] = Failure(binding, LiveWorkbookFreshness.Error, "Refresh arithmetic produced a non-finite value.");
@@ -281,13 +281,13 @@ namespace QS3D.Core.BenchmarkParity
                 results[id] = new LiveWorkbookRefreshResult(binding, freshness, binding.LastValue, value, sourceRevision, evidence, trace, message);
             }
 
-            foreach (var unresolved in distinctBindings.Keys.Where(x => !results.ContainsKey(x)).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            foreach (var unresolved in distinctBindings.Keys.Where(x => !results.ContainsKey(x)).OrderBy(x => x, StringComparer.Ordinal))
                 results[unresolved] = Failure(distinctBindings[unresolved], LiveWorkbookFreshness.Error, "Dependency cycle detected.");
 
             return new LiveWorkbookRefreshBatch(results.Values.OrderBy(x => x.Binding.WorkbookId, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Binding.Sheet, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Binding.Cell, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(x => x.Binding.BindingId, StringComparer.OrdinalIgnoreCase));
+                .ThenBy(x => x.Binding.BindingId, StringComparer.Ordinal));
         }
 
         private static bool TryCompensatedSum(IEnumerable<double> values, out double total)
@@ -326,8 +326,8 @@ namespace QS3D.Core.BenchmarkParity
 
         private static IReadOnlyList<string> TopologicalOrder(IDictionary<string, LiveWorkbookBinding> bindings)
         {
-            var indegree = bindings.Keys.ToDictionary(x => x, x => 0, StringComparer.OrdinalIgnoreCase);
-            var dependents = bindings.Keys.ToDictionary(x => x, x => new List<string>(), StringComparer.OrdinalIgnoreCase);
+            var indegree = bindings.Keys.ToDictionary(x => x, x => 0, StringComparer.Ordinal);
+            var dependents = bindings.Keys.ToDictionary(x => x, x => new List<string>(), StringComparer.Ordinal);
             foreach (var binding in bindings.Values)
             {
                 foreach (var dependency in binding.DependsOnBindingIds)
@@ -338,14 +338,14 @@ namespace QS3D.Core.BenchmarkParity
                 }
             }
 
-            var ready = new SortedSet<string>(indegree.Where(x => x.Value == 0).Select(x => x.Key), StringComparer.OrdinalIgnoreCase);
+            var ready = new SortedSet<string>(indegree.Where(x => x.Value == 0).Select(x => x.Key), StringComparer.Ordinal);
             var ordered = new List<string>();
             while (ready.Count > 0)
             {
                 var id = ready.Min;
                 ready.Remove(id);
                 ordered.Add(id);
-                foreach (var dependent in dependents[id].OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                foreach (var dependent in dependents[id].OrderBy(x => x, StringComparer.Ordinal))
                 {
                     indegree[dependent]--;
                     if (indegree[dependent] == 0) ready.Add(dependent);
