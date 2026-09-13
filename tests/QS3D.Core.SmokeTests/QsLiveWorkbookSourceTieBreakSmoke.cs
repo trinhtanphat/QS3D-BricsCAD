@@ -32,7 +32,7 @@ namespace QS3D.Core.SmokeTests
 
             var engine = new LiveWorkbookRefreshEngine2();
             var forward = engine.Refresh(new[] { binding }, sources, "R2").Results.Single();
-            var reverse = engine.Refresh(new[] { binding }, sources.Reverse(), "R2").Results.Single();
+            var reverse = engine.Refresh(new[] { binding }, sources.AsEnumerable().Reverse(), "R2").Results.Single();
             var canonical = sources
                 .OrderBy(x => x.Revision, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Revision, StringComparer.Ordinal)
