@@ -179,9 +179,15 @@ namespace QS3D.Core.BenchmarkParity
     public sealed class TakeoffWorkflowLine
     {
         public TakeoffWorkflowLine(string classification, string zone, string unit, double measuredQuantity, double formulaQuantity, double unitRate, int evidenceCount)
+            : this(classification, zone, string.Empty, unit, measuredQuantity, formulaQuantity, unitRate, evidenceCount)
+        {
+        }
+
+        public TakeoffWorkflowLine(string classification, string zone, string layer, string unit, double measuredQuantity, double formulaQuantity, double unitRate, int evidenceCount)
         {
             Classification = QsModelElementSnapshot.Require(classification, "classification");
             Zone = QsModelElementSnapshot.Optional(zone);
+            Layer = QsModelElementSnapshot.Optional(layer);
             Unit = QsModelElementSnapshot.Require(unit, "unit");
             MeasuredQuantity = QsModelElementSnapshot.Finite(measuredQuantity, "measuredQuantity");
             FormulaQuantity = QsModelElementSnapshot.Finite(formulaQuantity, "formulaQuantity");
@@ -192,6 +198,7 @@ namespace QS3D.Core.BenchmarkParity
         }
         public string Classification { get; private set; }
         public string Zone { get; private set; }
+        public string Layer { get; private set; }
         public string Unit { get; private set; }
         public double MeasuredQuantity { get; private set; }
         public double FormulaQuantity { get; private set; }
@@ -204,28 +211,35 @@ namespace QS3D.Core.BenchmarkParity
     {
         private sealed class WorkflowRow
         {
-            public WorkflowRow(string classification, string zone, string unit, double quantity)
+            public WorkflowRow(string classification, string zone, string layer, string unit, double quantity)
             {
                 Classification = QsModelElementSnapshot.Require(classification, "classification");
                 Zone = QsModelElementSnapshot.Optional(zone);
+                Layer = QsModelElementSnapshot.Optional(layer);
                 Unit = QsModelElementSnapshot.Require(unit, "unit");
                 Quantity = QsModelElementSnapshot.Finite(quantity, "quantity");
             }
             public string Classification { get; private set; }
             public string Zone { get; private set; }
+            public string Layer { get; private set; }
             public string Unit { get; private set; }
             public double Quantity { get; private set; }
         }
 
         private sealed class WorkflowKey : IEquatable<WorkflowKey>
         {
-            public WorkflowKey(string classification, string zone, string unit) { Classification = classification; Zone = zone ?? string.Empty; Unit = unit; }
+            public WorkflowKey(string classification, string zone, string layer, string unit) { Classification = classification; Zone = zone ?? string.Empty; Layer = layer ?? string.Empty; Unit = unit; }
             public string Classification { get; private set; }
             public string Zone { get; private set; }
+            public string Layer { get; private set; }
             public string Unit { get; private set; }
             public bool Equals(WorkflowKey? other)
             {
-                return other != null && string.Equals(Classification, other.Classification, StringComparison.OrdinalIgnoreCase) && string.Equals(Zone, other.Zone, StringComparison.OrdinalIgnoreCase) && string.Equals(Unit, other.Unit, StringComparison.OrdinalIgnoreCase);
+                return other != null
+                    && string.Equals(Classification, other.Classification, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Zone, other.Zone, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Layer, other.Layer, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Unit, other.Unit, StringComparison.OrdinalIgnoreCase);
             }
             public override bool Equals(object? obj) { return Equals(obj as WorkflowKey); }
             public override int GetHashCode()
@@ -234,6 +248,7 @@ namespace QS3D.Core.BenchmarkParity
                 {
                     var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(Classification);
                     hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Zone);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Layer);
                     hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Unit);
                     return hash;
                 }
@@ -250,24 +265,25 @@ namespace QS3D.Core.BenchmarkParity
             foreach (var evidence in drawingEvidence)
             {
                 if (evidence == null) throw new ArgumentException("Drawing evidence collection contains null.", "drawingEvidence");
-                rows.Add(new WorkflowRow(evidence.Classification, evidence.Zone, evidence.Unit, evidence.Quantity));
+                rows.Add(new WorkflowRow(evidence.Classification, evidence.Zone, evidence.Layer, evidence.Unit, evidence.Quantity));
             }
             foreach (var quantity in bimQuantities)
             {
                 if (quantity == null) throw new ArgumentException("BIM quantity collection contains null.", "bimQuantities");
-                rows.Add(new WorkflowRow(quantity.Classification, quantity.Storey, quantity.Unit, quantity.Quantity));
+                rows.Add(new WorkflowRow(quantity.Classification, quantity.Storey, string.Empty, quantity.Unit, quantity.Quantity));
             }
             return rows
-                .GroupBy(x => new WorkflowKey(x.Classification, x.Zone, x.Unit))
+                .GroupBy(x => new WorkflowKey(x.Classification, x.Zone, x.Layer, x.Unit))
                 .Select(g =>
                 {
                     var measured = CompensatedSum(g.Select(x => x.Quantity));
                     var adjusted = QsModelElementSnapshot.Finite(formula(g.Key.Classification, measured), "formulaQuantity");
                     var rate = QsModelElementSnapshot.Finite(rateProvider(g.Key.Classification, g.Key.Unit), "unitRate");
-                    return new TakeoffWorkflowLine(g.Key.Classification, g.Key.Zone, g.Key.Unit, measured, adjusted, rate, g.Count());
+                    return new TakeoffWorkflowLine(g.Key.Classification, g.Key.Zone, g.Key.Layer, g.Key.Unit, measured, adjusted, rate, g.Count());
                 })
                 .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Zone, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Layer, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
