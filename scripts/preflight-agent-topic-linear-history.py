@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-LOCKED_PREFIXES = ("agent/", "integration/")
+AGENT_PREFIX = "agent/"
 HEX40_RE = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -40,10 +40,7 @@ def merge_commits_between(base_ref: str, head_ref: str = "HEAD", cwd: Path | Non
     if not HEX40_RE.fullmatch(merge_base):
         raise RuntimeError("topic ancestry check could not resolve an exact merge-base")
 
-    raw = run_git(
-        ["rev-list", "--min-parents=2", "--format=%H", f"{merge_base}..{head}"],
-        cwd,
-    )
+    raw = run_git(["rev-list", "--min-parents=2", "--format=%H", f"{merge_base}..{head}"], cwd)
     commits: list[str] = []
     for line in raw.splitlines():
         value = line.strip().removeprefix("commit ").lower()
@@ -61,7 +58,7 @@ def assert_linear_topic_history(base_ref: str, head_ref: str = "HEAD", cwd: Path
     if merges:
         detail = ", ".join(merges[:8])
         raise ValueError(
-            "agent/integration topic ancestry contains merge commit(s) after its protected-base merge-base: "
+            "agent topic ancestry contains merge commit(s) after its protected-base merge-base: "
             + detail
             + "; rebuild/rebase a clean linear carrier from current protected main instead of merging main into the topic"
         )
@@ -127,16 +124,16 @@ def scoped_event() -> tuple[bool, str]:
         head = pr.get("head") or {}
         head_ref = str(head.get("ref") or "")
         head_repo = str((head.get("repo") or {}).get("full_name") or "")
-        if head_repo != repository or not head_ref.startswith(LOCKED_PREFIXES):
+        if head_repo != repository or not head_ref.startswith(AGENT_PREFIX):
             return False, ""
         base_ref = str((pr.get("base") or {}).get("ref") or os.environ.get("GITHUB_BASE_REF") or "").strip()
         if not base_ref:
-            raise RuntimeError("locked pull_request event is missing its protected base ref")
+            raise RuntimeError("agent pull_request event is missing its protected base ref")
         return True, base_ref
 
     ref = str(event.get("ref") or "")
     head_ref = str(os.environ.get("GITHUB_REF_NAME") or ref.removeprefix("refs/heads/"))
-    if not head_ref.startswith(LOCKED_PREFIXES):
+    if not head_ref.startswith(AGENT_PREFIX):
         return False, ""
     return True, "main"
 
@@ -146,16 +143,14 @@ def main() -> int:
         hermetic_regression()
         scoped, base_ref = scoped_event()
         if not scoped:
-            print("PASS: topic linear-history regression is green; event is outside same-repository agent/integration scope.")
+            print("PASS: topic linear-history regression is green; event is outside same-repository agent scope.")
             return 0
-
-        remote_base = f"origin/{base_ref}"
-        assert_linear_topic_history(remote_base)
+        assert_linear_topic_history(f"origin/{base_ref}")
     except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as exc:
         print("ERROR: agent topic linear-history preflight failed closed:", exc)
         return 1
 
-    print(f"PASS: active agent/integration topic is linear relative to protected base '{base_ref}'.")
+    print(f"PASS: active agent topic is linear relative to protected base '{base_ref}'.")
     return 0
 
 
