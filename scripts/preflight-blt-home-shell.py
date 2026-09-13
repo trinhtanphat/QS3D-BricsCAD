@@ -166,7 +166,7 @@ def main():
         'ToggleLightTheme', 'ToggleLinearContrast', 'ToggleOrtho', 'ToggleEntitySnap',
         'RefreshStatusControls();', 'Application.GetSystemVariable(name)',
         'Application.SetSystemVariable("COLORTHEME",', 'Application.SetSystemVariable("LINEARCONTRAST",',
-        'Application.SetSystemVariable("ORTHOMODE",', 'Application.SetSystemVariable("OSMODE",',
+        'ToggleDocumentScopedSystemVariable("ORTHOMODE",', 'ToggleDocumentScopedSystemVariable("OSMODE",',
         'current | ObjectSnapSuppressedBit', 'current & ~ObjectSnapSuppressedBit',
         'StartCenterUserStateStore.GetSnapshot().RecentProjects',
         'RibbonIconFactory.Create(RibbonIconKind.OpenProject, 20)',
@@ -180,13 +180,20 @@ def main():
     toggle_snap_block = shell.split('private static void ToggleEntitySnap()', 1)[1].split(
         'private static Button CreateClickSurface(UIElement content, Cursor cursor)', 1)[0]
     for needle in (
-        'var current = ReadRequiredSystemVariableInt("OSMODE");',
+        'ToggleDocumentScopedSystemVariable("OSMODE", current =>',
         '(current & ObjectSnapSuppressedBit) == 0',
         'current | ObjectSnapSuppressedBit',
         'current & ~ObjectSnapSuppressedBit',
-        'Application.SetSystemVariable("OSMODE", (short)next);',
     ):
         require(toggle_snap_block, needle, shell_rel + '::ToggleEntitySnap')
+    helper_block = shell.split('private static void ToggleDocumentScopedSystemVariable(', 1)[1].split(
+        'private static void ToggleOrtho()', 1)[0]
+    for needle in ('Application.DocumentManager.MdiActiveDocument',
+                   'DocumentGenerationGuard.CaptureCurrent(document)',
+                   'ReadRequiredSystemVariableInt(name)', 'Application.SetSystemVariable(name,'):
+        require(helper_block, needle, shell_rel + '::ToggleDocumentScopedSystemVariable')
+    if helper_block.count('DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)') < 2:
+        raise SystemExit(f"FAIL: {shell_rel} document-scoped toggle must revalidate native generation before read and write")
     for stale in ('SendStringToExecute', '"_.OPEN', '"_.NEW', '"_.QSAVE', '"_.SAVEAS',
                   'Application.DocumentManager.Open(normalized, false)',
                   'border.MouseLeftButtonUp', 'border.MouseLeftButtonDown', 'FocusVisualStyle = null',
