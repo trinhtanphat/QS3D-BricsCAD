@@ -272,7 +272,7 @@ namespace QS3D.Core.BenchmarkParity
                 string ifcEntity;
                 AddIf(
                     result,
-                    !element.Properties.TryGetValue("IfcEntity", out ifcEntity) || string.IsNullOrWhiteSpace(ifcEntity),
+                    !element.Properties.TryGetValue("IfcEntity", out ifcEntity) || string.IsNullOrWhiteSpace(ifcEntity) || !HasUsableMetadataEvidence(ifcEntity),
                     profile,
                     "QA2.MISSING_IFC_ENTITY",
                     QsQaSeverity.Error,
@@ -282,7 +282,7 @@ namespace QS3D.Core.BenchmarkParity
                 string quantityUnit;
                 AddIf(
                     result,
-                    !element.Properties.TryGetValue("QuantityUnit", out quantityUnit) || string.IsNullOrWhiteSpace(quantityUnit),
+                    !element.Properties.TryGetValue("QuantityUnit", out quantityUnit) || string.IsNullOrWhiteSpace(quantityUnit) || !HasUsableMetadataEvidence(quantityUnit),
                     profile,
                     "QA2.MISSING_QUANTITY_UNIT",
                     QsQaSeverity.Error,
@@ -360,15 +360,20 @@ namespace QS3D.Core.BenchmarkParity
             return guid.Trim();
         }
 
-        private static bool HasUsablePsetEvidence(string value)
+        private static bool HasUsableMetadataEvidence(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return false;
             return !InvalidPsetEvidence.Contains(value.Trim());
         }
 
+        private static bool HasUsablePsetEvidence(string value)
+        {
+            return HasUsableMetadataEvidence(value);
+        }
+
         private static bool HasUsableRelationshipEvidence(string value)
         {
-            return HasUsablePsetEvidence(value);
+            return HasUsableMetadataEvidence(value);
         }
 
         private static bool IsFinitePositive(double value)
