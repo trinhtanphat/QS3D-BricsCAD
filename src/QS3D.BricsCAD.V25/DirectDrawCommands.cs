@@ -51,10 +51,10 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Active();
             if (document == null) return;
-            Guard(document, "QS3DDRAWWALL", () =>
+            Guard(document, "QS3DDRAWWALL", nativeDatabaseIdentity =>
             {
                 RequireModelSpace(document);
-                var points = AcquireFixedPath(document, "Tường nhanh", 2);
+                var points = AcquireFixedPath(document, nativeDatabaseIdentity, "Tường nhanh", 2);
                 if (points == null) return;
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
@@ -73,14 +73,15 @@ namespace QS3D.BricsCAD.V25
                 ExecuteDirect(
                     document,
                     ElementCategory.ArchitecturalWall,
-                    () => CreateLine(document, points[0], points[1]),
+                    () => CreateLine(document, points[0], points[1], nativeDatabaseIdentity),
                     element =>
                     {
                         element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                     },
-                    projectPreview);
+                    projectPreview,
+                    nativeDatabaseIdentity: nativeDatabaseIdentity);
             });
         }
 
@@ -89,12 +90,12 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Active();
             if (document == null) return;
-            Guard(document, "QS3DDRAWWALLADV", () =>
+            Guard(document, "QS3DDRAWWALLADV", nativeDatabaseIdentity =>
             {
                 RequireModelSpace(document);
                 var promptUnit = (object)CadUnitService.GetLengthUnit(document);
                 var promptUcs = document.Editor.CurrentUserCoordinateSystem;
-                var points = AcquirePath(document, "Tường tùy chỉnh", minimumPoints: 2, close: false);
+                var points = AcquirePath(document, nativeDatabaseIdentity, "Tường tùy chỉnh", minimumPoints: 2, close: false);
                 if (points == null) return;
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
@@ -106,19 +107,22 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
-                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWWALLADV");
+                RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, "QS3DDRAWWALLADV");
 
                 ExecuteDirect(
                     document,
                     ElementCategory.ArchitecturalWall,
-                    () => points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false),
+                    () => points.Count == 2
+                        ? CreateLine(document, points[0], points[1], nativeDatabaseIdentity)
+                        : CreatePolyline(document, points, false, nativeDatabaseIdentity),
                     element =>
                     {
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     },
-                    projectPreview);
+                    projectPreview,
+                    nativeDatabaseIdentity: nativeDatabaseIdentity);
             });
         }
 
@@ -127,10 +131,10 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Active();
             if (document == null) return;
-            Guard(document, "QS3DDRAWBEAM", () =>
+            Guard(document, "QS3DDRAWBEAM", nativeDatabaseIdentity =>
             {
                 RequireModelSpace(document);
-                var points = AcquireFixedPath(document, "Dầm nhanh", 2);
+                var points = AcquireFixedPath(document, nativeDatabaseIdentity, "Dầm nhanh", 2);
                 if (points == null) return;
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
@@ -149,14 +153,15 @@ namespace QS3D.BricsCAD.V25
                 ExecuteDirect(
                     document,
                     ElementCategory.Beam,
-                    () => CreateLine(document, points[0], points[1]),
+                    () => CreateLine(document, points[0], points[1], nativeDatabaseIdentity),
                     element =>
                     {
                         element.SetProperty("WidthM", widthM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                     },
-                    projectPreview);
+                    projectPreview,
+                    nativeDatabaseIdentity: nativeDatabaseIdentity);
             });
         }
 
@@ -165,12 +170,12 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Active();
             if (document == null) return;
-            Guard(document, "QS3DDRAWBEAMADV", () =>
+            Guard(document, "QS3DDRAWBEAMADV", nativeDatabaseIdentity =>
             {
                 RequireModelSpace(document);
                 var promptUnit = (object)CadUnitService.GetLengthUnit(document);
                 var promptUcs = document.Editor.CurrentUserCoordinateSystem;
-                var points = AcquireFixedPath(document, "Dầm tùy chỉnh", 2);
+                var points = AcquireFixedPath(document, nativeDatabaseIdentity, "Dầm tùy chỉnh", 2);
                 if (points == null) return;
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
@@ -182,19 +187,20 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Dầm so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Beam, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
-                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWBEAMADV");
+                RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, "QS3DDRAWBEAMADV");
 
                 ExecuteDirect(
                     document,
                     ElementCategory.Beam,
-                    () => CreateLine(document, points[0], points[1]),
+                    () => CreateLine(document, points[0], points[1], nativeDatabaseIdentity),
                     element =>
                     {
                         element.SetProperty("WidthM", widthM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     },
-                    projectPreview);
+                    projectPreview,
+                    nativeDatabaseIdentity: nativeDatabaseIdentity);
             });
         }
 
@@ -203,10 +209,10 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Active();
             if (document == null) return;
-            Guard(document, "QS3DDRAWSLAB", () =>
+            Guard(document, "QS3DDRAWSLAB", nativeDatabaseIdentity =>
             {
                 RequireModelSpace(document);
-                var points = AcquirePath(document, "Sàn nhanh", minimumPoints: 3, close: true);
+                var points = AcquirePath(document, nativeDatabaseIdentity, "Sàn nhanh", minimumPoints: 3, close: true);
                 if (points == null) return;
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
@@ -223,13 +229,14 @@ namespace QS3D.BricsCAD.V25
                 ExecuteDirect(
                     document,
                     ElementCategory.Slab,
-                    () => CreatePolyline(document, points, true),
+                    () => CreatePolyline(document, points, true, nativeDatabaseIdentity),
                     element =>
                     {
                         element.SetProperty("ThicknessM", thicknessM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                     },
-                    projectPreview);
+                    projectPreview,
+                    nativeDatabaseIdentity: nativeDatabaseIdentity);
             });
         }
 
@@ -238,12 +245,12 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Active();
             if (document == null) return;
-            Guard(document, "QS3DDRAWSLABADV", () =>
+            Guard(document, "QS3DDRAWSLABADV", nativeDatabaseIdentity =>
             {
                 RequireModelSpace(document);
                 var promptUnit = (object)CadUnitService.GetLengthUnit(document);
                 var promptUcs = document.Editor.CurrentUserCoordinateSystem;
-                var points = AcquirePath(document, "Sàn tùy chỉnh", minimumPoints: 3, close: true);
+                var points = AcquirePath(document, nativeDatabaseIdentity, "Sàn tùy chỉnh", minimumPoints: 3, close: true);
                 if (points == null) return;
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
@@ -253,18 +260,19 @@ namespace QS3D.BricsCAD.V25
                 if (!thicknessM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Sàn so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Slab, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
-                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWSLABADV");
+                RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, "QS3DDRAWSLABADV");
 
                 ExecuteDirect(
                     document,
                     ElementCategory.Slab,
-                    () => CreatePolyline(document, points, true),
+                    () => CreatePolyline(document, points, true, nativeDatabaseIdentity),
                     element =>
                     {
                         element.SetProperty("ThicknessM", thicknessM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     },
-                    projectPreview);
+                    projectPreview,
+                    nativeDatabaseIdentity: nativeDatabaseIdentity);
             });
         }
 
@@ -273,14 +281,14 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Active();
             if (document == null) return;
-            Guard(document, "QS3DDRAWCOLUMN", () =>
+            Guard(document, "QS3DDRAWCOLUMN", nativeDatabaseIdentity =>
             {
                 RequireModelSpace(document);
                 var promptUnit = (object)CadUnitService.GetLengthUnit(document);
                 var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột nhanh: "));
                 if (centerResult.Status != PromptStatus.OK) return;
-                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWCOLUMN");
+                RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, "QS3DDRAWCOLUMN");
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
                 var defaultsProject = projectPreview.DefaultsProject;
@@ -300,7 +308,7 @@ namespace QS3D.BricsCAD.V25
                 ExecuteDirect(
                     document,
                     ElementCategory.Column,
-                    () => CreateColumnFootprint(document, centerResult.Value, widthM, depthM),
+                    () => CreateColumnFootprint(document, centerResult.Value, widthM, depthM, nativeDatabaseIdentity),
                     element =>
                     {
                         element.SetProperty("WidthM", widthM.ToString("R", CultureInfo.InvariantCulture));
@@ -308,7 +316,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("HeightM", heightM.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.ToString("R", CultureInfo.InvariantCulture));
                     },
-                    projectPreview);
+                    projectPreview,
+                    nativeDatabaseIdentity: nativeDatabaseIdentity);
             });
         }
 
@@ -317,14 +326,14 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Active();
             if (document == null) return;
-            Guard(document, "QS3DDRAWCOLUMNADV", () =>
+            Guard(document, "QS3DDRAWCOLUMNADV", nativeDatabaseIdentity =>
             {
                 RequireModelSpace(document);
                 var promptUnit = (object)CadUnitService.GetLengthUnit(document);
                 var promptUcs = document.Editor.CurrentUserCoordinateSystem;
                 var centerResult = document.Editor.GetPoint(new PromptPointOptions("\nChọn tâm Cột tùy chỉnh: "));
                 if (centerResult.Status != PromptStatus.OK) return;
-                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWCOLUMNADV");
+                RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, "QS3DDRAWCOLUMNADV");
 
                 var projectPreview = DirectDrawProjectPreviewContext.Capture(document);
                 var defaultsProject = projectPreview.DefaultsProject;
@@ -337,12 +346,12 @@ namespace QS3D.BricsCAD.V25
                 if (!heightM.HasValue) return;
                 var bottomOffsetM = PromptFiniteMeters(document.Editor, "Offset đáy Cột so với Z source (m)", hasDefaultsProject ? FamilyFiniteNumber(defaultsProject!, ElementCategory.Column, "BottomOffsetM", 0d) : 0d);
                 if (!bottomOffsetM.HasValue) return;
-                RequirePromptContextUnchanged(document, promptUnit, promptUcs, "QS3DDRAWCOLUMNADV");
+                RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, "QS3DDRAWCOLUMNADV");
 
                 ExecuteDirect(
                     document,
                     ElementCategory.Column,
-                    () => CreateColumnFootprint(document, centerResult.Value, widthM.Value, depthM.Value),
+                    () => CreateColumnFootprint(document, centerResult.Value, widthM.Value, depthM.Value, nativeDatabaseIdentity),
                     element =>
                     {
                         element.SetProperty("WidthM", widthM.Value.ToString("R", CultureInfo.InvariantCulture));
@@ -350,7 +359,8 @@ namespace QS3D.BricsCAD.V25
                         element.SetProperty("HeightM", heightM.Value.ToString("R", CultureInfo.InvariantCulture));
                         element.SetProperty("BottomOffsetM", bottomOffsetM.Value.ToString("R", CultureInfo.InvariantCulture));
                     },
-                    projectPreview);
+                    projectPreview,
+                    nativeDatabaseIdentity: nativeDatabaseIdentity);
             });
         }
 
@@ -360,20 +370,25 @@ namespace QS3D.BricsCAD.V25
             Func<ObjectId> createSource,
             Action<ProjectElement>? configureElement = null,
             DirectDrawProjectPreviewContext? projectPreview = null,
-            Action<ProjectState>? beforeMutation = null)
+            Action<ProjectState>? beforeMutation = null,
+            IntPtr nativeDatabaseIdentity = default)
         {
             var operation = "Direct Draw " + category;
-            EnsureActive(document, operation);
+            if (nativeDatabaseIdentity == IntPtr.Zero)
+                nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / mutation admission");
             var projectExistedBeforeAuthoring = projectPreview != null
                 ? projectPreview.HasProject
                 : ProjectContextCoordinator.TryGetReadOnly(document, out _);
             var project = projectPreview != null
                 ? projectPreview.ResolveForMutation(document, operation)
                 : ProjectContextCoordinator.GetOrCreate(document);
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / project mutation freshness");
             try { beforeMutation?.Invoke(project); }
             catch
             {
-                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
+                if (!projectExistedBeforeAuthoring && IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                    ProjectContextCoordinator.Forget(document);
                 throw;
             }
             var rollback = ProjectStateSnapshot.Capture(project);
@@ -385,12 +400,15 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / source creation");
                 sourceId = createSource();
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / source commit");
                 if (sourceId.IsNull || !sourceId.IsValid) throw new InvalidOperationException("Không tạo được CAD source cho Direct Draw.");
                 sourceHandle = sourceId.Handle.ToString();
                 document.Editor.SetImpliedSelection(new[] { sourceId });
 
                 var captured = SemanticCaptureService.Capture(document, category);
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / semantic capture");
                 if (captured != 1) throw new InvalidOperationException("Direct Draw cần capture đúng một semantic element, nhận được " + captured + ".");
 
                 createdElement = project.Elements.SingleOrDefault(x =>
@@ -402,16 +420,19 @@ namespace QS3D.BricsCAD.V25
                 regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault())
                     .RegenerateDirtySubset(project, new[] { createdElement.Id });
 
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / native build");
                 solids = BuildSelected(document, project, category);
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / native build completion");
                 if (solids <= 0) throw new InvalidOperationException("Native 3D builder không tạo được solid cho " + category + ".");
 
                 project.Touch();
             }
             catch (Exception operationError)
             {
+                var generationIsCurrent = IsActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 var generatedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 Exception? ownershipDiscoveryError = null;
-                if (createdElement != null)
+                if (generationIsCurrent && createdElement != null)
                 {
                     foreach (var entry in GeneratedHandleOwnershipPolicy.EnumerateOwnerHandles(createdElement))
                         if (!string.IsNullOrWhiteSpace(entry.Key)) generatedHandles.Add(entry.Key.Trim());
@@ -428,13 +449,20 @@ namespace QS3D.BricsCAD.V25
 
                 Exception? cadCleanupError = null;
                 Exception? restoreError = null;
-                try { EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles); }
-                catch (Exception ex) { cadCleanupError = ex; }
+                if (generationIsCurrent)
+                {
+                    try { EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles); }
+                    catch (Exception ex) { cadCleanupError = ex; }
+                }
                 try { rollback.Restore(project); }
                 catch (Exception ex) { restoreError = ex; }
-                if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);
-                try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
-                catch { }
+                if (!projectExistedBeforeAuthoring && generationIsCurrent)
+                    ProjectContextCoordinator.Forget(document);
+                if (generationIsCurrent)
+                {
+                    try { document.Editor.SetImpliedSelection(Array.Empty<ObjectId>()); }
+                    catch { }
+                }
 
                 if (ownershipDiscoveryError != null || cadCleanupError != null || restoreError != null)
                 {
@@ -454,7 +482,7 @@ namespace QS3D.BricsCAD.V25
                 .Select(x => x.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            FinalizeUi(document, createdElement!, sourceId, solids, regenerated);
+            FinalizeUi(document, nativeDatabaseIdentity, createdElement!, sourceId, solids, regenerated);
             return new DirectDrawCommitResult(project, createdElement!, sourceId, committedHandles);
         }
 
@@ -470,7 +498,7 @@ namespace QS3D.BricsCAD.V25
             throw new InvalidOperationException("Direct Draw P0 chưa hỗ trợ category " + category + ".");
         }
 
-        private static IReadOnlyList<Point3d>? AcquireFixedPath(Document document, string label, int count)
+        private static IReadOnlyList<Point3d>? AcquireFixedPath(Document document, IntPtr nativeDatabaseIdentity, string label, int count)
         {
             var editor = document.Editor;
             var promptUnit = (object)CadUnitService.GetLengthUnit(document);
@@ -486,16 +514,17 @@ namespace QS3D.BricsCAD.V25
                 }
                 var result = editor.GetPoint(options);
                 if (result.Status != PromptStatus.OK) return null;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / point prompt");
                 if (points.Count > 0 && result.Value.DistanceTo(points[points.Count - 1]) <= 1e-9d)
                     throw new InvalidOperationException(label + " có hai điểm trùng nhau.");
                 points.Add(result.Value);
             }
-            RequirePromptContextUnchanged(document, promptUnit, promptUcs, label);
+            RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, label);
             ValidatePlanView(document, points, label);
             return points;
         }
 
-        private static IReadOnlyList<Point3d>? AcquirePath(Document document, string label, int minimumPoints, bool close)
+        private static IReadOnlyList<Point3d>? AcquirePath(Document document, IntPtr nativeDatabaseIdentity, string label, int minimumPoints, bool close)
         {
             var editor = document.Editor;
             var promptUnit = (object)CadUnitService.GetLengthUnit(document);
@@ -513,6 +542,7 @@ namespace QS3D.BricsCAD.V25
                     options.BasePoint = points[points.Count - 1];
                 }
                 var result = editor.GetPoint(options);
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, label + " / point prompt");
                 if (result.Status == PromptStatus.None && points.Count >= minimumPoints) break;
                 if (result.Status != PromptStatus.OK) return null;
                 if (points.Count > 0 && result.Value.DistanceTo(points[points.Count - 1]) <= 1e-9d)
@@ -523,7 +553,7 @@ namespace QS3D.BricsCAD.V25
             if (close && points.Count >= 3 && points[0].DistanceTo(points[points.Count - 1]) <= 1e-9d)
                 points.RemoveAt(points.Count - 1);
             if (points.Count < minimumPoints) return null;
-            RequirePromptContextUnchanged(document, promptUnit, promptUcs, label);
+            RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, label);
             ValidatePlanView(document, points, label);
             return points;
         }
@@ -541,62 +571,77 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static ObjectId CreateLine(Document document, Point3d start, Point3d end) =>
-            CreateLineCore(document, start, end, transformFromUcs: true);
+        private static ObjectId CreateLine(Document document, Point3d start, Point3d end, IntPtr nativeDatabaseIdentity) =>
+            CreateLineCore(document, start, end, transformFromUcs: true, nativeDatabaseIdentity: nativeDatabaseIdentity);
 
         internal static ObjectId CreateLineWcs(Document document, Point3d startWcs, Point3d endWcs) =>
-            CreateLineCore(document, startWcs, endWcs, transformFromUcs: false);
+            CreateLineCore(document, startWcs, endWcs, transformFromUcs: false, nativeDatabaseIdentity: IntPtr.Zero);
 
         private static ObjectId CreateLineCore(
             Document document,
             Point3d start,
             Point3d end,
-            bool transformFromUcs)
+            bool transformFromUcs,
+            IntPtr nativeDatabaseIdentity)
         {
+            if (nativeDatabaseIdentity == IntPtr.Zero)
+                nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, "Direct Draw LINE / pre-lock");
             ValidatePlanView(document, new[] { start, end }, "LINE");
             if (start.DistanceTo(end) <= 1e-9d) throw new InvalidOperationException("LINE Direct Draw quá ngắn.");
             using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                var line = new Line(start, end);
-                line.SetDatabaseDefaults(document.Database);
-                if (transformFromUcs)
-                    line.TransformBy(document.Editor.CurrentUserCoordinateSystem);
-                var id = modelSpace.AppendEntity(line);
-                transaction.AddNewlyCreatedDBObject(line, true);
-                transaction.Commit();
-                return id;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, "Direct Draw LINE / post-lock");
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    var line = new Line(start, end);
+                    line.SetDatabaseDefaults(document.Database);
+                    if (transformFromUcs)
+                        line.TransformBy(document.Editor.CurrentUserCoordinateSystem);
+                    var id = modelSpace.AppendEntity(line);
+                    transaction.AddNewlyCreatedDBObject(line, true);
+                    RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, "Direct Draw LINE / pre-commit");
+                    transaction.Commit();
+                    return id;
+                }
             }
         }
 
-        private static ObjectId CreatePolyline(Document document, IReadOnlyList<Point3d> points, bool closed)
+        private static ObjectId CreatePolyline(Document document, IReadOnlyList<Point3d> points, bool closed, IntPtr nativeDatabaseIdentity)
         {
+            if (nativeDatabaseIdentity == IntPtr.Zero)
+                nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, "Direct Draw POLYLINE / pre-lock");
             if (points == null) throw new ArgumentNullException(nameof(points));
             if (points.Count < (closed ? 3 : 2)) throw new InvalidOperationException("Không đủ điểm để tạo POLYLINE Direct Draw.");
             ValidatePlanView(document, points, closed ? "Closed POLYLINE" : "Open POLYLINE");
 
             using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                var polyline = new Polyline();
-                polyline.SetDatabaseDefaults(document.Database);
-                polyline.Elevation = points[0].Z;
-                for (var index = 0; index < points.Count; index++)
-                    polyline.AddVertexAt(index, new Point2d(points[index].X, points[index].Y), 0d, 0d, 0d);
-                polyline.Closed = closed;
-                polyline.TransformBy(document.Editor.CurrentUserCoordinateSystem);
-                var id = modelSpace.AppendEntity(polyline);
-                transaction.AddNewlyCreatedDBObject(polyline, true);
-                transaction.Commit();
-                return id;
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, "Direct Draw POLYLINE / post-lock");
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    var polyline = new Polyline();
+                    polyline.SetDatabaseDefaults(document.Database);
+                    polyline.Elevation = points[0].Z;
+                    for (var index = 0; index < points.Count; index++)
+                        polyline.AddVertexAt(index, new Point2d(points[index].X, points[index].Y), 0d, 0d, 0d);
+                    polyline.Closed = closed;
+                    polyline.TransformBy(document.Editor.CurrentUserCoordinateSystem);
+                    var id = modelSpace.AppendEntity(polyline);
+                    transaction.AddNewlyCreatedDBObject(polyline, true);
+                    RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, "Direct Draw POLYLINE / pre-commit");
+                    transaction.Commit();
+                    return id;
+                }
             }
         }
 
-        private static ObjectId CreateColumnFootprint(Document document, Point3d center, double widthM, double depthM)
+        private static ObjectId CreateColumnFootprint(Document document, Point3d center, double widthM, double depthM, IntPtr nativeDatabaseIdentity)
         {
             var width = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, widthM, "DirectDraw Column WidthM"), "DirectDraw Column width drawing units");
             var depth = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, depthM, "DirectDraw Column DepthM"), "DirectDraw Column depth drawing units");
@@ -613,7 +658,7 @@ namespace QS3D.BricsCAD.V25
                 new Point3d(right, bottom, z),
                 new Point3d(right, top, z),
                 new Point3d(left, top, z)
-            }, true);
+            }, true, nativeDatabaseIdentity);
         }
 
         private static double? PromptPositiveMeters(Editor editor, string label, double defaultValue)
@@ -681,9 +726,25 @@ namespace QS3D.BricsCAD.V25
             return project.Families.FirstOrDefault(x => x.Category == category);
         }
 
+        private static void RequirePromptContextUnchanged(
+            Document document,
+            IntPtr nativeDatabaseIdentity,
+            object promptUnit,
+            Matrix3d promptUcs,
+            string operation)
+        {
+            RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / geometry prompt freshness");
+            RequirePromptGeometryContextUnchanged(document, promptUnit, promptUcs, operation);
+        }
+
         private static void RequirePromptContextUnchanged(Document document, object promptUnit, Matrix3d promptUcs, string operation)
         {
             EnsureActive(document, operation + " / geometry prompt freshness");
+            RequirePromptGeometryContextUnchanged(document, promptUnit, promptUcs, operation);
+        }
+
+        private static void RequirePromptGeometryContextUnchanged(Document document, object promptUnit, Matrix3d promptUcs, string operation)
+        {
             RequireModelSpace(document);
             if (!Equals(CadUnitService.GetLengthUnit(document), promptUnit))
                 throw new InvalidOperationException("Drawing unit policy đã thay đổi trong lúc chọn geometry cho " + operation + ". Hãy chạy lại lệnh.");
@@ -780,24 +841,61 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void FinalizeUi(Document document, ProjectElement element, ObjectId sourceId, int solids, int regenerated)
+        private static void FinalizeUi(
+            Document document,
+            IntPtr nativeDatabaseIdentity,
+            ProjectElement element,
+            ObjectId sourceId,
+            int solids,
+            int regenerated)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             var status = "Direct Draw " + element.Category + ": 1 semantic • " + solids + " solid • regenerate " + regenerated + ".";
             try
             {
-                EnsureActive(document, "Direct Draw post-commit UI refresh");
                 PaletteCoordinator.RefreshProject();
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 var generatedHandle = element.Properties.TryGetValue("GeneratedSolidHandle", out var generated) ? generated : string.Empty;
                 if (!string.IsNullOrWhiteSpace(generatedHandle)) CadHandleService.Select(document, new[] { generatedHandle });
                 else if (!sourceId.IsNull && sourceId.IsValid) document.Editor.SetImpliedSelection(new[] { sourceId });
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.Regen();
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 DirectDrawUiFailureReporter.ReportPostCommitSuccess(document, status);
                 document.Editor.WriteMessage("\nQS3D " + status);
             }
             catch (Exception)
             {
-                DirectDrawUiFailureReporter.ReportPostCommitWarning(document);
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                    DirectDrawUiFailureReporter.ReportPostCommitWarning(document);
             }
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            if (document == null) return IntPtr.Zero;
+            try { return document.Database?.UnmanagedObject ?? IntPtr.Zero; }
+            catch { return IntPtr.Zero; }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero) return false;
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)) return false;
+            try
+            {
+                return document.Database != null && document.Database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity, string operation)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException(operation + " yêu cầu đúng DWG/native database generation đã bắt đầu lệnh vẫn là bản vẽ active.");
         }
 
         private static void EnsureActive(Document document, string operation)
@@ -808,12 +906,19 @@ namespace QS3D.BricsCAD.V25
 
         private static Document? Active() => Application.DocumentManager.MdiActiveDocument;
 
-        private static void Guard(Document document, string operation, Action action)
+        private static void Guard(Document document, string operation, Action<IntPtr> action)
         {
-            try { action(); }
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (nativeDatabaseIdentity == IntPtr.Zero) return;
+            try
+            {
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + " / admission");
+                action(nativeDatabaseIdentity);
+            }
             catch (Exception)
             {
-                DirectDrawUiFailureReporter.ReportOperationFailure(document, operation);
+                if (IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                    DirectDrawUiFailureReporter.ReportOperationFailure(document, operation);
             }
         }
     }
