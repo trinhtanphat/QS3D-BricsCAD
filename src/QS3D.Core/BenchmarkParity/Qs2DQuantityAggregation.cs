@@ -8,9 +8,15 @@ namespace QS3D.Core.BenchmarkParity
     public sealed class TakeoffEvidenceAggregate2D
     {
         public TakeoffEvidenceAggregate2D(string classification, string zone, string unit, double quantity, IReadOnlyList<TakeoffQuantityEvidence2D> evidence)
+            : this(classification, zone, string.Empty, unit, quantity, evidence)
+        {
+        }
+
+        public TakeoffEvidenceAggregate2D(string classification, string zone, string layer, string unit, double quantity, IReadOnlyList<TakeoffQuantityEvidence2D> evidence)
         {
             Classification = QsModelElementSnapshot.Require(classification, "classification");
             Zone = QsModelElementSnapshot.Optional(zone);
+            Layer = QsModelElementSnapshot.Optional(layer);
             Unit = QsModelElementSnapshot.Require(unit, "unit");
             Quantity = QsModelElementSnapshot.Finite(quantity, "quantity");
             Evidence = evidence ?? throw new ArgumentNullException("evidence");
@@ -19,6 +25,7 @@ namespace QS3D.Core.BenchmarkParity
 
         public string Classification { get; private set; }
         public string Zone { get; private set; }
+        public string Layer { get; private set; }
         public string Unit { get; private set; }
         public double Quantity { get; private set; }
         public IReadOnlyList<TakeoffQuantityEvidence2D> Evidence { get; private set; }
@@ -65,15 +72,17 @@ namespace QS3D.Core.BenchmarkParity
 
         private sealed class AggregateKey : IEquatable<AggregateKey>
         {
-            public AggregateKey(string classification, string zone, string unit)
+            public AggregateKey(string classification, string zone, string layer, string unit)
             {
                 Classification = classification;
                 Zone = zone ?? string.Empty;
+                Layer = layer ?? string.Empty;
                 Unit = unit;
             }
 
             public string Classification { get; private set; }
             public string Zone { get; private set; }
+            public string Layer { get; private set; }
             public string Unit { get; private set; }
 
             public bool Equals(AggregateKey? other)
@@ -81,6 +90,7 @@ namespace QS3D.Core.BenchmarkParity
                 return other != null
                     && string.Equals(Classification, other.Classification, StringComparison.OrdinalIgnoreCase)
                     && string.Equals(Zone, other.Zone, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Layer, other.Layer, StringComparison.OrdinalIgnoreCase)
                     && string.Equals(Unit, other.Unit, StringComparison.OrdinalIgnoreCase);
             }
 
@@ -92,6 +102,7 @@ namespace QS3D.Core.BenchmarkParity
                 {
                     var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(Classification);
                     hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Zone);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Layer);
                     hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Unit);
                     return hash;
                 }
@@ -114,7 +125,7 @@ namespace QS3D.Core.BenchmarkParity
             }
 
             var result = materialized
-                .GroupBy(x => new AggregateKey(x.Classification, x.Zone, x.Unit))
+                .GroupBy(x => new AggregateKey(x.Classification, x.Zone, x.Layer, x.Unit))
                 .Select(group =>
                 {
                     var orderedEvidence = group
@@ -127,12 +138,14 @@ namespace QS3D.Core.BenchmarkParity
                     return new TakeoffEvidenceAggregate2D(
                         group.Key.Classification,
                         group.Key.Zone,
+                        group.Key.Layer,
                         group.Key.Unit,
                         quantity,
                         new ReadOnlyCollection<TakeoffQuantityEvidence2D>(orderedEvidence));
                 })
                 .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Zone, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Layer, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
