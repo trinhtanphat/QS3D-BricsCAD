@@ -134,7 +134,9 @@ def main():
     if native_save.count('document.SendStringToExecute("_.QSAVE\\n", true, false, true)') != 1:
         errors.append("native current-document save lifecycle must queue exactly one QSAVE command attempt")
 
-    require(errors, direct_save_as_block, ('EnsureWritableDirectory(directory);', 'McpDiagnosticHub.InvokeInCadContext(() =>', 'document.Database.SaveAs(fullPath, DwgVersion.Current);', 'McpNativeCurrentDocumentSave.SaveCurrentDocument(', 'route=Database.SaveAs+native-QSAVE', 'dbmodAfterSave', 'Path.GetFullPath(actual), fullPath'), "save-as publication plus native DBMOD settle guard")
+    require(errors, direct_save_as_block, ('EnsureWritableDirectory(directory);', 'InvokeSaveAsMutationInCadContext(() =>', 'document.Database.SaveAs(fullPath, DwgVersion.Current);', 'RequireSameSaveAsDocumentGeneration(document, nativeDatabaseIdentity, fullPath);', 'McpNativeCurrentDocumentSave.SaveCurrentDocument(', 'route=Database.SaveAs+native-QSAVE', 'dbmodAfterSave'), "save-as mutation-owned publication plus native DBMOD settle guard")
+    forbid(errors, direct_save_as_block, ('McpDiagnosticHub.InvokeInCadContext',), "save-as diagnostic-dispatch regression")
+    require(errors, direct, ('private static void RequireSameSaveAsDocumentGeneration(', 'database.UnmanagedObject != nativeDatabaseIdentity', 'string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase)'), "save-as exact document/database/path completion affinity")
     if 'WaitForSavedContentDbmod();' in direct_save_as_block:
         errors.append("cad_save_as must not treat Database.SaveAs return plus a blind DBMOD poll as terminal completion")
     if "Process.Start" in direct or "cmd.exe" in direct or "powershell" in direct.lower():

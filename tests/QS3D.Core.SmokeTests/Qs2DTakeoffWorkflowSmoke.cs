@@ -10,6 +10,13 @@ namespace QS3D.Core.SmokeTests
         internal static void Run()
         {
             var calibration = new DrawingCalibration(100d, 5d, "m");
+            ExpectThrows<ArgumentOutOfRangeException>(() => new DrawingSheet2D(
+                "A099", "Invalid source", (DrawingSheetSourceKind)999, "drawings/A099.bin", "R1", calibration),
+                "invalid drawing source kind rejection");
+            ExpectThrows<ArgumentOutOfRangeException>(() => new TakeoffMarkup2D(
+                "M-INVALID", "A099", (TakeoffMeasurementKind)999, 1d, "WALL", "ZONE-A", "Takeoff-Wall", "pdf:M-INVALID"),
+                "invalid measurement kind rejection");
+
             var ingestor = new Qs2DSheetIngestor();
             var validPdf = Encoding.ASCII.GetBytes("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\r\n");
             var ingested = ingestor.IngestPdf("A100", "Valid PDF", "drawings/A100.pdf", "R1", calibration, validPdf, 1);
@@ -25,6 +32,22 @@ namespace QS3D.Core.SmokeTests
             var oldSheet = new DrawingSheet2D("A101", "Ground Floor", DrawingSheetSourceKind.Pdf, "drawings/A101-r1.pdf", "R1", calibration);
             var newSheet = new DrawingSheet2D("A101", "Ground Floor", DrawingSheetSourceKind.Pdf, "drawings/A101-r2.pdf", "R2", calibration);
             var engine = new CalibratedTakeoffEngine2D();
+
+            var validEvidence = new TakeoffQuantityEvidence2D("M-AFFINITY", "A101", "R1", "drawings/A101-r1.pdf", "pdf:M-AFFINITY", "WALL", "ZONE-A", "Takeoff-Wall", 1d, "m");
+            ExpectThrows<ArgumentException>(() => new TakeoffSheetResult2D(oldSheet, new TakeoffQuantityEvidence2D[] { null! }), "null sheet evidence rejection");
+            ExpectThrows<InvalidOperationException>(() => new TakeoffSheetResult2D(oldSheet, new[]
+            {
+                new TakeoffQuantityEvidence2D("M-OTHER-SHEET", "A102", "R1", "drawings/A101-r1.pdf", "pdf:M-OTHER-SHEET", "WALL", "ZONE-A", "Takeoff-Wall", 1d, "m")
+            }), "cross-sheet evidence rejection");
+            ExpectThrows<InvalidOperationException>(() => new TakeoffSheetResult2D(oldSheet, new[]
+            {
+                new TakeoffQuantityEvidence2D("M-STALE-REV", "A101", "R0", "drawings/A101-r1.pdf", "pdf:M-STALE-REV", "WALL", "ZONE-A", "Takeoff-Wall", 1d, "m")
+            }), "stale-revision evidence rejection");
+            ExpectThrows<InvalidOperationException>(() => new TakeoffSheetResult2D(oldSheet, new[]
+            {
+                new TakeoffQuantityEvidence2D("M-STALE-SOURCE", "A101", "R1", "drawings/A101-old.pdf", "pdf:M-STALE-SOURCE", "WALL", "ZONE-A", "Takeoff-Wall", 1d, "m")
+            }), "stale-source evidence rejection");
+            ExpectThrows<InvalidOperationException>(() => new TakeoffSheetResult2D(oldSheet, new[] { validEvidence, validEvidence }), "duplicate markup evidence rejection");
 
             var oldResult = engine.Extract(oldSheet, new[]
             {
@@ -55,9 +78,11 @@ namespace QS3D.Core.SmokeTests
             });
             var extremeNew = new TakeoffSheetResult2D(newSheet, new[]
             {
-                new TakeoffQuantityEvidence2D("M-EXTREME", "A101", "R2", "drawings/A101-r2.pdf", "pdf:M-EXTREME", "WALL", "ZONE-A", "Takeoff-Wall", -double.MaxValue, "m")
+                new TakeoffQuantityEvidence2D("M-EXTREME", "A101", "R2", "drawings/A101-r2.pdf", "pdf:M-EXTREME", "WALL", "ZONE-A", "Takeoff-Wall", 0d, "m")
             });
-            ExpectThrows<ArgumentOutOfRangeException>(() => new DrawingRevisionComparer2D().Compare(extremeOld, extremeNew), "non-finite revision quantity delta rejection");
+            var extremeDelta = new DrawingRevisionComparer2D().Compare(extremeOld, extremeNew).Single(x => x.MarkupId == "M-EXTREME");
+            Expect(extremeDelta.Kind == RevisionMarkupChangeKind.Changed, "extreme changed markup");
+            Expect(extremeDelta.QuantityDelta == -double.MaxValue, "finite extreme negative revision quantity delta");
 
             var workflow = new AutodeskTakeoffWorkflow();
             var inventory = workflow.BuildInventoryAndEstimate(

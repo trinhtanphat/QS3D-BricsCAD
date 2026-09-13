@@ -31,8 +31,8 @@ namespace QS3D.Core.BenchmarkParity
             Subject = QsModelElementSnapshot.Require(subject, "subject");
             Scopes = new ReadOnlyCollection<string>((scopes ?? Enumerable.Empty<string>())
                 .Select(x => QsModelElementSnapshot.Require(x, "scopes"))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(x => x, StringComparer.Ordinal)
                 .ToList());
         }
 
@@ -41,7 +41,7 @@ namespace QS3D.Core.BenchmarkParity
 
         public bool HasScope(string scope)
         {
-            return Scopes.Contains(scope, StringComparer.OrdinalIgnoreCase) || Scopes.Contains("qs3d.admin", StringComparer.OrdinalIgnoreCase);
+            return Scopes.Contains(scope, StringComparer.Ordinal) || Scopes.Contains("qs3d.admin", StringComparer.Ordinal);
         }
     }
 
@@ -186,7 +186,11 @@ namespace QS3D.Core.BenchmarkParity
         {
             Revision = QsModelElementSnapshot.Require(revision, "revision");
             SnapshotId = QsModelElementSnapshot.Require(snapshotId, "snapshotId");
-            CreatedUtc = createdUtc.Kind == DateTimeKind.Utc ? createdUtc : createdUtc.ToUniversalTime();
+            CreatedUtc = createdUtc.Kind == DateTimeKind.Utc
+                ? createdUtc
+                : createdUtc.Kind == DateTimeKind.Local
+                    ? createdUtc.ToUniversalTime()
+                    : DateTime.SpecifyKind(createdUtc, DateTimeKind.Utc);
         }
         public string Revision { get; private set; }
         public string SnapshotId { get; private set; }
@@ -316,7 +320,7 @@ namespace QS3D.Core.BenchmarkParity
                 return new QsApiResponse(401, Version, string.Empty, null, "UNAUTHENTICATED");
             if (!request.Principal.HasScope(endpoint.RequiredScope))
                 return new QsApiResponse(403, Version, string.Empty, null, "FORBIDDEN");
-            if (!string.Equals(request.ProjectId, snapshot.Project.ProjectId, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(request.ProjectId, snapshot.Project.ProjectId, StringComparison.Ordinal))
                 return new QsApiResponse(404, Version, string.Empty, null, "PROJECT_NOT_FOUND");
 
             var etag = BuildEtag(snapshot.Project.ProjectId, snapshot.Project.CurrentRevision, request.Resource);
@@ -350,7 +354,7 @@ namespace QS3D.Core.BenchmarkParity
             if (principal == null) return new QsApiResponse(401, Version, string.Empty, null, "UNAUTHENTICATED");
             if (!principal.HasScope("qs3d.workbook.refresh")) return new QsApiResponse(403, Version, string.Empty, null, "FORBIDDEN");
             if (batch == null) throw new ArgumentNullException("batch");
-            if (batch.Results.Any(x => !string.Equals(x.Binding.WorkbookId, workbookId, StringComparison.OrdinalIgnoreCase)))
+            if (batch.Results.Any(x => !string.Equals(x.Binding.WorkbookId, workbookId, StringComparison.Ordinal)))
                 return new QsApiResponse(409, Version, string.Empty, batch.Results, "WORKBOOK_IDENTITY_MISMATCH");
             if (batch.HasBlockingFailure) return new QsApiResponse(409, Version, string.Empty, batch.Results, "WORKBOOK_REFRESH_CONFLICT");
             return new QsApiResponse(200, Version, string.Empty, batch.Results, batch.HasStaleData ? "STALE_SOURCE_REVISION" : string.Empty);

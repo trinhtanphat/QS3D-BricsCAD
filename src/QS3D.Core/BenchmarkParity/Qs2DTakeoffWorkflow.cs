@@ -14,6 +14,7 @@ namespace QS3D.Core.BenchmarkParity
         {
             Id = QsModelElementSnapshot.Require(id, "id");
             Name = QsModelElementSnapshot.Require(name, "name");
+            if (sourceKind != DrawingSheetSourceKind.Pdf && sourceKind != DrawingSheetSourceKind.RasterImage) throw new ArgumentOutOfRangeException("sourceKind");
             SourceKind = sourceKind;
             SourceReference = QsModelElementSnapshot.Require(sourceReference, "sourceReference");
             Revision = QsModelElementSnapshot.Require(revision, "revision");
@@ -33,6 +34,7 @@ namespace QS3D.Core.BenchmarkParity
         {
             Id = QsModelElementSnapshot.Require(id, "id");
             SheetId = QsModelElementSnapshot.Require(sheetId, "sheetId");
+            if (kind != TakeoffMeasurementKind.Count && kind != TakeoffMeasurementKind.Length && kind != TakeoffMeasurementKind.Area) throw new ArgumentOutOfRangeException("kind");
             Kind = kind;
             RawValue = DrawingCalibration.Positive(rawValue, "rawValue");
             Classification = QsModelElementSnapshot.Require(classification, "classification");
@@ -63,6 +65,7 @@ namespace QS3D.Core.BenchmarkParity
             Zone = QsModelElementSnapshot.Optional(zone);
             Layer = QsModelElementSnapshot.Optional(layer);
             Quantity = QsModelElementSnapshot.Finite(quantity, "quantity");
+            if (Quantity < 0d) throw new ArgumentOutOfRangeException("quantity", "Takeoff quantity evidence cannot be negative.");
             Unit = QsModelElementSnapshot.Require(unit, "unit");
         }
         public string MarkupId { get; private set; }
@@ -82,7 +85,19 @@ namespace QS3D.Core.BenchmarkParity
         public TakeoffSheetResult2D(DrawingSheet2D sheet, IReadOnlyList<TakeoffQuantityEvidence2D> evidence)
         {
             Sheet = sheet ?? throw new ArgumentNullException("sheet");
-            Evidence = evidence ?? throw new ArgumentNullException("evidence");
+            if (evidence == null) throw new ArgumentNullException("evidence");
+
+            var markupIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in evidence)
+            {
+                if (item == null) throw new ArgumentException("Takeoff evidence collection contains null.", "evidence");
+                if (!string.Equals(item.SheetId, Sheet.Id, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Takeoff evidence belongs to another sheet.");
+                if (!string.Equals(item.Revision, Sheet.Revision, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Takeoff evidence belongs to another sheet revision.");
+                if (!string.Equals(item.SourceReference, Sheet.SourceReference, StringComparison.Ordinal)) throw new InvalidOperationException("Takeoff evidence belongs to another sheet source.");
+                if (!markupIds.Add(item.MarkupId)) throw new InvalidOperationException("Duplicate takeoff evidence markup id.");
+            }
+
+            Evidence = new ReadOnlyCollection<TakeoffQuantityEvidence2D>(evidence.ToList());
         }
         public DrawingSheet2D Sheet { get; private set; }
         public IReadOnlyList<TakeoffQuantityEvidence2D> Evidence { get; private set; }

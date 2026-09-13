@@ -93,9 +93,12 @@ def main() -> int:
         errors.append("current-document QSAVE must have exactly one queued command attempt")
 
     require(errors, save_as, (
-        "McpDiagnosticHub.InvokeInCadContext(() =>", "document.Database.SaveAs(fullPath, DwgVersion.Current);",
+        "InvokeSaveAsMutationInCadContext(() =>", "document.Database.SaveAs(fullPath, DwgVersion.Current);",
+        "RequireSameSaveAsDocumentGeneration(document, nativeDatabaseIdentity, fullPath);",
         "McpNativeCurrentDocumentSave.SaveCurrentDocument(", "route=Database.SaveAs+native-QSAVE", "dbmodAfterSave",
-    ), "SaveAs native completion settle")
+    ), "SaveAs mutation-owned native completion settle")
+    forbid(errors, save_as, ("McpDiagnosticHub.InvokeInCadContext",), "SaveAs diagnostic-dispatch regression")
+    require(errors, direct, ("private static void RequireSameSaveAsDocumentGeneration(", "database.UnmanagedObject != nativeDatabaseIdentity", "string.Equals(Path.GetFullPath(actual), fullPath, StringComparison.OrdinalIgnoreCase)"), "SaveAs exact document/database/path completion affinity")
     forbid(errors, save_as, ("WaitForSavedContentDbmod();",), "SaveAs blind DBMOD polling regression")
     require(errors, call, ("catch (Exception ex)", "RecordDirectMutationFailure(tool, ex);"), "direct mutation failure routing")
     require(errors, direct, ("private static void RecordDirectMutationFailure(string tool, Exception ex)", '"cad-mutation-failed"', 'reason=" + ex.Message'), "unified direct failure diagnostics")
