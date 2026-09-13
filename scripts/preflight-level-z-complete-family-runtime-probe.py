@@ -29,6 +29,8 @@ if COMMAND.is_file():
         'failureStage = "admission"', 'failureStage = "matrix_configure"',
         'failureStage = "family_build"', 'failureStage = "family_range"',        'failureStage = "family_snapshot"', 'failureStage = "hosted_openings"',
         'failureStage = "fail_closed"', 'failureStage = "level_health"',
+        'project.Elements.Count != 0', 'project.Floors.Clear();',
+        'project.Floors.Add(new FloorDefinition("L0", "Level 0", 0d));',
     ):
         if token not in text:
             errors.append("complete-family command missing contract token: " + token)
