@@ -111,6 +111,21 @@ function Require-Qs3dLevelFailure {
         }
         throw "Level Z runtime probe reported sanitized host build failure at stage '$([string]$Marker["host_build_stage"])'."
     }
+    if ($failureCode -eq "LEVEL_Z_RUNTIME_OPENING_FAILED") {
+        $allowedOpeningStages = @("volume_before_read", "cut_linked_openings", "volume_after_read", "volume_reduction_assert")
+        if (-not $Marker.ContainsKey("opening_stage") -or -not ($allowedOpeningStages -contains [string]$Marker["opening_stage"])) {
+            throw "Level Z marker has an invalid sanitized opening stage."
+        }
+        foreach ($key in @("exception_type", "exception_target", "exception_hresult")) {
+            if (-not $Marker.ContainsKey($key)) { throw "Level Z marker is missing sanitized exception classification." }
+        }
+        if ([string]$Marker["exception_type"] -notmatch '^[A-Za-z0-9_.+`]+$' -or
+            [string]$Marker["exception_target"] -notmatch '^[A-Za-z0-9_.<>+`]*$' -or
+            [string]$Marker["exception_hresult"] -notmatch '^0x[0-9A-F]{8}$') {
+            throw "Level Z marker contains an invalid sanitized exception classification."
+        }
+        throw "Level Z runtime probe reported sanitized opening failure at stage '$([string]$Marker["opening_stage"])'."
+    }
     if ($failureCode -ne "LEVEL_Z_RUNTIME_REBAR_FAILED") { throw "Level Z runtime probe reported sanitized failure '$failureCode'." }
 
     $allowedStages = @(
