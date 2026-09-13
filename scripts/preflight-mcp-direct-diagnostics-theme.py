@@ -85,7 +85,7 @@ if "ThemeStateJson()" in theme_set_block or "InvokeInCadContext" in theme_set_bl
 if 'Application.GetSystemVariable("COLORTHEME")' in theme_ack_block:
     fail("theme mutation acknowledgement must not read COLORTHEME after SetMode")
 
-terminal_callback = between(coordinator, "private static void ApplyBricsCadThemeTerminalInContext", "private static void ApplyTrackedWpfTheme")
+terminal_callback = between(coordinator, "private static void ApplyBricsCadThemeTerminalInContext", "private static void ApplyCurrentTheme")
 if "item.Error = ex;" not in terminal_callback or "item.Done.Set();" not in terminal_callback:
     fail("terminal theme callback must publish error and completion to the owner")
 if "warning" in terminal_callback.lower():

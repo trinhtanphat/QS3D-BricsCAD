@@ -320,20 +320,20 @@ namespace QS3D.BricsCAD.V25
             else throw new InvalidOperationException("mode must be system, dark or light.");
 
             ensureMutationRunning();
-            Qs3dThemeCoordinator.SetMode(mode, "mcp-theme-set");
+            var colorTheme = Qs3dThemeCoordinator.SetModeTerminal(mode, "mcp-theme-set", ensureMutationRunning);
             ensureMutationRunning();
-            if (audit != null) audit("mode=" + modeText + "; host-wide=true");
-            return ThemeMutationAckJson(mode);
+            if (audit != null) audit("mode=" + modeText + "; host-wide=true; bricscadColorTheme=" + colorTheme.ToString(CultureInfo.InvariantCulture));
+            return ThemeMutationAckJson(mode, colorTheme);
         }
 
-        private static string ThemeMutationAckJson(Qs3dThemeMode requestedMode)
+        private static string ThemeMutationAckJson(Qs3dThemeMode requestedMode, int colorTheme)
         {
             var appliedMode = Qs3dThemeCoordinator.CurrentMode;
             var effectiveDark = Qs3dThemeCoordinator.EffectiveDark;
             return "{\"applied\":true,\"requested\":\"" + ModeText(requestedMode)
                    + "\",\"mode\":\"" + ModeText(appliedMode)
                    + "\",\"effective\":\"" + (effectiveDark ? "dark" : "light")
-                   + "\",\"verification\":\"theme_get\"}";
+                   + "\",\"bricscadColorTheme\":" + colorTheme.ToString(CultureInfo.InvariantCulture) + "}";
         }
 
         private static int Integer(string body, string property, int fallback, int minimum, int maximum)
