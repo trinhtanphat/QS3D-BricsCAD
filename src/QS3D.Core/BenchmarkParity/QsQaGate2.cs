@@ -307,16 +307,16 @@ namespace QS3D.Core.BenchmarkParity
                     string value;
                     var key = "IfcRel." + relationship;
                     AddIf(result,
-                        !element.Properties.TryGetValue(key, out value) || string.IsNullOrWhiteSpace(value),
+                        !element.Properties.TryGetValue(key, out value) || !HasUsableRelationshipEvidence(value),
                         profile,
                         "QA2.MISSING_RELATIONSHIP",
                         QsQaSeverity.Critical,
                         element.Id,
-                        "Required IFC relationship is missing: " + relationship + ".");
+                        "Required IFC relationship is missing or has unusable evidence: " + relationship + ".");
                 }
 
                 string spatialContainer;
-                if (element.Properties.TryGetValue("IfcRel.SpatialContainer", out spatialContainer) && !string.IsNullOrWhiteSpace(spatialContainer))
+                if (element.Properties.TryGetValue("IfcRel.SpatialContainer", out spatialContainer) && HasUsableRelationshipEvidence(spatialContainer))
                 {
                     AddIf(result,
                         element.Storey.Length == 0,
@@ -335,7 +335,7 @@ namespace QS3D.Core.BenchmarkParity
                 }
 
                 string typeAssignment;
-                if (element.Type.Length > 0 && element.Properties.TryGetValue("IfcRel.TypeAssignment", out typeAssignment) && !string.IsNullOrWhiteSpace(typeAssignment))
+                if (element.Type.Length > 0 && element.Properties.TryGetValue("IfcRel.TypeAssignment", out typeAssignment) && HasUsableRelationshipEvidence(typeAssignment))
                 {
                     AddIf(result,
                         !string.Equals(element.Type, typeAssignment.Trim(), StringComparison.OrdinalIgnoreCase),
@@ -366,6 +366,11 @@ namespace QS3D.Core.BenchmarkParity
             return !InvalidPsetEvidence.Contains(value.Trim());
         }
 
+        private static bool HasUsableRelationshipEvidence(string value)
+        {
+            return HasUsablePsetEvidence(value);
+        }
+
         private static bool IsFinitePositive(double value)
         {
             return value > 0d && !double.IsNaN(value) && !double.IsInfinity(value);
@@ -377,7 +382,6 @@ namespace QS3D.Core.BenchmarkParity
                    string.Equals(ruleId, "QA2.MISSING_IFC_GUID", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(ruleId, "QA2.DUPLICATE_IFC_GUID", StringComparison.OrdinalIgnoreCase);
         }
-
         private static void AddIf(List<QsQaFinding> result, bool condition, QsQaRuleProfile profile, string ruleId, QsQaSeverity fallback, string elementId, string message)
         {
             if (!condition) return;
