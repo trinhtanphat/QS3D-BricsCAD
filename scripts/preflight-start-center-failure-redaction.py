@@ -43,13 +43,9 @@ def main() -> int:
         "    }\n}",
         "Start Center document activation",
     )
-    require(
-        activation,
-        "document = e.Document ?? Application.DocumentManager.MdiActiveDocument;",
-        "nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);",
-        "panel.RefreshFromDocument(document, nativeDatabaseIdentity);",
-        "document-affine activation refresh",
-    )
+    require(activation, "document = e.Document ?? Application.DocumentManager.MdiActiveDocument;", "document-affine activation document capture")
+    require(activation, "nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);", "document-affine activation generation capture")
+    require(activation, "panel.RefreshFromDocument(document, nativeDatabaseIdentity);", "document-affine activation refresh")
     forbid(activation, "RefreshFromActiveDocument()", "activation must not re-query process-global active document")
     require(activation, "catch (Exception)", "activation containment")
     require(
