@@ -35,7 +35,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                document.Editor.WriteMessage("\nQS3D MCP Agent Center lỗi: " + ex.Message);
+                document.Editor.WriteMessage("\nQS3D MCP Agent Center lỗi: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
         }
     }
@@ -670,7 +670,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                ShowToast(ToastKind.Error, "Clipboard", "Không dán được Runtime API key: " + ex.Message);
+                ShowToast(ToastKind.Error, "Clipboard", "Không dán được Runtime API key: " + SanitizeBackgroundFailure(ex));
             }
         }
 
@@ -1187,7 +1187,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                ShowToast(ToastKind.Error, "Clipboard", "Không sao chép được: " + ex.Message);
+                ShowToast(ToastKind.Error, "Clipboard", "Không sao chép được: " + SanitizeBackgroundFailure(ex));
             }
         }
 
@@ -1413,19 +1413,19 @@ namespace QS3D.BricsCAD.V25
         private void OpenOpenAiPlatformTunnels()
         {
             try { McpOpenAiSecureTunnelManager.OpenPlatformTunnels(); }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI Tunnels", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI Tunnels", SanitizeBackgroundFailure(ex)); }
         }
 
         private void OpenOpenAiRuntimeKeys()
         {
             try { McpOpenAiSecureTunnelManager.OpenRuntimeKeys(); }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI Runtime API key", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI Runtime API key", SanitizeBackgroundFailure(ex)); }
         }
 
         private void OpenOpenAiTunnelClientDownload()
         {
             try { McpOpenAiSecureTunnelManager.OpenTunnelClientDownload(); }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI tunnel-client", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI tunnel-client", SanitizeBackgroundFailure(ex)); }
         }
 
         private void SelectOpenAiTunnelClient()
@@ -1449,7 +1449,7 @@ namespace QS3D.BricsCAD.V25
                     McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.OpenAiSecureTunnel);
                 }
             }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI tunnel-client", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "OpenAI tunnel-client", SanitizeBackgroundFailure(ex)); }
             RefreshStatus();
         }
 
@@ -1472,7 +1472,7 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex)
             {
                 try { _openAiRuntimeKeyBox.Password = string.Empty; } catch { }
-                ShowToast(ToastKind.Error, "OpenAI Secure MCP Tunnel", ex.Message);
+                ShowToast(ToastKind.Error, "OpenAI Secure MCP Tunnel", SanitizeBackgroundFailure(ex));
             }
             RefreshStatus();
         }
@@ -1503,8 +1503,8 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                McpAgentExperience.Error("onboarding", "Cloudflare setup: " + ex.Message, "Kiểm tra Cloudflare setup rồi thử lại.");
-                ShowToast(ToastKind.Error, "Cloudflare", ex.Message);
+                McpAgentExperience.Error("onboarding", "Cloudflare setup: " + SanitizeBackgroundFailure(ex), "Kiểm tra Cloudflare setup rồi thử lại.");
+                ShowToast(ToastKind.Error, "Cloudflare", SanitizeBackgroundFailure(ex));
             }
             RefreshStatus();
         }
@@ -1631,7 +1631,7 @@ namespace QS3D.BricsCAD.V25
                     ShowToast(ToastKind.Success, "ChatGPT", "Đã mở ChatGPT trong browser. Dùng URL + OAuth trên basic connector screen.");
                 }
             }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT", SanitizeBackgroundFailure(ex)); }
         }
 
         private void MarkChatGptRegistered(McpTransportProvider provider)
@@ -1653,7 +1653,7 @@ namespace QS3D.BricsCAD.V25
                         "Đã ghi nhận bạn đã thêm MCP URL hiện tại. Đây là xác nhận cài đặt, chưa phải bằng chứng traffic; OAuth MCP traffic sẽ tự hiện khi ChatGPT gọi server.");
                 }
             }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT Connector", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "ChatGPT Connector", SanitizeBackgroundFailure(ex)); }
             RefreshStatus();
         }
 
@@ -1672,7 +1672,7 @@ namespace QS3D.BricsCAD.V25
                 return;
             }
             try { Clipboard.SetText(url); ShowToast(ToastKind.Success, "MCP URL", "Đã copy public MCP URL."); }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "Clipboard", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Clipboard", SanitizeBackgroundFailure(ex)); }
         }
 
         private void CopyToken()
@@ -1683,7 +1683,7 @@ namespace QS3D.BricsCAD.V25
                 Clipboard.SetText(McpEmbeddedServer.GetBearerToken());
                 ShowToast(ToastKind.Warning, "Bearer Token", "Đã copy engineering bearer. Không chia sẻ token công khai; Secure Tunnel tự inject local bearer, Cloudflare production dùng OAuth.");
             }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "Bearer Token", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Bearer Token", SanitizeBackgroundFailure(ex)); }
         }
 
         private void CopyConfig()
@@ -1699,7 +1699,7 @@ namespace QS3D.BricsCAD.V25
                 Clipboard.SetText("MCP URL: " + url + Environment.NewLine + "Authorization: Bearer " + McpEmbeddedServer.GetBearerToken());
                 ShowToast(ToastKind.Warning, "Engineering config", "Đã copy URL + Authorization cho compatibility/debug. Secret không được ghi vào Logs.");
             }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "Engineering config", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Engineering config", SanitizeBackgroundFailure(ex)); }
         }
 
         private void ResumeDesktopConsent()
@@ -1709,7 +1709,7 @@ namespace QS3D.BricsCAD.V25
                 McpDesktopControlSession.ResumeFromLocalUser();
                 ShowToast(ToastKind.Success, "Resume desktop", "Desktop consent ON · auto-renew trong phiên, không còn timeout 10 phút; Esc ×2 hoặc Pause desktop để dừng ngay.");
             }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "Resume desktop", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Resume desktop", SanitizeBackgroundFailure(ex)); }
             RefreshStatus();
         }
 
@@ -1720,7 +1720,7 @@ namespace QS3D.BricsCAD.V25
                 McpDesktopControlSession.PauseFromLocalUser("User bấm Pause desktop trong Agent Center.");
                 ShowToast(ToastKind.Warning, "Pause desktop", "Đã PAUSED desktop control và emergency-stop mutation. Kiểm tra drawing/backup trước khi Resume.");
             }
-            catch (Exception ex) { ShowToast(ToastKind.Error, "Pause desktop", ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, "Pause desktop", SanitizeBackgroundFailure(ex)); }
             RefreshStatus();
         }
 
@@ -1861,7 +1861,7 @@ namespace QS3D.BricsCAD.V25
                 Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
                 ShowToast(ToastKind.Success, title, "Đã mở thư mục.");
             }
-            catch (Exception ex) { ShowToast(ToastKind.Error, title, ex.Message); }
+            catch (Exception ex) { ShowToast(ToastKind.Error, title, SanitizeBackgroundFailure(ex)); }
         }
 
         private void RefreshStatus()
