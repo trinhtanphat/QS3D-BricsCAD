@@ -43,18 +43,17 @@ def main() -> int:
         "    }\n}",
         "Start Center document activation",
     )
-    require(
-        activation,
-        "panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);",
-        "document-affine activation refresh",
-    )
+    require(activation, "document = e.Document ?? Application.DocumentManager.MdiActiveDocument;", "document-affine activation document capture")
+    require(activation, "nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);", "document-affine activation generation capture")
+    require(activation, "panel.RefreshFromDocument(document, nativeDatabaseIdentity);", "document-affine activation refresh")
     forbid(activation, "RefreshFromActiveDocument()", "activation must not re-query process-global active document")
     require(activation, "catch (Exception)", "activation containment")
     require(
         activation,
-        '"\\nQS3DSTART refresh could not update the Start Center."',
+        "TryWriteRefreshDiagnostic(document, nativeDatabaseIdentity);",
         "activation stable failure text",
     )
+    require(coordinator, '"\\nQS3DSTART refresh could not update the Start Center."', "stable diagnostic text")
     forbid(activation, "ex.Message", "activation callback")
     forbid(activation, ".Message", "activation callback")
 

@@ -62,7 +62,7 @@ def main():
         forbid(panel, "ProjectState", "Project Information legacy placeholder must not retain project state")
         forbid(panel, "ProjectContextCoordinator", "Project Information legacy placeholder must not resolve project state")
     else:
-        require(panel, "RefreshFromDocument(Document? document)", "Project Information completed surface")
+        require(panel, "RefreshFromDocument(Document? document, IntPtr nativeDatabaseIdentity)", "Project Information completed generation-aware surface")
         require(
             panel,
             "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
