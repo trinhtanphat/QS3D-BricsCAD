@@ -81,9 +81,6 @@ native_wrapper_end = source.index("function New-OwnedProvenanceGeneration", nati
 native_wrapper = source[native_wrapper_start:native_wrapper_end]
 helpers = source[helper_start:reader_start]
 
-# PowerShell single-quoted strings already allow literal double quotes. Keep
-# fixtures as valid JSON instead of C-style backslash-escaped text; otherwise
-# the guard tests malformed fixture syntax rather than the production parser.
 probe = native_wrapper + "\n" + helpers + r'''
 $rootCases = @(
     @{ Json='{"Name":"bricscad.exe"}'; Name='Name'; Expected=1 },
@@ -180,6 +177,10 @@ finally {
     if (Test-Path -LiteralPath $probeDir) { Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue }
 }
 '''
+
+# Python escapes embedded PowerShell quotes above. Remove only those quote
+# escapes before execution; preserve JSON's \u escapes for equivalence tests.
+probe = probe.replace('\\"', '"')
 
 with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as tmp:
     tmp.write(probe)
