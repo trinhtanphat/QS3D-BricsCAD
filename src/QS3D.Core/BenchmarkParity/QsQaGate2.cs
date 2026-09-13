@@ -272,7 +272,7 @@ namespace QS3D.Core.BenchmarkParity
                 string ifcEntity;
                 AddIf(
                     result,
-                    !element.Properties.TryGetValue("IfcEntity", out ifcEntity) || !HasUsableMetadataEvidence(ifcEntity),
+                    !element.Properties.TryGetValue("IfcEntity", out ifcEntity) || string.IsNullOrWhiteSpace(ifcEntity) || !HasUsableMetadataEvidence(ifcEntity),
                     profile,
                     "QA2.MISSING_IFC_ENTITY",
                     QsQaSeverity.Error,
@@ -282,7 +282,7 @@ namespace QS3D.Core.BenchmarkParity
                 string quantityUnit;
                 AddIf(
                     result,
-                    !element.Properties.TryGetValue("QuantityUnit", out quantityUnit) || !HasUsableMetadataEvidence(quantityUnit),
+                    !element.Properties.TryGetValue("QuantityUnit", out quantityUnit) || string.IsNullOrWhiteSpace(quantityUnit) || !HasUsableMetadataEvidence(quantityUnit),
                     profile,
                     "QA2.MISSING_QUANTITY_UNIT",
                     QsQaSeverity.Error,

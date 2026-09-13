@@ -11,8 +11,8 @@ for path in (SOURCE, DOC):
 
 source = SOURCE.read_text(encoding="utf-8")
 required = (
-    'TryGetValue("IfcEntity", out ifcEntity) || !HasUsableMetadataEvidence(ifcEntity)',
-    'TryGetValue("QuantityUnit", out quantityUnit) || !HasUsableMetadataEvidence(quantityUnit)',
+    'TryGetValue("IfcEntity", out ifcEntity) || string.IsNullOrWhiteSpace(ifcEntity) || !HasUsableMetadataEvidence(ifcEntity)',
+    'TryGetValue("QuantityUnit", out quantityUnit) || string.IsNullOrWhiteSpace(quantityUnit) || !HasUsableMetadataEvidence(quantityUnit)',
     'private static bool HasUsableMetadataEvidence(string value)',
     '"QA2.MISSING_IFC_ENTITY"',
     '"QA2.MISSING_QUANTITY_UNIT"',
