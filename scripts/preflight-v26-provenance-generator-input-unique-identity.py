@@ -27,6 +27,7 @@ required_tokens = (
     "Assert-JsonPropertyCounts -JsonText $metadataText -ExpectedPropertyCounts $metadataExpectedPropertyCounts",
     "RenameOwnedProvenanceGeneration",
     "SetFileInformationByHandleBuffer",
+    "SetFilePointerEx",
 )
 for token in required_tokens:
     if token not in source:
@@ -52,10 +53,6 @@ metadata_parse = source.index("$metadata = $metadataText | ConvertFrom-Json -Err
 if not (metadata_expected < metadata_assert < metadata_parse):
     raise SystemExit("ERROR: PACKAGE-METADATA identity cardinality must be proved before ConvertFrom-Json")
 
-# Publication must stay on the attempt-owned file handle from staging through rename,
-# identity verification, byte verification, and commit. Pathname Move/Replace plus a later
-# reopen creates a TOCTOU window and can lose rollback ownership. The creation handle must
-# also deny write/delete sharing so the owned generation cannot be replaced while admitted.
 native_start = source.index("public static class Qs3dProvenanceGenerationNative")
 create_start = source.index("public static SafeFileHandle CreateOwnedProvenanceGeneration", native_start)
 create_end = source.index("public static SafeFileHandle OpenPinnedPublishedProvenanceGeneration", create_start)
@@ -79,24 +76,21 @@ if rollback_after < rename_owned:
 if "[IO.File]::Move(" in publication or "[IO.File]::Replace(" in publication or "Open-PinnedPublishedProvenanceGeneration -Path" in publication:
     raise SystemExit("ERROR: V26 provenance publication must not reopen or pathname-move the admitted generation")
 
-# Compile and execute the exact native helper on the Windows CI runner. This catches invalid
-# FILE_RENAME_INFO layout/PInvoke declarations and proves both first publication and replace-
-# existing publication retain the admitted identity/bytes and deny concurrent writers.
 native_wrapper_start = source.index("if (-not ('Qs3dProvenanceGenerationNative' -as [type]))")
 native_wrapper_end = source.index("function New-OwnedProvenanceGeneration", native_wrapper_start)
 native_wrapper = source[native_wrapper_start:native_wrapper_end]
 helpers = source[helper_start:reader_start]
 probe = native_wrapper + "\n" + helpers + r'''
 $rootCases = @(
-    @{ Json='{"Name":"bricscad.exe"}'; Name='Name'; Expected=1 },
-    @{ Json='{"Name":"bricscad.exe","Name":"evil"}'; Name='Name'; Expected=2 },
-    @{ Json='{"Na\u006de":"bricscad.exe","name":"evil"}'; Name='Name'; Expected=2 },
-    @{ Json='{"Sha256":"a","SHA256":"b"}'; Name='Sha256'; Expected=2 },
-    @{ Json='{"product":"QS3D","PRODUCT":"evil"}'; Name='product'; Expected=2 },
-    @{ Json='{"product":"QS3D","pro\u0064uct":"evil"}'; Name='product'; Expected=2 },
-    @{ Json='{"product":"QS3D","extension":{"product":"diagnostic"}}'; Name='product'; Expected=1 },
-    @{ Json='{"Version":1,"Files":[],"extension":{"Version":99}}'; Name='Version'; Expected=1 },
-    @{ Json='{"framework":"net8.0-windows","extension":[{"framework":"ignored"}]}'; Name='framework'; Expected=1 }
+    @{ Json='{"Name":"bricscad.exe"}'.Replace('\"','"'); Name='Name'; Expected=1 },
+    @{ Json='{"Name":"bricscad.exe","Name":"evil"}'.Replace('\"','"'); Name='Name'; Expected=2 },
+    @{ Json='{"Na\u006de":"bricscad.exe","name":"evil"}'.Replace('\"','"'); Name='Name'; Expected=2 },
+    @{ Json='{"Sha256":"a","SHA256":"b"}'.Replace('\"','"'); Name='Sha256'; Expected=2 },
+    @{ Json='{"product":"QS3D","PRODUCT":"evil"}'.Replace('\"','"'); Name='product'; Expected=2 },
+    @{ Json='{"product":"QS3D","pro\u0064uct":"evil"}'.Replace('\"','"'); Name='product'; Expected=2 },
+    @{ Json='{"product":"QS3D","extension":{"product":"diagnostic"}}'.Replace('\"','"'); Name='product'; Expected=1 },
+    @{ Json='{"Version":1,"Files":[],"extension":{"Version":99}}'.Replace('\"','"'); Name='Version'; Expected=1 },
+    @{ Json='{"framework":"net8.0-windows","extension":[{"framework":"ignored"}]}'.Replace('\"','"'); Name='framework'; Expected=1 }
 )
 foreach ($case in $rootCases) {
     $actual = Get-JsonPropertyOccurrenceCount -JsonText $case.Json -PropertyName $case.Name
@@ -105,13 +99,13 @@ foreach ($case in $rootCases) {
     }
 }
 
-$validHost = '{"Version":1,"Files":[{"Name":"a","Path":"p1","Sha256":"s1","Length":1,"extension":{"Name":"nested"}},{"Name":"b","Path":"p2","Sha256":"s2","Length":2}],"extension":{"Files":[]}}'
+$validHost = '{"Version":1,"Files":[{"Name":"a","Path":"p1","Sha256":"s1","Length":1,"extension":{"Name":"nested"}},{"Name":"b","Path":"p2","Sha256":"s2","Length":2}],"extension":{"Files":[]}}'.Replace('\"','"')
 $recordCounts = @{ Name=1; Path=1; Sha256=1; Length=1 }
 $objects = @(Get-JsonTopLevelArrayObjectTexts -JsonText $validHost -ArrayPropertyName 'Files' -Label 'probe')
 if ($objects.Count -ne 2) { throw "provenance-generator Files[] probe expected 2 direct objects, got $($objects.Count)" }
 Assert-JsonArrayObjectPropertyCounts -JsonText $validHost -ArrayPropertyName 'Files' -ExpectedObjectCount 2 -ExpectedPropertyCounts $recordCounts -Label 'probe'
 
-$duplicateRecord = '{"Version":1,"Files":[{"Name":"a","NAME":"evil","Path":"p","Sha256":"s","Length":1}]}'
+$duplicateRecord = '{"Version":1,"Files":[{"Name":"a","NAME":"evil","Path":"p","Sha256":"s","Length":1}]}'.Replace('\"','"')
 $rejected = $false
 try {
     Assert-JsonArrayObjectPropertyCounts -JsonText $duplicateRecord -ArrayPropertyName 'Files' -ExpectedObjectCount 1 -ExpectedPropertyCounts $recordCounts -Label 'probe'
@@ -119,7 +113,7 @@ try {
 catch { $rejected = $true }
 if (-not $rejected) { throw 'provenance-generator Files[] duplicate record identity was not rejected' }
 
-$escapedDuplicateRecord = '{"Version":1,"Files":[{"Name":"a","Na\u006de":"evil","Path":"p","Sha256":"s","Length":1}]}'
+$escapedDuplicateRecord = '{"Version":1,"Files":[{"Name":"a","Na\u006de":"evil","Path":"p","Sha256":"s","Length":1}]}'.Replace('\"','"')
 $rejected = $false
 try {
     Assert-JsonArrayObjectPropertyCounts -JsonText $escapedDuplicateRecord -ArrayPropertyName 'Files' -ExpectedObjectCount 1 -ExpectedPropertyCounts $recordCounts -Label 'probe'
@@ -168,13 +162,13 @@ $probeDir = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-provenance-' + [Guid
 try {
     $destinationPath = Join-Path $probeDir 'published.json'
     $firstSource = Join-Path $probeDir 'owned-first.tmp'
-    $firstPayload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":"first"}')
+    $firstPayload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":"first"}'.Replace('\"','"'))
     Assert-OwnedPublication -SourcePath $firstSource -DestinationPath $destinationPath -Payload $firstPayload -ReplaceExisting $false
     if (Test-Path -LiteralPath $destinationPath) { throw 'first owned provenance generation remained after handle-owned cleanup' }
 
-    [IO.File]::WriteAllText($destinationPath, '{"old":true}', [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($destinationPath, '{"old":true}'.Replace('\"','"'), [Text.UTF8Encoding]::new($false))
     $secondSource = Join-Path $probeDir 'owned-replacement.tmp'
-    $secondPayload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":"replacement"}')
+    $secondPayload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":"replacement"}'.Replace('\"','"'))
     Assert-OwnedPublication -SourcePath $secondSource -DestinationPath $destinationPath -Payload $secondPayload -ReplaceExisting $true
     if (Test-Path -LiteralPath $destinationPath) { throw 'replacement owned provenance generation remained after handle-owned cleanup' }
 }
