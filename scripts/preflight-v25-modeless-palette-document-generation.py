@@ -43,6 +43,18 @@ if re.search(r'TryWriteRefreshDiagnostic\s*\(\s*document\s*,\s*nativeDatabaseIde
 if re.search(r'ShowUnavailableIfCurrent\s*\(\s*document\s*,\s*nativeDatabaseIdentity\s*,', PROJECT) is None:
     raise SystemExit('Project Information activation failure clearing must be generation-fenced before UI publication')
 
+# A stale callback must not clear or replace UI that may already belong to a newer generation.
+start_guard = START_PANEL.find('if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;')
+start_reset = START_PANEL.find('ResetDocumentScopedDisplay();')
+if start_guard < 0 or start_reset < 0 or start_guard > start_reset:
+    raise SystemExit('Start Center must reject stale generation before clearing document-scoped UI')
+
+if re.search(r'if\s*\(!DocumentGenerationGuard\.IsCurrent\(document, nativeDatabaseIdentity\)\)\s*\{\s*ShowUnavailable\(', PROJECT_PANEL) is not None:
+    raise SystemExit('Project Information stale-generation branch must not publish unavailable state')
+
+if re.search(r'else\s*ShowUnavailable\("Bản vẽ đã đổi generation trong lúc refresh;', PROJECT_PANEL) is not None:
+    raise SystemExit('Project Information catch path must not publish after generation drift')
+
 for text in (START, PROJECT, START_PANEL, PROJECT_PANEL):
     for forbidden in ('ex.Message', 'error.Message', 'Exception.Message'):
         if forbidden in text:
