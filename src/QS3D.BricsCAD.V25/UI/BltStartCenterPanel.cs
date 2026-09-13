@@ -89,7 +89,7 @@ namespace QS3D.BricsCAD.V25.UI
 
             if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
             if (!string.IsNullOrWhiteSpace(normalized))
-                StartCenterUserStateStore.RecordProject(normalized);
+                StartCenterUserStateStore.RecordProject(normalized!);
             if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
 
             var floorText = "Tầng —";
@@ -566,6 +566,13 @@ namespace QS3D.BricsCAD.V25.UI
             return button;
         }
 
+        private void RefreshStatusControls()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+            RefreshStatusControls(document, DocumentGenerationGuard.CaptureCurrent(document));
+        }
+
         private void RefreshStatusControls(Document document, IntPtr nativeDatabaseIdentity)
         {
             var light = TryReadSystemVariableInt("COLORTHEME", out var colorTheme) && colorTheme == 1;
@@ -672,6 +679,12 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 VisualTree = root
             };
+        }
+
+        private void RefreshRecentProjects()
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            RefreshRecentProjects(document, DocumentGenerationGuard.CaptureCurrent(document));
         }
 
         private void RefreshRecentProjects(Document? document, IntPtr nativeDatabaseIdentity)
