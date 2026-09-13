@@ -106,8 +106,11 @@ namespace QS3D.BricsCAD.V25
                 failureStage = "matrix_configure";
                 failureCase = "project_setup";
                 var project = ProjectContextCoordinator.GetOrCreate(document);
-                if (project.Elements.Count != 0 || project.Floors.Count != 0)
-                    throw new InvalidOperationException("Complete-family probe requires a fresh project.");
+                if (project.Elements.Count != 0 ||
+                    project.FindFloor("L0") != null ||
+                    project.FindFloor("L1") != null ||
+                    project.FindFloor("L2") != null)
+                    throw new InvalidOperationException("Complete-family probe requires a fresh canonical project.");
                 project.Floors.Add(new FloorDefinition("L0", "Level 0", 0d));
                 project.Floors.Add(new FloorDefinition("L1", "Level 1", 3d));
                 project.Floors.Add(new FloorDefinition("L2", "Level 2", 7d));

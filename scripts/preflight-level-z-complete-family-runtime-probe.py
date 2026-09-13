@@ -29,10 +29,13 @@ if COMMAND.is_file():
         'failureStage = "admission"', 'failureStage = "matrix_configure"',
         'failureStage = "family_build"', 'failureStage = "family_range"',        'failureStage = "family_snapshot"', 'failureStage = "hosted_openings"',
         'failureStage = "fail_closed"', 'failureStage = "level_health"',
+        'project.Elements.Count != 0', 'project.FindFloor("L0") != null',
+        'project.FindFloor("L1") != null', 'project.FindFloor("L2") != null',
     ):
         if token not in text:
             errors.append("complete-family command missing contract token: " + token)
-    for forbidden in ('error.Message', 'error.ToString()', 'error.StackTrace', 'GeneratedSolidHandle=" +'):
+    for forbidden in ('error.Message', 'error.ToString()', 'error.StackTrace', 'GeneratedSolidHandle=" +',
+                      'project.Floors.Count != 0'):
         if forbidden in text:
             errors.append("complete-family failure taxonomy leaks forbidden detail token: " + forbidden)
 
