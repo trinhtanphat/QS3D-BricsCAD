@@ -86,12 +86,36 @@ namespace QS3D.Core.SmokeTests
             Near(7d, changed.CurrentQuantity, "changed group current");
             Near(2d, changed.QuantityDelta, "changed group delta");
             Near(7d, changed.EstimateEligibleCurrentQuantity, "changed group estimate eligible");
+            Equal(0, changed.AddedCount, "changed group added count");
+            Equal(0, changed.RemovedCount, "changed group removed count");
+            Equal(1, changed.ChangedCount, "changed group changed count");
+            Equal(0, changed.UnchangedCount, "changed group unchanged count");
+            Equal(1, changed.MarkupCount, "changed group markup count");
 
             var removed = result.GroupSummaries.Single(x => x.Classification == "ARC.WALL" && x.Zone == "L01");
             Near(4d, removed.PreviousQuantity, "removed group previous");
             Near(0d, removed.CurrentQuantity, "removed group current");
             Near(-4d, removed.QuantityDelta, "removed group delta");
             Near(0d, removed.EstimateEligibleCurrentQuantity, "removed group excluded from estimate eligible");
+            Equal(0, removed.AddedCount, "removed group added count");
+            Equal(1, removed.RemovedCount, "removed group removed count");
+            Equal(0, removed.ChangedCount, "removed group changed count");
+            Equal(0, removed.UnchangedCount, "removed group unchanged count");
+            Equal(1, removed.MarkupCount, "removed group markup count");
+
+            var added = result.GroupSummaries.Single(x => x.Classification == "ARC.FLOOR");
+            Equal(1, added.AddedCount, "added group added count");
+            Equal(1, added.MarkupCount, "added group markup count");
+
+            var unchanged = result.GroupSummaries.Single(x => x.Classification == "ARC.DOOR");
+            Equal(1, unchanged.UnchangedCount, "unchanged group unchanged count");
+            Equal(1, unchanged.MarkupCount, "unchanged group markup count");
+
+            Equal(result.Rows.Count, result.GroupSummaries.Sum(x => x.MarkupCount), "group markup-count invariant");
+            Equal(result.AddedCount, result.GroupSummaries.Sum(x => x.AddedCount), "group added-count invariant");
+            Equal(result.RemovedCount, result.GroupSummaries.Sum(x => x.RemovedCount), "group removed-count invariant");
+            Equal(result.ChangedCount, result.GroupSummaries.Sum(x => x.ChangedCount), "group changed-count invariant");
+            Equal(result.UnchangedCount, result.GroupSummaries.Sum(x => x.UnchangedCount), "group unchanged-count invariant");
 
             Equal("ARC.DOOR", result.GroupSummaries[0].Classification, "group stable classification order");
             Equal("ARC.FLOOR", result.GroupSummaries[1].Classification, "group stable classification order 2");
@@ -111,6 +135,8 @@ namespace QS3D.Core.SmokeTests
             Equal(1, result.GroupSummaries.Count, "case-insensitive group identity");
             Near(3d, result.GroupSummaries[0].CurrentQuantity, "case-insensitive grouped current quantity");
             Near(3d, result.GroupSummaries[0].EstimateEligibleCurrentQuantity, "case-insensitive grouped estimate quantity");
+            Equal(2, result.GroupSummaries[0].AddedCount, "case-insensitive grouped added count");
+            Equal(2, result.GroupSummaries[0].MarkupCount, "case-insensitive grouped markup count");
         }
 
         private static RevisionTakeoffPackage2D BuildSamplePackage()
