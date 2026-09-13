@@ -26,14 +26,15 @@ metadata_parse = source.index("$metadata = $metadataText | ConvertFrom-Json", me
 update_read = source.index("$updateText = Read-HeldText")
 update_parse = source.index("$update = $updateText | ConvertFrom-Json", update_read)
 
-for label, start, parse in (
-    ("provenance", provenance_read, provenance_parse),
-    ("PACKAGE-METADATA", metadata_read, metadata_parse),
-    ("update manifest", update_read, update_parse),
+for label, start, parse, required_calls in (
+    ("provenance", provenance_read, provenance_parse, ("Assert-JsonPropertyCounts", "Assert-JsonArrayObjectPropertyCounts")),
+    ("PACKAGE-METADATA", metadata_read, metadata_parse, ("Assert-JsonPropertyCounts",)),
+    ("update manifest", update_read, update_parse, ("Assert-JsonPropertyCounts",)),
 ):
     segment = source[start:parse]
-    if "Get-JsonPropertyOccurrenceCount" not in segment:
-        raise SystemExit(f"ERROR: {label} identity cardinality must be proved before ConvertFrom-Json")
+    for required_call in required_calls:
+        if required_call not in segment:
+            raise SystemExit(f"ERROR: {label} identity cardinality must be proved before ConvertFrom-Json via {required_call}")
 
 # PowerShell single-quoted strings preserve double quotes literally. These are
 # valid JSON fixtures; only the JSON unicode escape deliberately contains a
