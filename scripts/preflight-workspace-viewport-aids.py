@@ -54,22 +54,20 @@ if PARTIAL.is_file():
         "viewportStatus.Children.Add(_orthoModeButton);",
         "viewportStatus.Children.Add(_objectSnapButton);",
         "viewportStatus.Children.Add(_objectSnapMenuButton);",
-        'ReadSystemVariableString("BKGCOLOR")',
-        'BcadApplication.SetSystemVariable("BKGCOLOR", next);',
-        'ReadSystemVariableInt("ORTHOMODE")',
-        'BcadApplication.SetSystemVariable("ORTHOMODE", (short)(enabled ? 1 : 0));',
-        'var current = ReadSystemVariableInt("OSMODE");',
         "var configuredModes = current & ObjectSnapModeMask;",
         "var suppression = current & ObjectSnapSuppressedBit;",
         "? configuredModes | bit",
         ": configuredModes & ~bit;",
-        "var next = suppression | configuredModes;",
-        'BcadApplication.SetSystemVariable("OSMODE", checked((short)next));',
         "SetObjectSnapMenuState(osMode & ObjectSnapModeMask);",
         "_endpointSnapItem.IsChecked = (configuredModes & ObjectSnapEndpointBit) != 0;",
         "_midpointSnapItem.IsChecked = (configuredModes & ObjectSnapMidpointBit) != 0;",
         "_centerSnapItem.IsChecked = (configuredModes & ObjectSnapCenterBit) != 0;",
         "_nearestSnapItem.IsChecked = (configuredModes & ObjectSnapNearestBit) != 0;",
+        "MutateDocumentScopedSystemVariable(\"BKGCOLOR\"",
+        "MutateDocumentScopedSystemVariable(\"ORTHOMODE\"",
+        "MutateDocumentScopedSystemVariable(\"OSMODE\"",
+        "DocumentGenerationGuard.CaptureCurrent(document)",
+        "DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)",
         "BcadApplication.GetSystemVariable(name)",
     )
     for needle in required:
@@ -132,76 +130,37 @@ if PARTIAL.is_file():
         )
 
     background_handler = text.find("private void ToggleViewportBackgroundPreset")
-    read_background = text.find('ReadSystemVariableString("BKGCOLOR")', background_handler)
-    restore_background = text.find("restoreColor = current;", read_background)
-    write_background = text.find('SetSystemVariable("BKGCOLOR", next);', restore_background)
-    if min(background_handler, read_background, restore_background, write_background) < 0 or not (
-        background_handler < read_background < restore_background < write_background
+    background_mutation = text.find('MutateDocumentScopedSystemVariable("BKGCOLOR"', background_handler)
+    restore_owner = text.find("ReferenceEquals(restoreDocumentSnapshot, currentDocument)", background_mutation)
+    restore_commit = text.find("restoreColor = nextRestoreColor;", restore_owner)
+    if min(background_handler, background_mutation, restore_owner, restore_commit) < 0 or not (
+        background_handler < background_mutation < restore_owner < restore_commit
     ):
-        errors.append("BKGCOLOR presets must read current host state, retain a restore value, and then write the preset")
+        errors.append("BKGCOLOR presets must mutate through the generation fence and commit restore state only after success")
 
     global_snap_handler = text.find("private void OnObjectSnapButtonClick")
-    read_pos = text.find('ReadSystemVariableInt("OSMODE")', global_snap_handler)
-    mask_pos = text.find("current & ObjectSnapModeMask", read_pos)
+    snap_mutation = text.find('MutateDocumentScopedSystemVariable("OSMODE"', global_snap_handler)
+    mask_pos = text.find("current & ObjectSnapModeMask", snap_mutation)
     enabled_pos = text.find("var currentlyEnabled", mask_pos)
-    zero_pos = text.find("if (enable && configuredModes == 0)", enabled_pos)
+    zero_pos = text.find("missingConfiguration = enable && configuredModes == 0", enabled_pos)
     preserve_on_pos = text.find("? configuredModes", zero_pos)
     preserve_off_pos = text.find(": configuredModes | ObjectSnapSuppressedBit;", preserve_on_pos)
-    write_pos = text.find('SetSystemVariable("OSMODE"', preserve_off_pos)
-    if min(
-        global_snap_handler,
-        read_pos,
-        mask_pos,
-        enabled_pos,
-        zero_pos,
-        preserve_on_pos,
-        preserve_off_pos,
-        write_pos,
-    ) < 0 or not (
-        global_snap_handler
-        < read_pos
-        < mask_pos
-        < enabled_pos
-        < zero_pos
-        < preserve_on_pos
-        < preserve_off_pos
-        < write_pos
+    if min(global_snap_handler, snap_mutation, mask_pos, enabled_pos, zero_pos, preserve_on_pos, preserve_off_pos) < 0 or not (
+        global_snap_handler < snap_mutation < mask_pos < enabled_pos < zero_pos < preserve_on_pos < preserve_off_pos
     ):
-        errors.append(
-            "global OSMODE toggle must read current bits, fail closed on zero configured modes, "
-            "preserve lower bits and only add/remove the suppression bit"
-        )
+        errors.append("global OSMODE toggle must use the generation fence, fail closed on zero configured modes, and preserve configured bits")
 
     mode_handler = text.find("private void OnObjectSnapModeClick")
-    mode_read = text.find('ReadSystemVariableInt("OSMODE")', mode_handler)
-    suppression_pos = text.find("current & ObjectSnapSuppressedBit", mode_read)
+    mode_mutation = text.find('MutateDocumentScopedSystemVariable("OSMODE"', mode_handler)
+    suppression_pos = text.find("current & ObjectSnapSuppressedBit", mode_mutation)
     configured_pos = text.find("current & ObjectSnapModeMask", suppression_pos)
     set_pos = text.find("? configuredModes | bit", configured_pos)
     clear_pos = text.find(": configuredModes & ~bit;", set_pos)
-    combine_pos = text.find("var next = suppression | configuredModes;", clear_pos)
-    mode_write = text.find('SetSystemVariable("OSMODE"', combine_pos)
-    if min(
-        mode_handler,
-        mode_read,
-        suppression_pos,
-        configured_pos,
-        set_pos,
-        clear_pos,
-        combine_pos,
-        mode_write,
-    ) < 0 or not (
-        mode_handler
-        < mode_read
-        < suppression_pos
-        < configured_pos
-        < set_pos
-        < clear_pos
-        < combine_pos
-        < mode_write
+    combine_pos = text.find("suppression | configuredModes", clear_pos)
+    if min(mode_handler, mode_mutation, suppression_pos, configured_pos, set_pos, clear_pos, combine_pos) < 0 or not (
+        mode_handler < mode_mutation < suppression_pos < configured_pos < set_pos < clear_pos < combine_pos
     ):
-        errors.append(
-            "per-mode OSNAP menu must preserve suppression and unrelated configured bits while toggling one requested bit"
-        )
+        errors.append("per-mode OSNAP menu must use the generation fence and preserve suppression/unrelated configured bits")
 
     for forbidden in (
         "ProjectContextCoordinator",
