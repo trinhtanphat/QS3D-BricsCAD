@@ -54,16 +54,95 @@ namespace QS3D.Core.BenchmarkParity
         }
     }
 
+    public sealed class RevisionPackageQuantitySummary2D
+    {
+        internal RevisionPackageQuantitySummary2D(string unit, double previousQuantity, double currentQuantity, double quantityDelta, double estimateEligibleCurrentQuantity)
+        {
+            Unit = QsModelElementSnapshot.Require(unit, "unit");
+            PreviousQuantity = QsModelElementSnapshot.Finite(previousQuantity, "previousQuantity");
+            CurrentQuantity = QsModelElementSnapshot.Finite(currentQuantity, "currentQuantity");
+            QuantityDelta = QsModelElementSnapshot.Finite(quantityDelta, "quantityDelta");
+            EstimateEligibleCurrentQuantity = QsModelElementSnapshot.Finite(estimateEligibleCurrentQuantity, "estimateEligibleCurrentQuantity");
+            if (PreviousQuantity < 0d || CurrentQuantity < 0d || EstimateEligibleCurrentQuantity < 0d)
+                throw new InvalidOperationException("Revision package quantity summary cannot contain negative absolute quantities.");
+        }
+
+        public string Unit { get; private set; }
+        public double PreviousQuantity { get; private set; }
+        public double CurrentQuantity { get; private set; }
+        public double QuantityDelta { get; private set; }
+        public double EstimateEligibleCurrentQuantity { get; private set; }
+    }
+
+    public sealed class RevisionPackageReviewResult2D
+    {
+        internal RevisionPackageReviewResult2D(RevisionTakeoffPackage2D package, IReadOnlyList<RevisionPackageReviewRow2D> rows)
+        {
+            if (package == null) throw new ArgumentNullException("package");
+            if (rows == null) throw new ArgumentNullException("rows");
+
+            PreviousRevision = package.Previous.Sheet.Revision;
+            CurrentRevision = package.Current.Sheet.Revision;
+            AddedCount = package.AddedCount;
+            RemovedCount = package.RemovedCount;
+            ChangedCount = package.ChangedCount;
+            UnchangedCount = package.UnchangedCount;
+            Rows = rows;
+
+            var summaries = rows
+                .GroupBy(x => x.Unit, StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(x => new RevisionPackageQuantitySummary2D(
+                    x.Key,
+                    SumFinite(x.Select(r => r.PreviousQuantity)),
+                    SumFinite(x.Select(r => r.CurrentQuantity)),
+                    SumFinite(x.Select(r => r.QuantityDelta)),
+                    SumFinite(x.Where(r => r.EstimateEligible).Select(r => r.CurrentQuantity))))
+                .ToList();
+            QuantitySummaries = new ReadOnlyCollection<RevisionPackageQuantitySummary2D>(summaries);
+        }
+
+        public string PreviousRevision { get; private set; }
+        public string CurrentRevision { get; private set; }
+        public int AddedCount { get; private set; }
+        public int RemovedCount { get; private set; }
+        public int ChangedCount { get; private set; }
+        public int UnchangedCount { get; private set; }
+        public IReadOnlyList<RevisionPackageReviewRow2D> Rows { get; private set; }
+        public IReadOnlyList<RevisionPackageQuantitySummary2D> QuantitySummaries { get; private set; }
+
+        private static double SumFinite(IEnumerable<double> values)
+        {
+            var sum = 0d;
+            var compensation = 0d;
+            foreach (var value in values)
+            {
+                var finite = QsModelElementSnapshot.Finite(value, "quantity");
+                var adjusted = finite - compensation;
+                var next = sum + adjusted;
+                compensation = (next - sum) - adjusted;
+                sum = QsModelElementSnapshot.Finite(next, "quantityTotal");
+            }
+            return sum;
+        }
+    }
+
     public sealed class RevisionTakeoffPackageReview2D
     {
         public IReadOnlyList<RevisionPackageReviewRow2D> Build(RevisionTakeoffPackage2D package)
+        {
+            return BuildResult(package).Rows;
+        }
+
+        public RevisionPackageReviewResult2D BuildResult(RevisionTakeoffPackage2D package)
         {
             if (package == null) throw new ArgumentNullException("package");
             var rows = package.Overlay
                 .Select(x => new RevisionPackageReviewRow2D(x))
                 .OrderBy(x => x.MarkupId, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            return new ReadOnlyCollection<RevisionPackageReviewRow2D>(rows);
+            var readOnlyRows = new ReadOnlyCollection<RevisionPackageReviewRow2D>(rows);
+            return new RevisionPackageReviewResult2D(package, readOnlyRows);
         }
     }
 }
