@@ -194,6 +194,7 @@ namespace QS3D.Core.BenchmarkParity
             }
 
             var bimSourceIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var bimQuantityIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var item in bim)
             {
                 if (item == null)
@@ -201,6 +202,10 @@ namespace QS3D.Core.BenchmarkParity
                     issues.Add(new TakeoffPackageValidationIssue("PKG.NULL_BIM_QUANTITY", TakeoffPackageValidationSeverity.Error, string.Empty, "BIM quantity input contains a null item."));
                     continue;
                 }
+
+                var quantityIdentity = item.Guid + "\u001f" + item.QuantityName + "\u001f" + item.Unit;
+                if (!bimQuantityIds.Add(quantityIdentity))
+                    issues.Add(new TakeoffPackageValidationIssue("PKG.DUPLICATE_BIM_QUANTITY", TakeoffPackageValidationSeverity.Error, item.Guid, "BIM quantity identity (Guid, QuantityName, Unit) is duplicated in the package."));
 
                 if (bimSourceIds.Add(item.Guid))
                     sources.Add(new TakeoffPackageSource(item.Guid, TakeoffPackageSourceKind.Bim3D, item.Entity, package.Revision));
@@ -215,7 +220,21 @@ namespace QS3D.Core.BenchmarkParity
             if (issues.Any(x => x.Severity == TakeoffPackageValidationSeverity.Error))
                 return new TakeoffPackageBuildResult(package, TakeoffPackageReadiness.Blocked, sources, issues, Enumerable.Empty<TakeoffWorkflowLine>());
 
-            var inventory = new AutodeskTakeoffWorkflow().BuildInventoryAndEstimate(evidence, bim, formula, rateProvider);
+            IReadOnlyList<TakeoffWorkflowLine> inventory;
+            try
+            {
+                inventory = new AutodeskTakeoffWorkflow().BuildInventoryAndEstimate(evidence, bim, formula, rateProvider);
+            }
+            catch (Exception ex) when (!(ex is OutOfMemoryException) && !(ex is StackOverflowException))
+            {
+                issues.Add(new TakeoffPackageValidationIssue(
+                    "PKG.EVALUATION_FAILED",
+                    TakeoffPackageValidationSeverity.Error,
+                    package.Id,
+                    "Takeoff package formula/rate evaluation failed: " + ex.Message));
+                return new TakeoffPackageBuildResult(package, TakeoffPackageReadiness.Blocked, sources, issues, Enumerable.Empty<TakeoffWorkflowLine>());
+            }
+
             var readiness = inventory.Count == 0 ? TakeoffPackageReadiness.Draft : TakeoffPackageReadiness.Ready;
             return new TakeoffPackageBuildResult(package, readiness, sources, issues, inventory);
         }
