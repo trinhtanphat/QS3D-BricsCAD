@@ -35,9 +35,9 @@ for label, start, parse in (
     if "Get-JsonPropertyOccurrenceCount" not in segment:
         raise SystemExit(f"ERROR: {label} identity cardinality must be proved before ConvertFrom-Json")
 
-# PowerShell single-quoted strings preserve double quotes literally. These are
-# valid JSON fixtures; only the JSON unicode escape deliberately contains a
-# backslash so the behavioral probe exercises escaped-equivalent names.
+# PowerShell single-quoted strings preserve JSON double quotes literally. Use
+# direct JSON here; only the JSON unicode escape deliberately has a backslash
+# so the behavioral probe exercises escaped-equivalent property names.
 probe = helper_block + r'''
 $cases = @(
     @{ Json='{"product":"QS3D"}'; Name='product'; Expected=1 },
@@ -56,9 +56,8 @@ foreach ($case in $cases) {
 }
 '''
 
-# The Python source above intentionally uses backslash escapes to encode the
-# embedded PowerShell text. Strip only quote escapes before execution; keep
-# JSON's \u escape intact.
+# r'''...''' preserves the JSON unicode escape above. Convert the Python-source
+# quote escapes (one backslash + quote) into literal PowerShell JSON quotes.
 probe = probe.replace('\\"', '"')
 
 with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as tmp:
