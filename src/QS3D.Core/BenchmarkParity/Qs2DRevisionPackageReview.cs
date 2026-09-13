@@ -74,8 +74,73 @@ namespace QS3D.Core.BenchmarkParity
         public double EstimateEligibleCurrentQuantity { get; private set; }
     }
 
+    public sealed class RevisionPackageGroupSummary2D
+    {
+        internal RevisionPackageGroupSummary2D(string classification, string zone, string layer, string unit, double previousQuantity, double currentQuantity, double quantityDelta, double estimateEligibleCurrentQuantity)
+        {
+            Classification = QsModelElementSnapshot.Require(classification, "classification");
+            Zone = QsModelElementSnapshot.Optional(zone);
+            Layer = QsModelElementSnapshot.Optional(layer);
+            Unit = QsModelElementSnapshot.Require(unit, "unit");
+            PreviousQuantity = QsModelElementSnapshot.Finite(previousQuantity, "previousQuantity");
+            CurrentQuantity = QsModelElementSnapshot.Finite(currentQuantity, "currentQuantity");
+            QuantityDelta = QsModelElementSnapshot.Finite(quantityDelta, "quantityDelta");
+            EstimateEligibleCurrentQuantity = QsModelElementSnapshot.Finite(estimateEligibleCurrentQuantity, "estimateEligibleCurrentQuantity");
+            if (PreviousQuantity < 0d || CurrentQuantity < 0d || EstimateEligibleCurrentQuantity < 0d)
+                throw new InvalidOperationException("Revision package group summary cannot contain negative absolute quantities.");
+        }
+
+        public string Classification { get; private set; }
+        public string Zone { get; private set; }
+        public string Layer { get; private set; }
+        public string Unit { get; private set; }
+        public double PreviousQuantity { get; private set; }
+        public double CurrentQuantity { get; private set; }
+        public double QuantityDelta { get; private set; }
+        public double EstimateEligibleCurrentQuantity { get; private set; }
+    }
+
     public sealed class RevisionPackageReviewResult2D
     {
+        private sealed class GroupSummaryKey : IEquatable<GroupSummaryKey>
+        {
+            public GroupSummaryKey(string classification, string zone, string layer, string unit)
+            {
+                Classification = classification;
+                Zone = zone ?? string.Empty;
+                Layer = layer ?? string.Empty;
+                Unit = unit;
+            }
+
+            public string Classification { get; private set; }
+            public string Zone { get; private set; }
+            public string Layer { get; private set; }
+            public string Unit { get; private set; }
+
+            public bool Equals(GroupSummaryKey? other)
+            {
+                return other != null
+                    && string.Equals(Classification, other.Classification, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Zone, other.Zone, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Layer, other.Layer, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(Unit, other.Unit, StringComparison.OrdinalIgnoreCase);
+            }
+
+            public override bool Equals(object? obj) { return Equals(obj as GroupSummaryKey); }
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(Classification);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Zone);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Layer);
+                    hash = (hash * 397) ^ StringComparer.OrdinalIgnoreCase.GetHashCode(Unit);
+                    return hash;
+                }
+            }
+        }
+
         internal RevisionPackageReviewResult2D(RevisionTakeoffPackage2D package, IReadOnlyList<RevisionPackageReviewRow2D> rows)
         {
             if (package == null) throw new ArgumentNullException("package");
@@ -100,6 +165,24 @@ namespace QS3D.Core.BenchmarkParity
                     SumFinite(x.Where(r => r.EstimateEligible).Select(r => r.CurrentQuantity))))
                 .ToList();
             QuantitySummaries = new ReadOnlyCollection<RevisionPackageQuantitySummary2D>(summaries);
+
+            var groupSummaries = rows
+                .GroupBy(x => new GroupSummaryKey(x.Classification, x.Zone, x.Layer, x.Unit))
+                .Select(x => new RevisionPackageGroupSummary2D(
+                    x.Key.Classification,
+                    x.Key.Zone,
+                    x.Key.Layer,
+                    x.Key.Unit,
+                    SumFinite(x.Select(r => r.PreviousQuantity)),
+                    SumFinite(x.Select(r => r.CurrentQuantity)),
+                    SumFinite(x.Select(r => r.QuantityDelta)),
+                    SumFinite(x.Where(r => r.EstimateEligible).Select(r => r.CurrentQuantity))))
+                .OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Zone, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Layer, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Unit, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            GroupSummaries = new ReadOnlyCollection<RevisionPackageGroupSummary2D>(groupSummaries);
         }
 
         public string PreviousRevision { get; private set; }
@@ -110,6 +193,7 @@ namespace QS3D.Core.BenchmarkParity
         public int UnchangedCount { get; private set; }
         public IReadOnlyList<RevisionPackageReviewRow2D> Rows { get; private set; }
         public IReadOnlyList<RevisionPackageQuantitySummary2D> QuantitySummaries { get; private set; }
+        public IReadOnlyList<RevisionPackageGroupSummary2D> GroupSummaries { get; private set; }
 
         private static double SumFinite(IEnumerable<double> values)
         {
