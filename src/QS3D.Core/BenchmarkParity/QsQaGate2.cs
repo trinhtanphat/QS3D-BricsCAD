@@ -185,6 +185,10 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class QsQaGate2
     {
+        private static readonly HashSet<string> InvalidPsetEvidence = new HashSet<string>(
+            new[] { "0", "false", "missing", "none", "n/a", "na", "null", "absent", "no" },
+            StringComparer.OrdinalIgnoreCase);
+
         public QsQaGate2Decision Evaluate(
             IEnumerable<QsModelElementSnapshot> elements,
             QsQaRuleProfile profile,
@@ -290,12 +294,12 @@ namespace QS3D.Core.BenchmarkParity
                     string value;
                     var key = "IfcPset." + pset;
                     AddIf(result,
-                        !element.Properties.TryGetValue(key, out value) || string.IsNullOrWhiteSpace(value),
+                        !element.Properties.TryGetValue(key, out value) || !HasUsablePsetEvidence(value),
                         profile,
                         "QA2.MISSING_PSET",
                         QsQaSeverity.Error,
                         element.Id,
-                        "Required IFC property set is missing: " + pset + ".");
+                        "Required IFC property set is missing or has unusable evidence: " + pset + ".");
                 }
 
                 foreach (var relationship in profile.RequiredRelationships)
@@ -354,6 +358,12 @@ namespace QS3D.Core.BenchmarkParity
             string guid;
             if (!element.Properties.TryGetValue("IfcGuid", out guid) || string.IsNullOrWhiteSpace(guid)) return null;
             return guid.Trim();
+        }
+
+        private static bool HasUsablePsetEvidence(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return false;
+            return !InvalidPsetEvidence.Contains(value.Trim());
         }
 
         private static bool IsFinitePositive(double value)
