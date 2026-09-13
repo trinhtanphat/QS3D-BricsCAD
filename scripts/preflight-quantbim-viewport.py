@@ -12,8 +12,13 @@ required = [
     "FitSelection(IfcStandaloneScene scene)",
     "IfcViewportBounds",
     "IfcViewportFrame",
+    "StableMidpoint",
+    "StableHalfExtent",
+    "ScaledHypot",
+    "distanceFactor",
     "Viewport selection is empty",
     "Viewport field of view must be finite",
+    "Viewport clipping range is invalid",
     "Geometry is used only for navigation/visualization",
 ]
 for token in required:
@@ -24,8 +29,22 @@ for forbidden in ("Bricscad", "BricsCAD", "Autodesk.AutoCAD", "Teigha", "HostApp
     if forbidden in text:
         raise SystemExit(f"QuantBIM viewport preflight: host-specific dependency found: {forbidden}")
 
-for token in ("[ModuleInitializer]", "FitAll(scene)", "FitSelection(scene)", "degenerate radius floor", "invalid fov"):
+for token in (
+    "[ModuleInitializer]",
+    "FitAll(scene)",
+    "FitSelection(scene)",
+    "degenerate radius floor",
+    "same-sign extreme midpoint",
+    "opposite-sign extreme radius",
+    "scaled hypot radius",
+    "invalid fov",
+):
     if token not in smoke_text:
         raise SystemExit(f"QuantBIM viewport preflight: smoke coverage missing token: {token}")
+
+# Do not regress to the two arithmetic forms that caused finite-coordinate overflow.
+for forbidden in ("(MinX + MaxX) / 2.0", "Math.Sqrt((halfX * halfX)"):
+    if forbidden in text:
+        raise SystemExit(f"QuantBIM viewport preflight: overflow-prone arithmetic restored: {forbidden}")
 
 print("QuantBIM standalone viewport preflight passed.")
