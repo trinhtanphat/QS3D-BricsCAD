@@ -6,8 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src/QS3D.BricsCAD.V25/Reporting/QuantityGeometryExplanationService.cs"
 RUNBOOK = ROOT / "docs/FEATURE-RUNBOOKS/v25-quantity-geometry-deduction-aggregation-precision.md"
 
-if not SOURCE.is_file():
-    raise SystemExit("native quantity geometry precision source is missing")
+for path in (SOURCE, RUNBOOK):
+    if not path.is_file():
+        raise SystemExit("native quantity geometry precision file is missing: " + str(path.relative_to(ROOT)))
 
 source = SOURCE.read_text(encoding="utf-8")
 
@@ -27,7 +28,10 @@ required_source = (
     "individualVolumeAccumulators",
     "individualAreaAccumulators",
     "residualAreaAccumulators",
-    "coverageAccumulator.Add(areaCad",
+    "var contributions = new List<KeyValuePair<int, double>>();",
+    "contributions.Add(new KeyValuePair<int, double>(seedIndex, areaCad));",
+    "foreach (var contribution in contributions)",
+    "coverageAccumulator.Add(contribution.Value",
     "FinalizeAccumulators(individualVolumeAccumulators",
     "FinalizeNestedAccumulators(individualAreaAccumulators",
     "SumFinite(individualVolumeCad.Values",
@@ -42,6 +46,7 @@ for stale in (
     "individualVolumeCad.Values.Sum()",
     "residualAreasCad[best] += areaCad",
     "totalCad += areaCad",
+    "coverageAccumulator.Add(areaCad",
     "? current : 0d) + value",
 ):
     if stale in source:
