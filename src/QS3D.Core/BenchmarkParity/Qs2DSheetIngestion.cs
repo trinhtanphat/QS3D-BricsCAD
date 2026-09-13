@@ -54,8 +54,16 @@ namespace QS3D.Core.BenchmarkParity
             RasterSheetFormat format;
             int width;
             int height;
-            if (TryPng(payload, out width, out height)) format = RasterSheetFormat.Png;
-            else if (TryJpeg(payload, out width, out height)) format = RasterSheetFormat.Jpeg;
+            if (TryPng(payload, out width, out height))
+            {
+                ValidatePngTerminator(payload);
+                format = RasterSheetFormat.Png;
+            }
+            else if (TryJpeg(payload, out width, out height))
+            {
+                ValidateJpegTerminator(payload);
+                format = RasterSheetFormat.Jpeg;
+            }
             else throw new InvalidOperationException("Raster payload must be a supported PNG or JPEG image.");
 
             var sheet = new DrawingSheet2D(id, name, DrawingSheetSourceKind.RasterImage, sourceReference, revision, calibration);
@@ -154,6 +162,16 @@ namespace QS3D.Core.BenchmarkParity
             return true;
         }
 
+        private static void ValidatePngTerminator(byte[] payload)
+        {
+            const int chunkLength = 12;
+            if (payload.Length < chunkLength) throw new InvalidOperationException("PNG payload is truncated or missing the terminal IEND chunk.");
+            var offset = payload.Length - chunkLength;
+            if (payload[offset] != 0 || payload[offset + 1] != 0 || payload[offset + 2] != 0 || payload[offset + 3] != 0 ||
+                payload[offset + 4] != (byte)'I' || payload[offset + 5] != (byte)'E' || payload[offset + 6] != (byte)'N' || payload[offset + 7] != (byte)'D')
+                throw new InvalidOperationException("PNG payload is truncated or missing the terminal IEND chunk.");
+        }
+
         private static bool TryJpeg(byte[] payload, out int width, out int height)
         {
             width = 0;
@@ -181,6 +199,12 @@ namespace QS3D.Core.BenchmarkParity
                 offset += length;
             }
             throw new InvalidOperationException("JPEG payload has no supported frame dimensions.");
+        }
+
+        private static void ValidateJpegTerminator(byte[] payload)
+        {
+            if (payload.Length < 2 || payload[payload.Length - 2] != 0xFF || payload[payload.Length - 1] != 0xD9)
+                throw new InvalidOperationException("JPEG payload is truncated or missing the terminal EOI marker.");
         }
 
         private static bool IsStartOfFrame(byte marker)
