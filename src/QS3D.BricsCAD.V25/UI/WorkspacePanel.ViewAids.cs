@@ -207,79 +207,111 @@ namespace QS3D.BricsCAD.V25.UI
         {
             if (_syncingViewportAids) return;
 
+            var previousRestoreColor = restoreColor;
+            var nextRestoreColor = previousRestoreColor;
+            var nextColor = string.Empty;
+            bool mutated;
             try
             {
-                var current = ReadSystemVariableString("BKGCOLOR");
-                string next;
-                if (BackgroundColorsEqual(current, preset))
+                mutated = MutateDocumentScopedSystemVariable("BKGCOLOR", currentValue =>
                 {
-                    next = string.IsNullOrWhiteSpace(restoreColor)
-                        ? DefaultDarkBackgroundColor
-                        : restoreColor!;
-                    restoreColor = null;
-                }
-                else
-                {
-                    restoreColor = current;
-                    next = preset;
-                }
-
-                BcadApplication.SetSystemVariable("BKGCOLOR", next);
-                RefreshViewportAidState();
-                SetStatus(label + (BackgroundColorsEqual(next, preset) ? " đã bật." : " đã khôi phục."));
+                    var current = Convert.ToString(currentValue, CultureInfo.InvariantCulture) ?? string.Empty;
+                    if (BackgroundColorsEqual(current, preset))
+                    {
+                        nextColor = string.IsNullOrWhiteSpace(previousRestoreColor)
+                            ? DefaultDarkBackgroundColor
+                            : previousRestoreColor!;
+                        nextRestoreColor = null;
+                    }
+                    else
+                    {
+                        nextRestoreColor = current;
+                        nextColor = preset;
+                    }
+                    return nextColor;
+                });
             }
             catch (Exception ex)
             {
-                RefreshViewportAidState();
+                RefreshViewportAidStateBestEffort();
                 SetStatus("Không thể đổi BKGCOLOR: " + ex.Message);
+                return;
             }
+
+            RefreshViewportAidStateBestEffort();
+            if (!mutated) return;
+
+            restoreColor = nextRestoreColor;
+            SetStatus(label + (BackgroundColorsEqual(nextColor, preset) ? " đã bật." : " đã khôi phục."));
         }
 
         private void OnOrthoModeButtonClick(object sender, RoutedEventArgs e)
         {
             if (_syncingViewportAids) return;
+
+            var enabled = false;
+            bool mutated;
             try
             {
-                var enabled = ReadSystemVariableInt("ORTHOMODE") == 0;
-                BcadApplication.SetSystemVariable("ORTHOMODE", (short)(enabled ? 1 : 0));
-                RefreshViewportAidState();
-                SetStatus(enabled ? "Vuông góc (ORTHO) đã bật." : "Vuông góc (ORTHO) đã tắt.");
+                mutated = MutateDocumentScopedSystemVariable("ORTHOMODE", currentValue =>
+                {
+                    enabled = Convert.ToInt32(currentValue, CultureInfo.InvariantCulture) == 0;
+                    return (short)(enabled ? 1 : 0);
+                });
             }
             catch (Exception ex)
             {
-                RefreshViewportAidState();
+                RefreshViewportAidStateBestEffort();
                 SetStatus("Không thể đổi ORTHOMODE: " + ex.Message);
+                return;
             }
+
+            RefreshViewportAidStateBestEffort();
+            if (!mutated) return;
+            SetStatus(enabled ? "Vuông góc (ORTHO) đã bật." : "Vuông góc (ORTHO) đã tắt.");
         }
 
         private void OnObjectSnapButtonClick(object sender, RoutedEventArgs e)
         {
             if (_syncingViewportAids) return;
+
+            var enable = false;
+            var missingConfiguration = false;
+            bool mutated;
             try
             {
-                var current = ReadSystemVariableInt("OSMODE");
-                var configuredModes = current & ObjectSnapModeMask;
-                var currentlyEnabled = configuredModes != 0 && (current & ObjectSnapSuppressedBit) == 0;
-                var enable = !currentlyEnabled;
-                if (enable && configuredModes == 0)
+                mutated = MutateDocumentScopedSystemVariable("OSMODE", currentValue =>
                 {
-                    RefreshViewportAidState();
-                    SetStatus("Bắt điểm chưa có kiểu snap nào được cấu hình. Mở menu cạnh Bắt điểm để chọn kiểu snap.");
-                    return;
-                }
+                    var current = Convert.ToInt32(currentValue, CultureInfo.InvariantCulture);
+                    var configuredModes = current & ObjectSnapModeMask;
+                    var currentlyEnabled = configuredModes != 0 && (current & ObjectSnapSuppressedBit) == 0;
+                    enable = !currentlyEnabled;
+                    missingConfiguration = enable && configuredModes == 0;
+                    if (missingConfiguration)
+                        return currentValue;
 
-                var next = enable
-                    ? configuredModes
-                    : configuredModes | ObjectSnapSuppressedBit;
-                BcadApplication.SetSystemVariable("OSMODE", checked((short)next));
-                RefreshViewportAidState();
-                SetStatus(enable ? "Bắt điểm (Entity Snap) đã bật." : "Bắt điểm (Entity Snap) đã tắt; cấu hình snap được giữ nguyên.");
+                    var next = enable
+                        ? configuredModes
+                        : configuredModes | ObjectSnapSuppressedBit;
+                    return checked((short)next);
+                });
             }
             catch (Exception ex)
             {
-                RefreshViewportAidState();
+                RefreshViewportAidStateBestEffort();
                 SetStatus("Không thể đổi OSMODE: " + ex.Message);
+                return;
             }
+
+            RefreshViewportAidStateBestEffort();
+            if (!mutated) return;
+            if (missingConfiguration)
+            {
+                SetStatus("Bắt điểm chưa có kiểu snap nào được cấu hình. Mở menu cạnh Bắt điểm để chọn kiểu snap.");
+                return;
+            }
+
+            SetStatus(enable ? "Bắt điểm (Entity Snap) đã bật." : "Bắt điểm (Entity Snap) đã tắt; cấu hình snap được giữ nguyên.");
         }
 
         private void OnObjectSnapMenuButtonClick(object sender, RoutedEventArgs e)
@@ -300,25 +332,30 @@ namespace QS3D.BricsCAD.V25.UI
             if (_syncingViewportAids || !(sender is MenuItem item) || !(item.Tag is int bit))
                 return;
 
+            bool mutated;
             try
             {
-                var current = ReadSystemVariableInt("OSMODE");
-                var suppression = current & ObjectSnapSuppressedBit;
-                var configuredModes = current & ObjectSnapModeMask;
-                configuredModes = item.IsChecked
-                    ? configuredModes | bit
-                    : configuredModes & ~bit;
-
-                var next = suppression | configuredModes;
-                BcadApplication.SetSystemVariable("OSMODE", checked((short)next));
-                RefreshViewportAidState();
-                SetStatus((item.Header as string ?? "Bắt điểm") + (item.IsChecked ? " đã bật." : " đã tắt."));
+                mutated = MutateDocumentScopedSystemVariable("OSMODE", currentValue =>
+                {
+                    var current = Convert.ToInt32(currentValue, CultureInfo.InvariantCulture);
+                    var suppression = current & ObjectSnapSuppressedBit;
+                    var configuredModes = current & ObjectSnapModeMask;
+                    configuredModes = item.IsChecked
+                        ? configuredModes | bit
+                        : configuredModes & ~bit;
+                    return checked((short)(suppression | configuredModes));
+                });
             }
             catch (Exception ex)
             {
-                RefreshViewportAidState();
+                RefreshViewportAidStateBestEffort();
                 SetStatus("Không thể đổi kiểu OSMODE: " + ex.Message);
+                return;
             }
+
+            RefreshViewportAidStateBestEffort();
+            if (!mutated) return;
+            SetStatus((item.Header as string ?? "Bắt điểm") + (item.IsChecked ? " đã bật." : " đã tắt."));
         }
 
         private void RefreshViewportAidState()
@@ -332,9 +369,23 @@ namespace QS3D.BricsCAD.V25.UI
             _syncingViewportAids = true;
             try
             {
+                var document = BcadApplication.DocumentManager.MdiActiveDocument;
+                if (document == null)
+                {
+                    ClearViewportAidState();
+                    return;
+                }
+
+                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
+                    return;
+
                 var background = ReadSystemVariableString("BKGCOLOR");
                 var orthoMode = ReadSystemVariableInt("ORTHOMODE");
                 var osMode = ReadSystemVariableInt("OSMODE");
+                if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
+                    return;
+
                 var configuredModes = osMode & ObjectSnapModeMask;
                 var snapsSuppressed = (osMode & ObjectSnapSuppressedBit) != 0;
 
@@ -350,11 +401,7 @@ namespace QS3D.BricsCAD.V25.UI
             }
             catch (Exception ex)
             {
-                SetViewportAidButtonState(_lightBackgroundButton, false);
-                SetViewportAidButtonState(_contrastBackgroundButton, false);
-                SetViewportAidButtonState(_orthoModeButton, false);
-                SetViewportAidButtonState(_objectSnapButton, false);
-                SetObjectSnapMenuState(0);
+                ClearViewportAidState();
                 SetStatus("Không đọc được trạng thái Viewport Aid: " + ex.Message);
             }
             finally
@@ -363,11 +410,38 @@ namespace QS3D.BricsCAD.V25.UI
             }
         }
 
+        private void RefreshViewportAidStateBestEffort()
+        {
+            try
+            {
+                RefreshViewportAidState();
+            }
+            catch
+            {
+                // A native mutation may already be committed. Display refresh is best-effort only.
+            }
+        }
+
         private void RefreshObjectSnapMenuState()
         {
             try
             {
-                RefreshObjectSnapMenuState(ReadSystemVariableInt("OSMODE"));
+                var document = BcadApplication.DocumentManager.MdiActiveDocument;
+                if (document == null)
+                {
+                    SetObjectSnapMenuState(0);
+                    return;
+                }
+
+                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
+                    return;
+
+                var osMode = ReadSystemVariableInt("OSMODE");
+                if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity))
+                    return;
+
+                RefreshObjectSnapMenuState(osMode);
             }
             catch (Exception ex)
             {
@@ -379,6 +453,19 @@ namespace QS3D.BricsCAD.V25.UI
         private void RefreshObjectSnapMenuState(int osMode)
         {
             SetObjectSnapMenuState(osMode & ObjectSnapModeMask);
+        }
+
+        private void ClearViewportAidState()
+        {
+            if (_lightBackgroundButton != null)
+                SetViewportAidButtonState(_lightBackgroundButton, false);
+            if (_contrastBackgroundButton != null)
+                SetViewportAidButtonState(_contrastBackgroundButton, false);
+            if (_orthoModeButton != null)
+                SetViewportAidButtonState(_orthoModeButton, false);
+            if (_objectSnapButton != null)
+                SetViewportAidButtonState(_objectSnapButton, false);
+            SetObjectSnapMenuState(0);
         }
 
         private void SetObjectSnapMenuState(int configuredModes)
@@ -412,6 +499,24 @@ namespace QS3D.BricsCAD.V25.UI
         private static string NormalizeBackgroundColor(string value)
         {
             return (value ?? string.Empty).Replace(" ", string.Empty).Trim();
+        }
+
+        private static bool MutateDocumentScopedSystemVariable(string name, Func<object?, object?> nextValue)
+        {
+            var document = BcadApplication.DocumentManager.MdiActiveDocument;
+            if (document == null) return false;
+
+            var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return false;
+
+            var current = BcadApplication.GetSystemVariable(name);
+            var next = nextValue(current);
+
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return false;
+            if (Equals(current, next)) return true;
+
+            BcadApplication.SetSystemVariable(name, next);
+            return true;
         }
 
         private static int ReadSystemVariableInt(string name)
