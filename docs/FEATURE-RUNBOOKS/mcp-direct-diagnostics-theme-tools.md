@@ -30,6 +30,8 @@ The underlying `McpDiagnosticHub` continues to redact bearer/token/secret/passwo
 
 `theme_set` does not style only the MCP popup. It calls `Qs3dThemeCoordinator`, which owns the persistent theme mode, changes BricsCAD `COLORTHEME`, recolors canonical QS3D WPF resources and loaded/future QS3D surfaces, and follows Windows app theme changes while configured as `system`. The result-state read is marshalled back onto BricsCAD application context before reading `COLORTHEME`.
 
+For MCP `theme_set`, native `COLORTHEME` is now terminally owned by the request: application-context work moves through queued/running/cancel-before-start/terminal states. A timeout may cancel only before native execution starts; once running, ownership is retained until terminal completion. Native failure is propagated instead of reduced to warning-only success, and `applied:true` is published only after `COLORTHEME` is re-read and matches the requested effective host theme. No automatic replay or second writer is introduced. WPF dispatcher follow-up is presentation work and is not treated as proof of native mutation success.
+
 ## Security invariants
 
 - No arbitrary file reader.

@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HUB = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpDiagnosticHub.cs"
 RUNTIME = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpDirectDiagnosticsThemeRuntime.cs"
 REGISTRY = ROOT / "src" / "QS3D.BricsCAD.V25" / "McpDesktopAutomationRuntime.cs"
+COORDINATOR = ROOT / "src" / "QS3D.BricsCAD.V25" / "Qs3dThemeCoordinator.cs"
 
 
 def fail(message: str) -> None:
@@ -24,6 +25,7 @@ def between(text: str, start: str, end: str) -> str:
 hub = HUB.read_text(encoding="utf-8")
 runtime = RUNTIME.read_text(encoding="utf-8")
 registry = REGISTRY.read_text(encoding="utf-8")
+coordinator = COORDINATOR.read_text(encoding="utf-8")
 theme_set_block = between(runtime, "private static string SetTheme", "private static string ThemeMutationAckJson")
 theme_ack_block = between(runtime, "private static string ThemeMutationAckJson", "private static int Integer")
 
@@ -52,7 +54,13 @@ requirements = {
     "CAD-context theme read": (runtime, "return McpDiagnosticHub.InvokeInCadContext(ThemeStateJsonInCadContext);"),
     "CAD-context dispatcher": (hub, "Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadRead, item);"),
     "cancel-before-start dispatcher": (hub, "CadReadCancelledBeforeStart"),
-    "theme owner": (runtime, "Qs3dThemeCoordinator.SetMode(mode, \"mcp-theme-set\")"),
+    "theme owner": (runtime, "Qs3dThemeCoordinator.SetModeTerminal(mode, \"mcp-theme-set\", ensureMutationRunning)"),
+    "queued theme mutation": (coordinator, "ThemeMutationCadContextQueued"),
+    "running theme mutation": (coordinator, "ThemeMutationCadContextRunning"),
+    "cancel-before-start theme mutation": (coordinator, "ThemeMutationCadContextCancelledBeforeStart"),
+    "terminal theme mutation": (coordinator, "ThemeMutationCadContextTerminal"),
+    "terminal callback": (coordinator, "ApplyBricsCadThemeTerminalInContext"),
+    "terminal readback": (coordinator, "AppliedColorTheme"),
     "host theme state": (runtime, 'Application.GetSystemVariable("COLORTHEME")'),
     "mutation callback": (runtime, "ensureMutationRunning();"),
     "direct descriptors": (registry, "descriptors.AddRange(McpDirectDiagnosticsThemeRuntime.ToolDescriptors());"),
@@ -62,10 +70,10 @@ requirements = {
     "current audit cursor scan": (hub, "ReadLatestSequence(path)"),
     "rotated audit cursor scan": (hub, 'ReadLatestSequence(path + ".1")'),
     "shared sequence parser": (hub, "SequenceRegex.Match(line)"),
-    "theme mutation acknowledgement": (theme_set_block, "return ThemeMutationAckJson(mode);"),
+    "theme mutation acknowledgement": (theme_set_block, "return ThemeMutationAckJson(mode, colorTheme);"),
     "ack configured mode": (theme_ack_block, "Qs3dThemeCoordinator.CurrentMode"),
     "ack effective mode": (theme_ack_block, "Qs3dThemeCoordinator.EffectiveDark"),
-    "explicit verification tool": (theme_ack_block, '\\"verification\\":\\"theme_get\\"'),
+    "ack verified host theme": (theme_ack_block, '\\"bricscadColorTheme\\":'),
 }
 for label, (source, token) in requirements.items():
     if token not in source:
@@ -76,6 +84,16 @@ if "ThemeStateJson()" in theme_set_block or "InvokeInCadContext" in theme_set_bl
 
 if 'Application.GetSystemVariable("COLORTHEME")' in theme_ack_block:
     fail("theme mutation acknowledgement must not read COLORTHEME after SetMode")
+
+terminal_callback = between(coordinator, "private static void ApplyBricsCadThemeTerminalInContext", "private static void ApplyCurrentTheme")
+if "item.Error = ex;" not in terminal_callback or "item.Done.Set();" not in terminal_callback:
+    fail("terminal theme callback must publish error and completion to the owner")
+cas_index = terminal_callback.find("Interlocked.CompareExchange")
+try_index = terminal_callback.find("try")
+if cas_index < 0 or (try_index >= 0 and try_index < cas_index):
+    fail("cancel-before-start CAS must occur before the callback try/finally so a cancelled late callback cannot signal a disposed completion event")
+if "warning" in terminal_callback.lower():
+    fail("terminal theme callback must not reduce native failure to warning-only success")
 
 if '"theme_set"' not in registry.split("private static readonly HashSet<string> MutationTools", 1)[1].split("};", 1)[0]:
     fail("theme_set must stay inside MutationTools so McpCadAgentRuntime enforces confirmMutation/emergency-stop")

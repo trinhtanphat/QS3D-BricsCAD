@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -28,12 +29,26 @@ namespace QS3D.BricsCAD.V25
     {
         private const int MaxTrackedElements = 2048;
         private const int MaxVisualNodesPerApply = 12000;
+        private const int ThemeMutationCadContextDispatchTimeoutMilliseconds = 8000;
+        private const int ThemeMutationCadContextQueued = 0;
+        private const int ThemeMutationCadContextRunning = 1;
+        private const int ThemeMutationCadContextCancelledBeforeStart = 2;
+        private const int ThemeMutationCadContextTerminal = 3;
         private const string ThemeFileName = "theme-mode.txt";
         private static readonly object Gate = new object();
         private static readonly List<WeakReference> TrackedElements = new List<WeakReference>();
         private static bool _started;
         private static bool _classHandlersRegistered;
         private static Qs3dThemeMode _mode = Qs3dThemeMode.System;
+
+        private sealed class ThemeMutationCadContextWorkItem
+        {
+            internal bool Dark;
+            internal int AppliedColorTheme;
+            internal Exception? Error;
+            internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+            internal int State = ThemeMutationCadContextQueued;
+        }
 
         internal static string ThemeFilePath
         {
@@ -100,11 +115,61 @@ namespace QS3D.BricsCAD.V25
                    + "; bricscad.COLORTHEME=" + colorTheme;
         }
 
+        internal static int SetModeTerminal(Qs3dThemeMode mode, string source, Action ensureMutationRunning)
+        {
+            if (ensureMutationRunning == null) throw new ArgumentNullException(nameof(ensureMutationRunning));
+            ensureMutationRunning();
+            var dark = ResolveEffectiveDark(mode);
+            var appliedColorTheme = ApplyBricsCadThemeTerminal(dark);
+            ensureMutationRunning();
+            lock (Gate) _mode = mode;
+            PersistMode(mode);
+            ApplyTrackedWpfTheme(dark);
+            McpDiagnosticHub.Record("theme", "info", "theme-applied", "mode=" + ModeText(mode) + "; effective=" + (dark ? "dark" : "light") + "; reason=" + (source ?? string.Empty));
+            return appliedColorTheme;
+        }
+
         internal static void SetMode(Qs3dThemeMode mode, string source)
         {
             lock (Gate) _mode = mode;
             PersistMode(mode);
             ApplyCurrentTheme(source ?? "theme-change");
+        }
+
+        private static int ApplyBricsCadThemeTerminal(bool dark)
+        {
+            var item = new ThemeMutationCadContextWorkItem { Dark = dark };
+            try { Application.DocumentManager.ExecuteInApplicationContext(ApplyBricsCadThemeTerminalInContext, item); }
+            catch (Exception ex) { item.Done.Dispose(); throw new InvalidOperationException("Could not queue BricsCAD theme mutation application-context work.", ex); }
+            if (!item.Done.Wait(ThemeMutationCadContextDispatchTimeoutMilliseconds))
+            {
+                var cancelled = Interlocked.CompareExchange(ref item.State, ThemeMutationCadContextCancelledBeforeStart, ThemeMutationCadContextQueued) == ThemeMutationCadContextQueued;
+                if (cancelled) { item.Done.Dispose(); throw new TimeoutException("Timed out waiting for BricsCAD application context; queued theme mutation was cancelled before start."); }
+                item.Done.Wait();
+            }
+            try
+            {
+                if (item.Error != null) throw new InvalidOperationException("BricsCAD theme mutation application-context work failed.", item.Error);
+                return item.AppliedColorTheme;
+            }
+            finally { item.Done.Dispose(); }
+        }
+
+        private static void ApplyBricsCadThemeTerminalInContext(object state)
+        {
+            var item = (ThemeMutationCadContextWorkItem)state;
+            if (Interlocked.CompareExchange(ref item.State, ThemeMutationCadContextRunning, ThemeMutationCadContextQueued) != ThemeMutationCadContextQueued) return;
+            try
+            {
+                var desired = item.Dark ? 0 : 1;
+                var current = Convert.ToInt32(Application.GetSystemVariable("COLORTHEME"), CultureInfo.InvariantCulture);
+                if (current != desired) Application.SetSystemVariable("COLORTHEME", (short)desired);
+                var applied = Convert.ToInt32(Application.GetSystemVariable("COLORTHEME"), CultureInfo.InvariantCulture);
+                if (applied != desired) throw new InvalidOperationException("BricsCAD COLORTHEME did not reach the requested terminal state.");
+                item.AppliedColorTheme = applied;
+            }
+            catch (Exception ex) { item.Error = ex; }
+            finally { Interlocked.Exchange(ref item.State, ThemeMutationCadContextTerminal); item.Done.Set(); }
         }
 
         private static void ApplyCurrentTheme(string reason)
