@@ -73,10 +73,27 @@ require(
     "[Uri]::UriSchemeHttps",
     "packageUri admission does not require HTTPS",
 )
+require(
+    source,
+    "[string]::Equals($metadataVersionRaw, $updateVersionRaw, [StringComparison]::Ordinal)",
+    "update manifest assembly version is not bound to PACKAGE-METADATA version",
+)
+require_order(
+    source,
+    "$metadataExpectedPropertyCounts = @{",
+    "try { return $text | ConvertFrom-Json -ErrorAction Stop }",
+    "PACKAGE-METADATA identity cardinality must be checked before parsing",
+)
+metadata_block = source.split("$metadataExpectedPropertyCounts = @{", 1)[1].split("}", 1)[0]
+if "version = 1" not in metadata_block:
+    raise SystemExit("ERROR: PACKAGE-METADATA version must appear exactly once before parser admission")
 
 # Same-generation invariant: after Open-HeldGeneration, the manifest must be consumed
 # from $updateHeld. Reopening UpdateManifestPath would reintroduce a pathname TOCTOU.
-post_open = source.split("$updateHeld = Open-HeldGeneration", 1)[1]
+parts = source.split("$updateHeld = Open-HeldGeneration", 1)
+if len(parts) != 2:
+    raise SystemExit("ERROR: update manifest held-generation admission is missing")
+post_open = parts[1]
 if "Get-Content -LiteralPath $UpdateManifestPath" in post_open or "[IO.File]::Open($UpdateManifestPath" in post_open:
     raise SystemExit("ERROR: update manifest is reopened by pathname after held-generation admission")
 
