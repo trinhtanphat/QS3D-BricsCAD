@@ -80,6 +80,8 @@ namespace QS3D.BricsCAD.V25
         public void Run()
         {
             var requestedPath = Environment.GetEnvironmentVariable(ResultVariable);
+            var failureStage = "admission";
+            var failureCase = "none";
             try
             {
                 var nonce = (Environment.GetEnvironmentVariable(NonceVariable) ?? string.Empty).Trim();
@@ -101,6 +103,8 @@ namespace QS3D.BricsCAD.V25
                 if (!CadUnitService.TryGetNativeLengthUnit(document, out var nativeUnit))
                     throw new InvalidOperationException("Complete-family probe requires Millimeter or Meter native units.");
 
+                failureStage = "matrix_configure";
+                failureCase = "project_setup";
                 var project = ProjectContextCoordinator.GetOrCreate(document);
                 if (project.Elements.Count != 0 || project.Floors.Count != 0)
                     throw new InvalidOperationException("Complete-family probe requires a fresh project.");
@@ -109,6 +113,7 @@ namespace QS3D.BricsCAD.V25
                 project.Floors.Add(new FloorDefinition("L2", "Level 2", 7d));
                 project.ActiveFloorId = "L0";
                 DrawingUnitResolutionPolicy.BindQuantityUnit(project.Metadata, false, nativeUnit, DrawingUnitResolutionSource.NativeInsunits);
+                failureCase = "source_matrix";
                 var sources = CreateMatrixSources(document);
                 var matrix = new List<MatrixCase>();
                 var index = 0;
@@ -119,16 +124,19 @@ namespace QS3D.BricsCAD.V25
                     var boundedSource = sources[index++];
                     var legacyHeight = LegacyHeight(category);
 
+                    failureCase = category + "/LegacySourceRelative";
                     var legacy = AddElement(project, category, "legacy-" + category, legacySource);
                     ConfigureDimensions(legacy, category, legacyHeight);
                     matrix.Add(new MatrixCase(category, "LegacySourceRelative", legacySource, legacy, legacySource.SourceZM, legacySource.SourceZM + legacyHeight));
 
+                    failureCase = category + "/BottomLevel";
                     var bottom = AddElement(project, category, "bottom-" + category, bottomSource);
                     ConfigureDimensions(bottom, category, legacyHeight);
                     Require(ProjectFloorService.AssignBottomLevel(project, "L1", new[] { bottom }) == 1, category + " bottom-only assignment");
                     Set(bottom, ProjectFloorService.BottomLevelOffsetKey, 0.25d);
                     matrix.Add(new MatrixCase(category, "BottomLevel", bottomSource, bottom, 3.25d, 3.25d + legacyHeight));
 
+                    failureCase = category + "/BottomTopLevels";
                     var bounded = AddElement(project, category, "bounded-" + category, boundedSource);
                     ConfigureDimensions(bounded, category, legacyHeight);
                     Require(ProjectFloorService.AssignBottomLevel(project, "L1", new[] { bounded }) == 1, category + " bounded Bottom assignment");
@@ -140,20 +148,34 @@ namespace QS3D.BricsCAD.V25
 
                 foreach (var item in matrix)
                 {
+                    failureCase = item.Category + "/" + item.Mode;
+                    failureStage = "family_build";
                     Select(document, item.Source.ObjectId);
                     Require(Build(document, project, item.Category) == 1, item.Category + "/" + item.Mode + " native build");
+                    failureStage = "family_range";
                     var range = ReadZRange(document, Handles(item.Element, "GeneratedSolidHandle"), item.Category + "/" + item.Mode);
                     RequireNear(item.ExpectedBottomM, range.MinimumM, item.Category + "/" + item.Mode + " bottom");
                     RequireNear(item.ExpectedTopM, range.MaximumM, item.Category + "/" + item.Mode + " top");
+                    failureStage = "family_snapshot";
                     RequireSnapshot(item.Element, item.ExpectedBottomM, item.ExpectedTopM, item.Mode);
                 }
+                failureStage = "hosted_openings";
+                failureCase = "straight_openings";
                 var hostedOpeningCount = VerifyStraightHostedOpenings(document, project);
+                failureStage = "fail_closed";
+                failureCase = "TopOnly";
                 var topOnlyFailClosed = VerifyFailure(document, FailureKind.TopOnly, 220d);
+                failureCase = "MissingLevel";
                 var missingLevelFailClosed = VerifyFailure(document, FailureKind.MissingLevel, 224d);
+                failureCase = "AmbiguousLevel";
                 var ambiguousLevelFailClosed = VerifyFailure(document, FailureKind.AmbiguousLevel, 228d);
+                failureCase = "NonFiniteOffset";
                 var nonFiniteOffsetFailClosed = VerifyFailure(document, FailureKind.NonFiniteOffset, 232d);
+                failureCase = "InvalidVerticalRange";
                 var invalidVerticalRangeFailClosed = VerifyFailure(document, FailureKind.InvalidVerticalRange, 236d);
 
+                failureStage = "level_health";
+                failureCase = "aggregate";
                 var healthIssueCount = new LevelReferenceHealthService().Inspect(project)
                     .Count(issue => issue.Severity != HealthSeverity.Info);
                 Require(healthIssueCount == 0, "complete-family Level health");
@@ -189,7 +211,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception error)
             {
-                TryWriteFailure(requestedPath, error);
+                TryWriteFailure(requestedPath, error, failureStage, failureCase);
                 Application.DocumentManager.MdiActiveDocument?.Editor.WriteMessage("\nQS3D LOCAL-003 complete-family probe FAIL.");
             }
         }
@@ -533,7 +555,7 @@ namespace QS3D.BricsCAD.V25
             return fullPath;
         }
 
-        private static void TryWriteFailure(string? requestedPath, Exception error)
+        private static void TryWriteFailure(string? requestedPath, Exception error, string failureStage, string failureCase)
         {
             try
             {
@@ -547,6 +569,8 @@ namespace QS3D.BricsCAD.V25
                     "qualification_boundary=LOCAL_003_COMPLETE_FAMILY_HOSTS_ONLY",
                     "production_local003_qualified=false",
                     "error_code=LOCAL_003_COMPLETE_FAMILY_RUNTIME_FAILED",
+                    "failure_stage=" + OneLine(failureStage),
+                    "failure_case=" + OneLine(failureCase),
                     "exception_type=" + OneLine(error.GetType().FullName ?? error.GetType().Name),
                     "exception_target=" + OneLine(error.TargetSite?.Name ?? string.Empty),
                     "exception_hresult=0x" + error.HResult.ToString("X8", CultureInfo.InvariantCulture)
