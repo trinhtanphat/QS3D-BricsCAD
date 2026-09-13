@@ -173,8 +173,8 @@ namespace QS3D.Core.SmokeTests
                 .ToArray();
 
             QuantityAdjustment max = positives[0];
-            QuantityAdjustment plusOne = null;
-            QuantityAdjustment minusOne = null;
+            QuantityAdjustment? plusOne = null;
+            QuantityAdjustment? minusOne = null;
             foreach (var positive in positives.Skip(1))
             {
                 foreach (var negative in negatives)
@@ -192,6 +192,8 @@ namespace QS3D.Core.SmokeTests
                 if (plusOne != null) break;
             }
             True(plusOne != null && minusOne != null, "deterministic overflow-order fixture");
+            var selectedPlusOne = plusOne ?? throw new Exception("Missing deterministic positive adjustment fixture.");
+            var selectedMinusOne = minusOne ?? throw new Exception("Missing deterministic negative adjustment fixture.");
 
             var graph = QuantityExplanation.Create(
                 "S-OVERFLOW",
@@ -200,7 +202,7 @@ namespace QS3D.Core.SmokeTests
                 "unit",
                 0m,
                 decimal.MaxValue,
-                adjustments: new[] { max, plusOne, minusOne });
+                adjustments: new[] { max, selectedPlusOne, selectedMinusOne });
             Equal(decimal.MaxValue, graph.NetValue, "mixed-sign adjustment exact total");
         }
         private static void GeometryEvidenceAdapterParity()
