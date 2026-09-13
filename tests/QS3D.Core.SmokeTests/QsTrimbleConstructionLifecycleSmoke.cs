@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
@@ -8,6 +9,8 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void Run()
         {
+            RejectsUnapprovedSupplier();
+
             var suppliers = new[]
             {
                 new ConstructionSupplier("S1", "Supplier A", SupplierLifecycleStatus.Approved),
@@ -72,6 +75,26 @@ namespace QS3D.Core.SmokeTests
             if (!failClosed) throw new InvalidOperationException("ERP export must fail closed when a ratio denominator is zero with non-zero activity.");
         }
 
+        private static void RejectsUnapprovedSupplier()
+        {
+            var rejected = false;
+            try
+            {
+                new TrimbleConstructionLifecycleEngine().BuildProjectControls(
+                    new[] { new ConstructionSupplier("S-BLOCKED", "Blocked Supplier", SupplierLifecycleStatus.Suspended) },
+                    new[] { new SubcontractCommitment("SC-BLOCKED", "S-BLOCKED", "PKG-BLOCKED", 10m, 0m) },
+                    Enumerable.Empty<PurchaseOrderDelivery>(),
+                    Enumerable.Empty<FieldProgressRecord>());
+            }
+            catch (InvalidOperationException)
+            {
+                rejected = true;
+            }
+
+            if (!rejected)
+                throw new InvalidOperationException("Trimble lifecycle must reject commitments from non-approved suppliers.");
+        }
+
         private static void Equal<T>(T expected, T actual, string label)
         {
             if (!object.Equals(expected, actual)) throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
@@ -80,6 +103,15 @@ namespace QS3D.Core.SmokeTests
         private static void Near(double expected, double actual, double tolerance, string label)
         {
             if (Math.Abs(expected - actual) > tolerance) throw new InvalidOperationException(label + ": expected " + expected + ", actual " + actual + ".");
+        }
+    }
+
+    internal static class QsTrimbleConstructionLifecycleSmokeRegistration
+    {
+        [ModuleInitializer]
+        internal static void Initialize()
+        {
+            QsTrimbleConstructionLifecycleSmoke.Run();
         }
     }
 }
