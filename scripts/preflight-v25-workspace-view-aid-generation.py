@@ -49,6 +49,29 @@ require(
     "OSMODE Workspace per-mode menu mutation must use the generation-fenced helper",
 )
 
+# The remembered BKGCOLOR restore value is also document-scoped state. It must
+# be bound to the managed/native generation that produced it so another drawing
+# cannot consume a restore color captured from the previous active document.
+require(
+    r"_lightBackgroundRestoreDocument.*?_lightBackgroundRestoreNativeDatabaseIdentity",
+    "light-background restore state must carry document/native-generation ownership",
+)
+require(
+    r"_contrastBackgroundRestoreDocument.*?_contrastBackgroundRestoreNativeDatabaseIdentity",
+    "contrast-background restore state must carry document/native-generation ownership",
+)
+require(
+    r"ToggleViewportBackgroundPreset.*?ReferenceEquals\(.*?restoreDocument.*?currentDocument.*?\).*?restoreNativeDatabaseIdentity",
+    "BKGCOLOR restore state must be admitted only for the same managed/native document generation",
+)
+
+# A committed native write must not be reported as failed because a later WPF
+# display refresh throws or observes a different document generation.
+require(
+    r"RefreshViewportAidStateBestEffort",
+    "post-commit viewport-aid refresh must be best-effort display work",
+)
+
 # Preserve native semantics while hardening affinity.
 require(
     r"ObjectSnapSuppressedBit\s*=\s*16384",
