@@ -635,19 +635,32 @@ namespace QS3D.BricsCAD.V25.UI
             Application.SetSystemVariable("LINEARCONTRAST", (short)(current == 0 ? 10 : 0));
         }
 
+        private static void ToggleDocumentScopedSystemVariable(string name, Func<int, int> nextValue)
+        {
+            var document = Application.DocumentManager.MdiActiveDocument;
+            if (document == null) return;
+
+            var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+
+            var current = ReadRequiredSystemVariableInt(name);
+            var next = nextValue(current);
+
+            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+            Application.SetSystemVariable(name, (short)next);
+        }
+
         private static void ToggleOrtho()
         {
-            var current = ReadRequiredSystemVariableInt("ORTHOMODE");
-            Application.SetSystemVariable("ORTHOMODE", (short)(current == 0 ? 1 : 0));
+            ToggleDocumentScopedSystemVariable("ORTHOMODE", current => current == 0 ? 1 : 0);
         }
 
         private static void ToggleEntitySnap()
         {
-            var current = ReadRequiredSystemVariableInt("OSMODE");
-            var next = (current & ObjectSnapSuppressedBit) == 0
-                ? current | ObjectSnapSuppressedBit
-                : current & ~ObjectSnapSuppressedBit;
-            Application.SetSystemVariable("OSMODE", (short)next);
+            ToggleDocumentScopedSystemVariable("OSMODE", current =>
+                (current & ObjectSnapSuppressedBit) == 0
+                    ? current | ObjectSnapSuppressedBit
+                    : current & ~ObjectSnapSuppressedBit);
         }
 
         private static Button CreateClickSurface(UIElement content, Cursor cursor)
