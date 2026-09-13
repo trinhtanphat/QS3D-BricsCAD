@@ -33,14 +33,20 @@ namespace QS3D.Core.SmokeTests
             var engine = new LiveWorkbookRefreshEngine2();
             var forward = engine.Refresh(new[] { binding }, sources, "R2").Results.Single();
             var reverse = engine.Refresh(new[] { binding }, sources.Reverse(), "R2").Results.Single();
+            var canonical = sources
+                .OrderBy(x => x.Revision, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.Revision, StringComparer.Ordinal)
+                .ThenBy(x => x.EvidenceReference, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.EvidenceReference, StringComparer.Ordinal)
+                .First();
 
             Equal(forward.Freshness, reverse.Freshness, "freshness independent of equivalent source input order");
             Equal(forward.ResolvedRevision, reverse.ResolvedRevision, "resolved revision independent of equivalent source input order");
             Equal(forward.SourceEvidenceReference, reverse.SourceEvidenceReference, "evidence independent of equivalent source input order");
             Equal(forward.Trace.Single(), reverse.Trace.Single(), "trace independent of equivalent source input order");
             Equal(forward.Value, reverse.Value, "value independent of equivalent source input order");
-            Equal("R2", forward.ResolvedRevision, "ordinal revision tie-break");
-            Equal("IFC://MODEL/E1", forward.SourceEvidenceReference, "evidence follows canonical selected snapshot");
+            Equal(canonical.Revision, forward.ResolvedRevision, "revision follows documented canonical tie-break");
+            Equal(canonical.EvidenceReference, forward.SourceEvidenceReference, "evidence follows canonical selected snapshot");
         }
 
         private static void Equal<T>(T expected, T actual, string message)
