@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
 
             var workflow = new CubicostConcreteFormworkWorkflow();
             var forward = workflow.BuildInventory(lines);
-            var reverse = workflow.BuildInventory(lines.Reverse());
+            var reverse = workflow.BuildInventory(lines.AsEnumerable().Reverse());
             var expected = 10000000000000002d;
             Equal(expected, Quantity(forward, "STR.HOSTILE.CONCRETE"), "compensated concrete total");
             Equal(expected, Quantity(forward, "STR.HOSTILE.FORMWORK"), "compensated formwork total");
