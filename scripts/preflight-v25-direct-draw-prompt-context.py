@@ -36,7 +36,7 @@ for command, next_marker, geometry_marker, final_prompt_variable in contracts:
     final_prompt = body.rfind(final_prompt_variable, geometry, execute)
     snapshot_unit = body.find("CadUnitService.GetLengthUnit(document)", 0, geometry)
     snapshot_ucs = body.find("CurrentUserCoordinateSystem", 0, geometry)
-    final_fence = body.rfind("RequirePromptContextUnchanged(document, promptUnit, promptUcs", final_prompt, execute)
+    final_fence = body.rfind("RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs", final_prompt, execute)
 
     if snapshot_unit < 0 or snapshot_ucs < 0:
         raise SystemExit(f"{command} must snapshot drawing-unit and UCS context before geometry acquisition")
