@@ -13,6 +13,9 @@ SCRIPTS = ROOT / "scripts"
 SELF = Path(__file__).resolve()
 CHILD_TIMEOUT_SECONDS = 180
 AGGREGATE_TIMEOUT_SECONDS = 15 * 60
+AGGREGATE_TIMEOUT_GATE_BASELINE = 1024
+AGGREGATE_TIMEOUT_SECONDS_PER_EXCESS_GATE = 0.5
+MAX_AGGREGATE_TIMEOUT_SECONDS = 25 * 60
 PROCESS_TREE_CLEANUP_TIMEOUT_SECONDS = 10
 OUTPUT_DRAIN_JOIN_TIMEOUT_SECONDS = 10
 INPUT_FEED_JOIN_TIMEOUT_SECONDS = 10
@@ -307,9 +310,31 @@ def build_child_env(source=None):
     return child_env
 
 
+def aggregate_timeout_for_gate_count(gate_count):
+    if gate_count < 0 or gate_count > MAX_FEATURE_GATES:
+        raise ValueError("aggregate feature gate count is outside admitted bounds")
+    excess_gates = max(0, gate_count - AGGREGATE_TIMEOUT_GATE_BASELINE)
+    scaled = float(AGGREGATE_TIMEOUT_SECONDS) + (
+        excess_gates * AGGREGATE_TIMEOUT_SECONDS_PER_EXCESS_GATE
+    )
+    return min(float(MAX_AGGREGATE_TIMEOUT_SECONDS), scaled)
+
+
 def remaining_child_timeout(started_at, now=None):
     current = time.monotonic() if now is None else now
     remaining = AGGREGATE_TIMEOUT_SECONDS - max(0.0, current - started_at)
+    if remaining <= 0:
+        return 0.0
+    return min(float(CHILD_TIMEOUT_SECONDS), remaining)
+
+
+def remaining_child_timeout_for_budget(started_at, aggregate_timeout_seconds, now=None):
+    if float(aggregate_timeout_seconds) == float(AGGREGATE_TIMEOUT_SECONDS):
+        if now is None:
+            return remaining_child_timeout(started_at)
+        return remaining_child_timeout(started_at, now)
+    current = time.monotonic() if now is None else now
+    remaining = float(aggregate_timeout_seconds) - max(0.0, current - started_at)
     if remaining <= 0:
         return 0.0
     return min(float(CHILD_TIMEOUT_SECONDS), remaining)
@@ -563,6 +588,8 @@ def main():
         print("ERROR: no feature preflight gates were discovered.")
         return 1
 
+    aggregate_timeout_seconds = aggregate_timeout_for_gate_count(len(gates))
+
     print("QS3D aggregate feature preflight")
     print("Discovered", len(gates), "feature gate(s):")
     for path in gates:
@@ -572,9 +599,12 @@ def main():
     child_env = build_child_env()
     for path in gates:
         rel = path.relative_to(ROOT)
-        child_timeout = remaining_child_timeout(aggregate_started_at)
+        child_timeout = remaining_child_timeout_for_budget(
+            aggregate_started_at,
+            aggregate_timeout_seconds,
+        )
         if child_timeout <= 0:
-            print("ERROR: aggregate preflight exceeded", AGGREGATE_TIMEOUT_SECONDS, "seconds before launching", rel)
+            print("ERROR: aggregate preflight exceeded", aggregate_timeout_seconds, "seconds before launching", rel)
             failed.append((str(rel), "aggregate-timeout"))
             break
 
@@ -582,7 +612,14 @@ def main():
         try:
             returncode = run_gate(path, child_env, child_timeout)
         except GateTimeoutError as exc:
-            timeout_reason = "aggregate-timeout" if remaining_child_timeout(aggregate_started_at) <= 0 else "timeout"
+            timeout_reason = (
+                "aggregate-timeout"
+                if remaining_child_timeout_for_budget(
+                    aggregate_started_at,
+                    aggregate_timeout_seconds,
+                ) <= 0
+                else "timeout"
+            )
             reason = timeout_reason
             if exc.cleanup_error is not None:
                 reason += "-cleanup-failed"

@@ -1262,22 +1262,34 @@ namespace QS3D.BricsCAD.V25
             public Exception? Error;
             public readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
             public int DispatchState = CadWorkQueued;
-            public int Abandoned;
         }
 
         private static string InvokeCad(Func<string> action)
         {
             if (action == null) throw new ArgumentNullException(nameof(action));
             var item = new CadWorkItem { Action = action };
-            Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
+            try
+            {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteCadWork, item);
+            }
+            catch
+            {
+                item.Done.Dispose();
+                throw;
+            }
+
             if (!item.Done.Wait(CadDispatchTimeoutMilliseconds))
             {
                 var cancellation = Interlocked.CompareExchange(ref item.DispatchState, CadWorkCancelledBeforeStart, CadWorkQueued);
-                Interlocked.Exchange(ref item.Abandoned, 1);
-                try { if (item.Done.IsSet) item.Done.Dispose(); } catch (ObjectDisposedException) { }
                 if (cancellation == CadWorkQueued)
+                {
+                    item.Done.Dispose();
                     throw new TimeoutException("Timed out waiting for the BricsCAD application context; queued work was cancelled before it started.");
-                throw new TimeoutException("Timed out waiting for the BricsCAD application context after CAD work started; completion is uncertain. Do not retry automatically; inspect CAD state before deciding whether another mutation is safe.");
+                }
+
+                // Native work has started. Retain request/writer ownership until the exact callback
+                // reaches terminal completion; returning an uncertain timeout here permits unsafe retry.
+                item.Done.Wait();
             }
             try
             {
@@ -1290,24 +1302,15 @@ namespace QS3D.BricsCAD.V25
         private static void ExecuteCadWork(object data)
         {
             var item = (CadWorkItem)data;
+            if (Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued) != CadWorkQueued)
+                return;
+
             try
             {
-                if (Interlocked.CompareExchange(ref item.DispatchState, CadWorkRunning, CadWorkQueued) != CadWorkQueued)
-                    return;
                 item.Result = item.Action == null ? string.Empty : item.Action();
             }
             catch (Exception ex) { item.Error = ex; }
-            finally
-            {
-                try { item.Done.Set(); }
-                finally
-                {
-                    if (Volatile.Read(ref item.Abandoned) != 0)
-                    {
-                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
-                    }
-                }
-            }
+            finally { item.Done.Set(); }
         }
 
         private static List<Point2d> ParsePoints2d(string value)
