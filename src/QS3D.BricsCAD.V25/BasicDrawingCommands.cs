@@ -146,18 +146,31 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = TryCaptureNativeDatabaseIdentity(document);
             try
             {
                 action(document);
             }
             catch (Exception)
             {
-                Report(document, operation + OperationFailureSuffix);
+                Report(document, nativeDatabaseIdentity, operation + OperationFailureSuffix);
             }
         }
 
         private static BasicDrawingContext CaptureContext(Document document, string operation)
         {
+            IntPtr nativeDatabaseIdentity;
+            try
+            {
+                nativeDatabaseIdentity = document.Database.UnmanagedObject;
+            }
+            catch (Exception)
+            {
+                throw new InvalidOperationException(operation + ": native database không còn khả dụng. Hãy chạy lại lệnh.");
+            }
+            if (nativeDatabaseIdentity == IntPtr.Zero)
+                throw new InvalidOperationException(operation + ": native database không có identity hợp lệ. Hãy chạy lại lệnh.");
+
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
                 throw new InvalidOperationException(operation + ": bản vẽ chưa có QS3D project. Mở Workspace, Add/chọn Family trước khi vẽ.");
 
@@ -179,6 +192,7 @@ namespace QS3D.BricsCAD.V25
             return new BasicDrawingContext(
                 project,
                 hasCachedProject,
+                nativeDatabaseIdentity,
                 projectId,
                 project.ChangeVersion,
                 familyId,
@@ -212,6 +226,8 @@ namespace QS3D.BricsCAD.V25
         {
             if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
                 throw new InvalidOperationException(operation + ": DWG active đã thay đổi trong lúc chọn hình học. Hãy chạy lại lệnh.");
+            if (!IsCurrentDocumentGeneration(document, expected.NativeDatabaseIdentity))
+                throw new InvalidOperationException(operation + ": native database đã reload/thay generation trong lúc chọn hình học. Hãy chạy lại lệnh.");
 
             RequireModelSpace(document);
             if (!document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs))
@@ -267,20 +283,25 @@ namespace QS3D.BricsCAD.V25
             Func<Entity> entityFactory)
         {
             using (document.LockDocument())
-            using (var transaction = document.Database.TransactionManager.StartTransaction())
             {
-                var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
-                var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
-                EnsureRegApp(document.Database, transaction);
+                if (!IsCurrentDocumentGeneration(document, context.NativeDatabaseIdentity))
+                    throw new InvalidOperationException("Native database đã reload/thay generation trước khi commit CAD. Hãy chạy lại lệnh.");
 
-                var entity = entityFactory();
-                entity.SetDatabaseDefaults(document.Database);
-                entity.TransformBy(promptUcs);
-                var id = modelSpace.AppendEntity(entity);
-                transaction.AddNewlyCreatedDBObject(entity, true);
-                MarkContext(entity, context, kind);
-                transaction.Commit();
-                return id;
+                using (var transaction = document.Database.TransactionManager.StartTransaction())
+                {
+                    var blockTable = (BlockTable)transaction.GetObject(document.Database.BlockTableId, OpenMode.ForRead);
+                    var modelSpace = (BlockTableRecord)transaction.GetObject(blockTable[BlockTableRecord.ModelSpace], OpenMode.ForWrite);
+                    EnsureRegApp(document.Database, transaction);
+
+                    var entity = entityFactory();
+                    entity.SetDatabaseDefaults(document.Database);
+                    entity.TransformBy(promptUcs);
+                    var id = modelSpace.AppendEntity(entity);
+                    transaction.AddNewlyCreatedDBObject(entity, true);
+                    MarkContext(entity, context, kind);
+                    transaction.Commit();
+                    return id;
+                }
             }
         }
 
@@ -348,18 +369,28 @@ namespace QS3D.BricsCAD.V25
 
         private static void FinalizeSuccess(Document document, ObjectId id, BasicDrawingContext context, string primitiveLabel)
         {
+            if (!IsCurrentDocumentGeneration(document, context.NativeDatabaseIdentity)) return;
+
             var status = "Đã vẽ " + primitiveLabel + " • Family “" + context.FamilyName + "” • " + context.Category + ".";
             try
             {
-                if (!id.IsNull && id.IsValid) document.Editor.SetImpliedSelection(new[] { id });
+                if (!id.IsNull && id.IsValid)
+                {
+                    if (!IsCurrentDocumentGeneration(document, context.NativeDatabaseIdentity)) return;
+                    document.Editor.SetImpliedSelection(new[] { id });
+                }
+                if (!IsCurrentDocumentGeneration(document, context.NativeDatabaseIdentity)) return;
                 document.Editor.Regen();
             }
             catch (Exception)
             {
-                Report(document, status + " " + UiSyncWarning);
+                if (IsCurrentDocumentGeneration(document, context.NativeDatabaseIdentity))
+                    Report(document, context.NativeDatabaseIdentity, status + " " + UiSyncWarning);
                 return;
             }
-            Report(document, status);
+
+            if (!IsCurrentDocumentGeneration(document, context.NativeDatabaseIdentity)) return;
+            Report(document, context.NativeDatabaseIdentity, status);
         }
 
         private static bool IsActiveDocument(Document document)
@@ -374,17 +405,43 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void TrySetPaletteStatus(Document document, string message)
+        private static IntPtr TryCaptureNativeDatabaseIdentity(Document document)
         {
-            if (!IsActiveDocument(document)) return;
+            try
+            {
+                return document?.Database?.UnmanagedObject ?? IntPtr.Zero;
+            }
+            catch
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        private static bool IsCurrentDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (document == null || nativeDatabaseIdentity == IntPtr.Zero || !IsActiveDocument(document)) return false;
+            try
+            {
+                return document.Database != null && document.Database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void TrySetPaletteStatus(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsCurrentDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { PaletteCoordinator.SetStatus(message); }
             catch { }
         }
 
-        private static void Report(Document document, string message)
+        private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
+            if (!IsCurrentDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { document.Editor.WriteMessage("\nQS3D: " + message); } catch { }
-            TrySetPaletteStatus(document, message);
+            TrySetPaletteStatus(document, nativeDatabaseIdentity, message);
         }
 
         private enum BasicPrimitiveKind
@@ -399,6 +456,7 @@ namespace QS3D.BricsCAD.V25
             public BasicDrawingContext(
                 ProjectState project,
                 bool hasCachedProject,
+                IntPtr nativeDatabaseIdentity,
                 string projectId,
                 long changeVersion,
                 string familyId,
@@ -409,6 +467,7 @@ namespace QS3D.BricsCAD.V25
             {
                 Project = project ?? throw new ArgumentNullException(nameof(project));
                 HasCachedProject = hasCachedProject;
+                NativeDatabaseIdentity = nativeDatabaseIdentity;
                 ProjectId = projectId ?? string.Empty;
                 ChangeVersion = changeVersion;
                 FamilyId = familyId ?? string.Empty;
@@ -420,6 +479,7 @@ namespace QS3D.BricsCAD.V25
 
             public ProjectState Project { get; }
             public bool HasCachedProject { get; }
+            public IntPtr NativeDatabaseIdentity { get; }
             public string ProjectId { get; }
             public long ChangeVersion { get; }
             public string FamilyId { get; }
