@@ -6,8 +6,8 @@ text = SOURCE.read_text(encoding="utf-8")
 required = [
     'private const string OperationFailureSuffix = ": không thể hoàn tất thao tác. Vui lòng thử lại.";',
     'private const string UiSyncWarning = "UI sync warning: CAD đã commit nhưng đồng bộ giao diện chưa hoàn tất. Hãy refresh giao diện.";',
-    'Report(document, operation + OperationFailureSuffix);',
-    'Report(document, status + " " + UiSyncWarning);',
+    'Report(document, nativeDatabaseIdentity, operation + OperationFailureSuffix);',
+    'Report(document, context.NativeDatabaseIdentity, status + " " + UiSyncWarning);',
 ]
 for token in required:
     if token not in text:
@@ -35,7 +35,7 @@ if finalize_start < 0 or report_start < 0:
 finalize = text[finalize_start:report_start]
 if "try" not in finalize or "catch (Exception)" not in finalize:
     raise SystemExit("Basic Drawing post-commit UI finalization must remain exception-isolated")
-if "Report(document, status + \" \" + UiSyncWarning);" not in finalize:
+if 'Report(document, context.NativeDatabaseIdentity, status + " " + UiSyncWarning);' not in finalize:
     raise SystemExit("Basic Drawing UI-sync failure must report a stable redacted warning")
 
 print("PASS: Basic Drawing command and post-commit UI failures are redacted and UI sync remains best-effort")

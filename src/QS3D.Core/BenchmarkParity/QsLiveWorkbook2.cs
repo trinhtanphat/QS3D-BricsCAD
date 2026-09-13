@@ -239,7 +239,12 @@ namespace QS3D.Core.BenchmarkParity
                         results[id] = Failure(binding, LiveWorkbookFreshness.Conflict, "Authoritative source has conflicting snapshots.");
                         continue;
                     }
-                    var source = candidates.OrderBy(x => x.Revision, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.EvidenceReference, StringComparer.OrdinalIgnoreCase).First();
+                    var source = candidates
+                        .OrderBy(x => x.Revision, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => x.Revision, StringComparer.Ordinal)
+                        .ThenBy(x => x.EvidenceReference, StringComparer.OrdinalIgnoreCase)
+                        .ThenBy(x => x.EvidenceReference, StringComparer.Ordinal)
+                        .First();
                     sourceValue = source.Quantity;
                     sourceRevision = source.Revision;
                     evidence = source.EvidenceReference;
