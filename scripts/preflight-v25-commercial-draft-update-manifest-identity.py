@@ -73,6 +73,27 @@ require(
     "[Uri]::UriSchemeHttps",
     "packageUri admission does not require HTTPS",
 )
+
+# HTTPS plus a canonical filename is insufficient release provenance: an attacker-
+# controlled origin can serve the same filename. Bind the manifest URI to the exact
+# GitHub release asset for the expected tag, which also rejects query/fragment drift.
+require(
+    source,
+    '$expectedPackageUri = "https://github.com/trinhtanphat/QS3D-BricsCAD/releases/download/$ExpectedReleaseTag/QS3D-BricsCAD-V25.zip"',
+    "packageUri admission is not bound to the canonical QS3D GitHub release asset",
+)
+require(
+    source,
+    "[string]::Equals($updatePackageUri.AbsoluteUri, $expectedPackageUri, [StringComparison]::Ordinal)",
+    "packageUri admission does not compare the exact trusted release URI",
+)
+require_order(
+    source,
+    '$expectedPackageUri = "https://github.com/trinhtanphat/QS3D-BricsCAD/releases/download/$ExpectedReleaseTag/QS3D-BricsCAD-V25.zip"',
+    "$updateManifestText = Read-HeldStrictUtf8",
+    "trusted package URI must be derived from the already-validated expected release tag before manifest admission",
+)
+
 require(
     source,
     "[string]::Equals($metadataVersionRaw, $updateVersionRaw, [StringComparison]::Ordinal)",
