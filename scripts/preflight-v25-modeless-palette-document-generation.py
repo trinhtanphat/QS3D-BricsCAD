@@ -6,13 +6,16 @@ START = (ROOT / 'src/QS3D.BricsCAD.V25/StartCenterPaletteCoordinator.cs').read_t
 PROJECT = (ROOT / 'src/QS3D.BricsCAD.V25/ProjectSetupPaletteCoordinator.cs').read_text(encoding='utf-8')
 START_PANEL = (ROOT / 'src/QS3D.BricsCAD.V25/UI/BltStartCenterPanel.cs').read_text(encoding='utf-8')
 PROJECT_PANEL = (ROOT / 'src/QS3D.BricsCAD.V25/UI/BltProjectSetupPanel.cs').read_text(encoding='utf-8')
+HELPER = PROJECT_PANEL
 
 for name, text in [('StartCenter', START), ('ProjectInformation', PROJECT)]:
-    for token in ('Database.UnmanagedObject', 'RequireCurrentDocumentGeneration'):
+    for token in ('DocumentGenerationGuard.CaptureCurrent', 'RequireCurrentDocumentGeneration'):
         if token not in text:
             raise SystemExit(f'{name} exact native database generation contract missing: {token}')
-    if 'ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)' not in text:
-        raise SystemExit(f'{name} must prove the admitted managed document is still current')
+
+for token in ('Database.UnmanagedObject', 'ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)', 'nativeDatabaseIdentity'):
+    if token not in HELPER:
+        raise SystemExit(f'shared document-generation guard missing: {token}')
 
 if 'RefreshFromDocument(Document? document, IntPtr nativeDatabaseIdentity)' not in START_PANEL:
     raise SystemExit('Start Center panel refresh must receive exact native database generation')

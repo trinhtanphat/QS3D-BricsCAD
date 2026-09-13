@@ -36,7 +36,11 @@ namespace QS3D.BricsCAD.V25
             {
                 SubscribeToDocumentActivation();
                 palette.Visible = true;
-                panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);
+                var document = Application.DocumentManager.MdiActiveDocument;
+                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                if (document != null && !RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity))
+                    nativeDatabaseIdentity = IntPtr.Zero;
+                panel.RefreshFromDocument(document, nativeDatabaseIdentity);
             }
             catch
             {
@@ -163,6 +167,12 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+
+        private static bool RequireCurrentDocumentGeneration(Document? document, IntPtr nativeDatabaseIdentity)
+        {
+            return DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity);
+        }
+
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
             var palette = _palette;
@@ -195,9 +205,13 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                // Bind display state to the document carried by this activation event. Re-querying
-                // MdiActiveDocument here can observe a later host transition and render the wrong DWG.
-                panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);
+                // Bind display state to the document carried by this activation event, then prove
+                // the exact native database generation before any document-scoped UI publication.
+                var document = e.Document ?? Application.DocumentManager.MdiActiveDocument;
+                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                if (document != null && !RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity))
+                    nativeDatabaseIdentity = IntPtr.Zero;
+                panel.RefreshFromDocument(document, nativeDatabaseIdentity);
             }
             catch (Exception)
             {

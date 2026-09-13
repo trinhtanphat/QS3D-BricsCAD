@@ -42,7 +42,11 @@ namespace QS3D.BricsCAD.V25
             try
             {
                 SubscribeToDocumentActivation();
-                panel.RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);
+                var document = Application.DocumentManager.MdiActiveDocument;
+                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                if (document != null && !RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity))
+                    nativeDatabaseIdentity = IntPtr.Zero;
+                panel.RefreshFromDocument(document, nativeDatabaseIdentity);
                 palette.Visible = true;
             }
             catch (Exception)
@@ -155,6 +159,12 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
+
+        private static bool RequireCurrentDocumentGeneration(Document? document, IntPtr nativeDatabaseIdentity)
+        {
+            return DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity);
+        }
+
         private static void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)
         {
             var palette = _palette;
@@ -186,7 +196,11 @@ namespace QS3D.BricsCAD.V25
 
             try
             {
-                panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);
+                var document = e.Document ?? Application.DocumentManager.MdiActiveDocument;
+                var nativeDatabaseIdentity = DocumentGenerationGuard.CaptureCurrent(document);
+                if (document != null && !RequireCurrentDocumentGeneration(document, nativeDatabaseIdentity))
+                    nativeDatabaseIdentity = IntPtr.Zero;
+                panel.RefreshFromDocument(document, nativeDatabaseIdentity);
             }
             catch (Exception)
             {
