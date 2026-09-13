@@ -26,6 +26,7 @@ namespace QS3D.Core.SmokeTests
             ConcreteAndFormwork();
             IfcWorkbench();
             QsCubicostQuantBimSmoke.Run();
+            QsQuantBimWorkbenchStateSmoke.Run();
             ConstructionLifecycle();
             QsTrimbleConstructionLifecycleSmoke.Run();
         }
