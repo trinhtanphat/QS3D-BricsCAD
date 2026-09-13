@@ -27,6 +27,21 @@ namespace QS3D.BricsCAD.V25
         private const int SaveAsCadContextRunning = 1;
         private const int SaveAsCadContextCancelledBeforeStart = 2;
         private const int SaveAsCadContextTerminal = 3;
+        private const int DirectMutationCadContextDispatchTimeoutMilliseconds = 8000;
+        private const int DirectMutationCadContextQueued = 0;
+        private const int DirectMutationCadContextRunning = 1;
+        private const int DirectMutationCadContextCancelled = 2;
+        private const int DirectMutationCadContextTerminal = 3;
+
+        private sealed class DirectMutationCadContextWorkItem
+        {
+            internal Func<string> Action = null!;
+            internal string Result = string.Empty;
+            internal Exception? Error;
+            internal readonly ManualResetEventSlim Done = new ManualResetEventSlim(false);
+            internal int State = DirectMutationCadContextQueued;
+            internal int Abandoned;
+        }
 
         private static readonly HashSet<string> Tools = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -144,11 +159,9 @@ namespace QS3D.BricsCAD.V25
                     RequireConfirmedMutation(body, tool);
                     EnsureAutomationRunning();
                 }
-                return McpDiagnosticHub.InvokeInCadContext(() =>
-                {
-                    if (mutation) EnsureAutomationRunning();
-                    return McpCadLayerStateRuntime.CallInCadContext(tool, body);
-                });
+                if (mutation)
+                    return InvokeDirectMutationInCadContext(tool, () => McpCadLayerStateRuntime.CallInCadContext(tool, body));
+                return McpDiagnosticHub.InvokeInCadContext(() => McpCadLayerStateRuntime.CallInCadContext(tool, body));
             }
             if (McpCadViewStatusRuntime.IsTool(tool))
             {
@@ -158,11 +171,9 @@ namespace QS3D.BricsCAD.V25
                     RequireConfirmedMutation(body, tool);
                     EnsureAutomationRunning();
                 }
-                return McpDiagnosticHub.InvokeInCadContext(() =>
-                {
-                    if (mutation) EnsureAutomationRunning();
-                    return McpCadViewStatusRuntime.CallInCadContext(tool, body);
-                });
+                if (mutation)
+                    return InvokeDirectMutationInCadContext(tool, () => McpCadViewStatusRuntime.CallInCadContext(tool, body));
+                return McpDiagnosticHub.InvokeInCadContext(() => McpCadViewStatusRuntime.CallInCadContext(tool, body));
             }
 
             RequireConfirmedMutation(body, tool);
@@ -171,20 +182,17 @@ namespace QS3D.BricsCAD.V25
             {
                 if (string.Equals(tool, "cad_save", StringComparison.Ordinal)) return Save();
                 if (string.Equals(tool, "cad_save_as", StringComparison.Ordinal)) return SaveAs(body);
-                return McpDiagnosticHub.InvokeInCadContext(() =>
+                return InvokeDirectMutationInCadContext(tool, () =>
                 {
-                    EnsureAutomationRunning();
-                    string result;
                     switch (tool)
                     {
-                        case "cad_create_box": result = CreateBox(body); break;
-                        case "cad_extrude": result = Extrude(body); break;
-                        case "cad_boolean_union": result = Boolean(body, BooleanOperationType.BoolUnite, "union"); break;
-                        case "cad_boolean_subtract": result = Boolean(body, BooleanOperationType.BoolSubtract, "subtract"); break;
-                        case "cad_boolean_intersect": result = Boolean(body, BooleanOperationType.BoolIntersect, "intersect"); break;
+                        case "cad_create_box": return CreateBox(body);
+                        case "cad_extrude": return Extrude(body);
+                        case "cad_boolean_union": return Boolean(body, BooleanOperationType.BoolUnite, "union");
+                        case "cad_boolean_subtract": return Boolean(body, BooleanOperationType.BoolSubtract, "subtract");
+                        case "cad_boolean_intersect": return Boolean(body, BooleanOperationType.BoolIntersect, "intersect");
                         default: throw new InvalidOperationException("Unknown direct MCP CAD model tool: " + tool);
                     }
-                    return result;
                 });
             }
             catch (Exception ex)
@@ -212,9 +220,8 @@ namespace QS3D.BricsCAD.V25
                 ? NormalizeExtrudeInputs(rawInputs)
                 : string.Empty;
             if (string.Equals(command, "QSAVE", StringComparison.Ordinal)) return SaveCadCommandSequence();
-            return McpDiagnosticHub.InvokeInCadContext(() =>
+            return InvokeDirectMutationInCadContext("cad_command_sequence", () =>
             {
-                EnsureAutomationRunning();
                 if (directLayout)
                     return ExecuteDirectLayoutCommand(command, layoutAction, layoutName);
                 var document = RequireDocument();
@@ -228,6 +235,93 @@ namespace QS3D.BricsCAD.V25
                 McpDiagnosticHub.Record("mcp", "info", "cad-command-sequence", "command=EXTRUDE; boundedMultiStage=true; inputChars=" + inputs.Length.ToString(CultureInfo.InvariantCulture), document);
                 return "{\"accepted\":true,\"command\":\"EXTRUDE\",\"multiStage\":true,\"inputChars\":" + inputs.Length.ToString(CultureInfo.InvariantCulture) + "}";
             });
+        }
+
+        private static string InvokeDirectMutationInCadContext(string tool, Func<string> action)
+        {
+            if (action == null) throw new ArgumentNullException(nameof(action));
+            var item = new DirectMutationCadContextWorkItem
+            {
+                Action = () =>
+                {
+                    McpCadAgentRuntime.EnsureCurrentMutationRunning();
+                    EnsureAutomationRunning();
+                    var document = RequireDocument();
+                    var nativeDatabaseIdentity = RequireLiveNativeDatabaseIdentity(document, tool);
+                    var result = action();
+                    RequireSameDirectDocumentGeneration(document, nativeDatabaseIdentity, tool);
+                    return result;
+                }
+            };
+            try
+            {
+                Application.DocumentManager.ExecuteInApplicationContext(ExecuteDirectMutationCadContext, item);
+            }
+            catch (Exception ex)
+            {
+                item.Done.Dispose();
+                throw new InvalidOperationException("Could not queue " + tool + " mutation CAD-context work.", ex);
+            }
+
+            if (!item.Done.Wait(DirectMutationCadContextDispatchTimeoutMilliseconds))
+            {
+                var cancelled = Interlocked.CompareExchange(ref item.State, DirectMutationCadContextCancelled, DirectMutationCadContextQueued) == DirectMutationCadContextQueued;
+                if (cancelled)
+                {
+                    Interlocked.Exchange(ref item.Abandoned, 1);
+                    throw new TimeoutException("Timed out waiting for BricsCAD application context; queued " + tool + " mutation was cancelled before start.");
+                }
+                item.Done.Wait();
+            }
+
+            try
+            {
+                if (item.Error != null) throw new InvalidOperationException(tool + " mutation CAD-context work failed.", item.Error);
+                return item.Result;
+            }
+            finally { item.Done.Dispose(); }
+        }
+
+        private static void ExecuteDirectMutationCadContext(object state)
+        {
+            var item = (DirectMutationCadContextWorkItem)state;
+            try
+            {
+                if (Interlocked.CompareExchange(ref item.State, DirectMutationCadContextRunning, DirectMutationCadContextQueued) != DirectMutationCadContextQueued) return;
+                item.Result = item.Action();
+            }
+            catch (Exception ex) { item.Error = ex; }
+            finally
+            {
+                Interlocked.Exchange(ref item.State, DirectMutationCadContextTerminal);
+                try { item.Done.Set(); }
+                finally
+                {
+                    if (Volatile.Read(ref item.Abandoned) != 0)
+                    {
+                        try { item.Done.Dispose(); } catch (ObjectDisposedException) { }
+                    }
+                }
+            }
+        }
+
+        private static IntPtr RequireLiveNativeDatabaseIdentity(Document document, string tool)
+        {
+            if (document == null) throw new InvalidOperationException(tool + " requires an active BricsCAD document.");
+            var database = document.Database;
+            if (database == null) throw new InvalidOperationException(tool + " requires a live BricsCAD database.");
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero) throw new InvalidOperationException(tool + " requires a live native BricsCAD database generation.");
+            return identity;
+        }
+
+        private static void RequireSameDirectDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity, string tool)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException(tool + " completed against a document that is no longer active; result publication is suppressed.");
+            var database = document.Database;
+            if (database == null || nativeDatabaseIdentity == IntPtr.Zero || database.UnmanagedObject != nativeDatabaseIdentity)
+                throw new InvalidOperationException(tool + " observed a native BricsCAD database generation change; completion is uncertain and must not be retried automatically.");
         }
 
         private static string SaveCadCommandSequence()
