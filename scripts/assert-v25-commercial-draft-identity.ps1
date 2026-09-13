@@ -29,6 +29,7 @@ $ErrorActionPreference = 'Stop'
 
 $MaxMetadataBytes = 65536
 $MaxProvenanceBytes = 65536
+$MaxUpdateManifestBytes = 65536
 $MaxChecksumBytes = 4096
 $MaxVerifierScriptBytes = 262144
 $MaxSignedPayloadEntryBytes = 268435456
@@ -53,7 +54,7 @@ function Assert-NoReparseAncestor {
     $cursor = [IO.Directory]::GetParent((Get-CanonicalFullPath -LiteralPath $LiteralPath))
     while ($null -ne $cursor) {
         if (($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "Downloaded V25 draft input traverses a reparse-point ancestor: $($cursor.FullName)"
+            throw "$Label must be an ordinary non-reparse file: $canonical"
         }
         $cursor = $cursor.Parent
     }
@@ -227,6 +228,7 @@ function Read-ZipMetadataIdentity {
             product = 1
             target = 1
             productVersion = 1
+            version = 1
             gitCommit = 1
         }
         Assert-JsonPropertyCounts -JsonText $text -ExpectedPropertyCounts $metadataExpectedPropertyCounts
@@ -340,6 +342,49 @@ try {
     if ($checksumText -notmatch '^([0-9a-fA-F]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Downloaded V25 draft checksum is malformed.' }
     if (-not [string]::Equals($Matches[1], $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'Downloaded V25 draft ZIP fails its SHA-256 checksum.' }
 
+    $updateManifestText = Read-HeldStrictUtf8 -Held $updateHeld -MaxBytes $MaxUpdateManifestBytes -Label 'downloaded V25 draft update manifest'
+    $updateManifestExpectedPropertyCounts = @{
+        schemaVersion = 1
+        product = 1
+        target = 1
+        productVersion = 1
+        version = 1
+        packageUri = 1
+        sha256 = 1
+        signerThumbprint = 1
+        generatedUtc = 1
+    }
+    Assert-JsonPropertyCounts -JsonText $updateManifestText -ExpectedPropertyCounts $updateManifestExpectedPropertyCounts
+    try { $updateManifest = $updateManifestText | ConvertFrom-Json -ErrorAction Stop }
+    catch { throw "Downloaded V25 draft update manifest is invalid JSON: $($_.Exception.Message)" }
+
+    $updateProductVersionRaw = [string]$updateManifest.productVersion
+    $updateVersionRaw = [string]$updateManifest.version
+    $updatePackageUriRaw = [string]$updateManifest.packageUri
+    $updateSignerRaw = [string]$updateManifest.signerThumbprint
+    if (-not [string]::Equals($updateProductVersionRaw, $updateProductVersionRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updateVersionRaw, $updateVersionRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updatePackageUriRaw, $updatePackageUriRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updateSignerRaw, $updateSignerRaw.Trim(), [StringComparison]::Ordinal)) {
+        throw 'Downloaded V25 draft update manifest identity is non-canonical: leading or trailing whitespace is not allowed.'
+    }
+
+    $updatePackageUri = $null
+    if (-not [Uri]::TryCreate($updatePackageUriRaw, [UriKind]::Absolute, [ref]$updatePackageUri) -or
+        -not [string]::Equals($updatePackageUri.Scheme, [Uri]::UriSchemeHttps, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::IsNullOrEmpty($updatePackageUri.UserInfo) -or
+        -not [string]::Equals([IO.Path]::GetFileName($updatePackageUri.AbsolutePath), 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal)) {
+        throw 'Downloaded V25 draft update manifest packageUri must be an absolute HTTPS package URL without embedded credentials and ending in QS3D-BricsCAD-V25.zip.'
+    }
+
+    if ([int]$updateManifest.schemaVersion -ne 2 -or [string]$updateManifest.product -ne 'QS3D' -or [string]$updateManifest.target -ne 'BricsCAD V25 x64' -or
+        -not [string]::Equals($updateProductVersionRaw, $expectedProductVersion, [StringComparison]::Ordinal) -or
+        [string]::IsNullOrWhiteSpace($updateVersionRaw) -or
+        -not [string]::Equals([string]$updateManifest.sha256, $zipHash, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals($updateSignerRaw.Replace(' ', ''), $expectedSigner, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Downloaded V25 draft update manifest does not exactly bind product, target, release version, package digest and signer.'
+    }
+
     $provenanceText = Read-HeldStrictUtf8 -Held $provenanceHeld -MaxBytes $MaxProvenanceBytes -Label 'downloaded V25 draft provenance'
     $provenanceExpectedPropertyCounts = @{
         schemaVersion = 1
@@ -377,16 +422,20 @@ try {
 
     $metadata = Read-ZipMetadataIdentity -ZipHeld $zipHeld
     $metadataProductVersionRaw = [string]$metadata.productVersion
+    $metadataVersionRaw = [string]$metadata.version
     $metadataGitCommitRaw = [string]$metadata.gitCommit
     if (-not [string]::Equals($metadataProductVersionRaw, $metadataProductVersionRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($metadataVersionRaw, $metadataVersionRaw.Trim(), [StringComparison]::Ordinal) -or
         -not [string]::Equals($metadataGitCommitRaw, $metadataGitCommitRaw.Trim(), [StringComparison]::Ordinal)) {
         throw 'Downloaded V25 draft ZIP metadata identity is non-canonical: leading or trailing whitespace is not allowed.'
     }
 
     if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V25 x64' -or
-        -not [string]::Equals(([string]$metadata.productVersion).Trim(), $expectedProductVersion, [StringComparison]::Ordinal) -or
-        -not [string]::Equals(([string]$metadata.gitCommit).Trim(), $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Downloaded V25 draft ZIP metadata does not exactly bind product, tag and source commit.'
+        -not [string]::Equals($metadataProductVersionRaw, $expectedProductVersion, [StringComparison]::Ordinal) -or
+        [string]::IsNullOrWhiteSpace($metadataVersionRaw) -or
+        -not [string]::Equals($metadataVersionRaw, $updateVersionRaw, [StringComparison]::Ordinal) -or
+        -not [string]::Equals($metadataGitCommitRaw, $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Downloaded V25 draft ZIP metadata does not exactly bind product, tag, source commit and update-manifest assembly version.'
     }
 
     Test-HeldZipPayloadSignatures -ZipHeld $zipHeld -ExpectedThumbprint $expectedSigner
