@@ -203,6 +203,9 @@ namespace QS3D.Core.BenchmarkParity
                     continue;
                 }
 
+                if (item.Quantity < 0d)
+                    issues.Add(new TakeoffPackageValidationIssue("PKG.NEGATIVE_BIM_QUANTITY", TakeoffPackageValidationSeverity.Error, item.Guid, "BIM quantity evidence cannot be negative."));
+
                 var quantityIdentity = item.Guid + "\u001f" + item.QuantityName + "\u001f" + item.Unit;
                 if (!bimQuantityIds.Add(quantityIdentity))
                     issues.Add(new TakeoffPackageValidationIssue("PKG.DUPLICATE_BIM_QUANTITY", TakeoffPackageValidationSeverity.Error, item.Guid, "BIM quantity identity (Guid, QuantityName, Unit) is duplicated in the package."));
