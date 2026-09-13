@@ -1,7 +1,7 @@
-# BricsCAD V25 Direct Draw document-generation affinity
+﻿# BricsCAD V25 Direct Draw document-generation affinity
 
-Issue: #6818  
-Lane: C03 — BricsCAD V25 UI / Workspace / Modeless / Authoring  
+Issue: #6818
+Lane: C03 â€” BricsCAD V25 UI / Workspace / Modeless / Authoring
 Ownership-Key: `v25-direct-draw-document-generation-affinity-v1`
 
 ## Failure mode
