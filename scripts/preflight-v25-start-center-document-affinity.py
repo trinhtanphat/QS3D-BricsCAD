@@ -13,14 +13,14 @@ panel = PANEL.read_text(encoding="utf-8")
 # re-query a process-global active document after the host has already supplied event affinity.
 for token in (
     "RefreshFromDocument(Document? document)",
-    "RefreshFromDocument(Application.DocumentManager.MdiActiveDocument);",
+    "RefreshFromDocument(document, DocumentGenerationGuard.CaptureCurrent(document));",
 ):
     if token not in panel:
         raise SystemExit(f"Start Center explicit document refresh contract missing: {token}")
 
 # The modeless coordinator must use the event document, with MDI active document only as the
 # null fallback. Calling RefreshFromActiveDocument from DocumentActivated is a stale-affinity risk.
-if "panel.RefreshFromDocument(e.Document ?? Application.DocumentManager.MdiActiveDocument);" not in coordinator:
+if "panel.RefreshFromDocument(document, nativeDatabaseIdentity);" not in coordinator:
     raise SystemExit("Start Center DocumentActivated must refresh from the event document")
 
 handler_match = re.search(
