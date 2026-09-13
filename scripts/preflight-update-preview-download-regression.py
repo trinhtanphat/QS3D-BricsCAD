@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import contextlib
+import importlib.util
+import io
+import os
 import shutil
 import subprocess
 import sys
@@ -30,15 +34,38 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         return temporary, fixture
 
     def run_guard(self, fixture):
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
         return subprocess.run(
             [sys.executable, str(fixture / PREFLIGHT)],
             cwd=str(fixture),
             text=True,
+            encoding="utf-8",
+            errors="strict",
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             check=False,
             timeout=30,
         )
+
+    def run_guard_in_process(self, fixture):
+        path = fixture / PREFLIGHT
+        spec = importlib.util.spec_from_file_location("qs3d_preview_download_guard", path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        output = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(output):
+                code = module.main()
+            return subprocess.CompletedProcess([str(path)], int(code or 0), output.getvalue())
+        except SystemExit as exc:
+            if exc.code not in (None, 0):
+                output.write(str(exc.code) + "\n")
+            code = exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
+            return subprocess.CompletedProcess([str(path)], code, output.getvalue())
 
     def mutate_all(self, fixture, relative, old, new):
         path = fixture / relative
@@ -53,7 +80,7 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         temporary, fixture = self.make_fixture()
         self.addCleanup(temporary.cleanup)
         self.mutate_all(fixture, relative, old, new)
-        result = self.run_guard(fixture)
+        result = self.run_guard_in_process(fixture)
         self.assertNotEqual(0, result.returncode, result.stdout)
         self.assertIn(expected_fragment or old, result.stdout)
 
@@ -105,6 +132,16 @@ class PreviewDownloadGuardMutationTests(unittest.TestCase):
         for index, (relative, old, new) in enumerate(cases, 1):
             with self.subTest(case=index, file=str(relative)):
                 self.assert_rejected(relative, old, new)
+
+    def test_unicode_failure_diagnostic_roundtrips_through_subprocess(self):
+        old = 'CreateActionCard("↻", "Cập nhật", "Kiểm tra và tải bản cập nhật QS3D", () => UpdateCenterWindowHost.Show())'
+        new = 'CreateActionCard("↻", "Cập nhật", "Kiểm tra và tải bản cập nhật QS3D", () => { })'
+        temporary, fixture = self.make_fixture()
+        self.addCleanup(temporary.cleanup)
+        self.mutate_all(fixture, START, old, new)
+        result = self.run_guard(fixture)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertIn(old, result.stdout)
 
     def test_forbidden_direct_execution_is_rejected(self):
         temporary, fixture = self.make_fixture()
