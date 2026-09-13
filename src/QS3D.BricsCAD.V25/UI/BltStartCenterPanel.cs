@@ -66,14 +66,14 @@ namespace QS3D.BricsCAD.V25.UI
 
         public void RefreshFromDocument(Document? document, IntPtr nativeDatabaseIdentity)
         {
+            if (document != null && !DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
+
             ResetDocumentScopedDisplay();
             if (document == null)
             {
                 RefreshRecentProjects(null, IntPtr.Zero);
                 return;
             }
-
-            if (!DocumentGenerationGuard.IsCurrent(document, nativeDatabaseIdentity)) return;
 
             string? normalized = null;
             try
