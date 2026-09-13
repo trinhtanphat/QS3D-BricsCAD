@@ -37,7 +37,11 @@ namespace QS3D.BricsCAD.V25.UI
         private MenuItem? _centerSnapItem;
         private MenuItem? _nearestSnapItem;
         private string? _lightBackgroundRestoreColor;
+        private object? _lightBackgroundRestoreDocument;
+        private IntPtr _lightBackgroundRestoreNativeDatabaseIdentity;
         private string? _contrastBackgroundRestoreColor;
+        private object? _contrastBackgroundRestoreDocument;
+        private IntPtr _contrastBackgroundRestoreNativeDatabaseIdentity;
 
         private static bool RegisterViewportAidClassHandler()
         {
@@ -192,6 +196,8 @@ namespace QS3D.BricsCAD.V25.UI
             ToggleViewportBackgroundPreset(
                 LightBackgroundColor,
                 ref _lightBackgroundRestoreColor,
+                ref _lightBackgroundRestoreDocument,
+                ref _lightBackgroundRestoreNativeDatabaseIdentity,
                 "Nền sáng");
         }
 
@@ -200,15 +206,26 @@ namespace QS3D.BricsCAD.V25.UI
             ToggleViewportBackgroundPreset(
                 ContrastBackgroundColor,
                 ref _contrastBackgroundRestoreColor,
+                ref _contrastBackgroundRestoreDocument,
+                ref _contrastBackgroundRestoreNativeDatabaseIdentity,
                 "Tương phản");
         }
 
-        private void ToggleViewportBackgroundPreset(string preset, ref string? restoreColor, string label)
+        private void ToggleViewportBackgroundPreset(
+            string preset,
+            ref string? restoreColor,
+            ref object? restoreDocument,
+            ref IntPtr restoreNativeDatabaseIdentity,
+            string label)
         {
             if (_syncingViewportAids) return;
 
             var previousRestoreColor = restoreColor;
+            var restoreDocumentSnapshot = restoreDocument;
+            var restoreNativeDatabaseIdentitySnapshot = restoreNativeDatabaseIdentity;
             var nextRestoreColor = previousRestoreColor;
+            var nextRestoreDocument = restoreDocumentSnapshot;
+            var nextRestoreNativeDatabaseIdentity = restoreNativeDatabaseIdentitySnapshot;
             var nextColor = string.Empty;
             bool mutated;
             try
@@ -216,16 +233,29 @@ namespace QS3D.BricsCAD.V25.UI
                 mutated = MutateDocumentScopedSystemVariable("BKGCOLOR", currentValue =>
                 {
                     var current = Convert.ToString(currentValue, CultureInfo.InvariantCulture) ?? string.Empty;
+                    var currentDocument = BcadApplication.DocumentManager.MdiActiveDocument;
+                    var currentNativeDatabaseIdentity = currentDocument == null
+                        ? IntPtr.Zero
+                        : DocumentGenerationGuard.CaptureCurrent(currentDocument);
+                    var ownsRestoreState = currentDocument != null &&
+                        ReferenceEquals(restoreDocumentSnapshot, currentDocument) &&
+                        restoreNativeDatabaseIdentitySnapshot == currentNativeDatabaseIdentity &&
+                        DocumentGenerationGuard.IsCurrent(currentDocument, currentNativeDatabaseIdentity);
+
                     if (BackgroundColorsEqual(current, preset))
                     {
-                        nextColor = string.IsNullOrWhiteSpace(previousRestoreColor)
-                            ? DefaultDarkBackgroundColor
-                            : previousRestoreColor!;
+                        nextColor = ownsRestoreState && !string.IsNullOrWhiteSpace(previousRestoreColor)
+                            ? previousRestoreColor!
+                            : DefaultDarkBackgroundColor;
                         nextRestoreColor = null;
+                        nextRestoreDocument = null;
+                        nextRestoreNativeDatabaseIdentity = IntPtr.Zero;
                     }
                     else
                     {
                         nextRestoreColor = current;
+                        nextRestoreDocument = currentDocument;
+                        nextRestoreNativeDatabaseIdentity = currentNativeDatabaseIdentity;
                         nextColor = preset;
                     }
                     return nextColor;
@@ -242,6 +272,8 @@ namespace QS3D.BricsCAD.V25.UI
             if (!mutated) return;
 
             restoreColor = nextRestoreColor;
+            restoreDocument = nextRestoreDocument;
+            restoreNativeDatabaseIdentity = nextRestoreNativeDatabaseIdentity;
             SetStatus(label + (BackgroundColorsEqual(nextColor, preset) ? " đã bật." : " đã khôi phục."));
         }
 
