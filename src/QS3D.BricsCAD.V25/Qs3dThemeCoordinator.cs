@@ -158,9 +158,9 @@ namespace QS3D.BricsCAD.V25
         private static void ApplyBricsCadThemeTerminalInContext(object state)
         {
             var item = (ThemeMutationCadContextWorkItem)state;
+            if (Interlocked.CompareExchange(ref item.State, ThemeMutationCadContextRunning, ThemeMutationCadContextQueued) != ThemeMutationCadContextQueued) return;
             try
             {
-                if (Interlocked.CompareExchange(ref item.State, ThemeMutationCadContextRunning, ThemeMutationCadContextQueued) != ThemeMutationCadContextQueued) return;
                 var desired = item.Dark ? 0 : 1;
                 var current = Convert.ToInt32(Application.GetSystemVariable("COLORTHEME"), CultureInfo.InvariantCulture);
                 if (current != desired) Application.SetSystemVariable("COLORTHEME", (short)desired);

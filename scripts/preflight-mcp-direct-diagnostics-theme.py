@@ -88,6 +88,10 @@ if 'Application.GetSystemVariable("COLORTHEME")' in theme_ack_block:
 terminal_callback = between(coordinator, "private static void ApplyBricsCadThemeTerminalInContext", "private static void ApplyCurrentTheme")
 if "item.Error = ex;" not in terminal_callback or "item.Done.Set();" not in terminal_callback:
     fail("terminal theme callback must publish error and completion to the owner")
+cas_index = terminal_callback.find("Interlocked.CompareExchange")
+try_index = terminal_callback.find("try")
+if cas_index < 0 or (try_index >= 0 and try_index < cas_index):
+    fail("cancel-before-start CAS must occur before the callback try/finally so a cancelled late callback cannot signal a disposed completion event")
 if "warning" in terminal_callback.lower():
     fail("terminal theme callback must not reduce native failure to warning-only success")
 
