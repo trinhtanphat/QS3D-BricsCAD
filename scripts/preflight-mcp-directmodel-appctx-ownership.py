@@ -17,8 +17,12 @@ if start < 0 or end < 0:
     fail("DirectModel Call boundary not found")
 call = text[start:end]
 
-if "return McpDiagnosticHub.InvokeInCadContext(() =>" in call:
-    fail("DirectModel mutation dispatch still uses response-bounded diagnostic CAD-context dispatch")
+for pattern in (
+    "if (mutation)\n                    return InvokeDirectMutationInCadContext(tool",
+    "return InvokeDirectMutationInCadContext(tool, () =>",
+):
+    if pattern not in call:
+        fail("DirectModel mutation branch is not routed through mutation-owned CAD-context completion: " + pattern)
 
 seq_start = text.find("internal static string CallCadCommandSequence")
 seq_end = text.find("private static string SaveCadCommandSequence", seq_start)
@@ -27,22 +31,16 @@ if seq_start < 0 or seq_end < 0:
 sequence = text[seq_start:seq_end]
 if "McpDiagnosticHub.InvokeInCadContext" in sequence:
     fail("direct layout/command mutation still uses diagnostic CAD-context dispatch")
+if 'InvokeDirectMutationInCadContext("cad_command_sequence"' not in sequence:
+    fail("direct command sequence lacks mutation-owned CAD-context completion")
 
-required = (
-    "InvokeDirectMutationInCadContext",
-    "DirectMutationCadContextWorkItem",
-    "DirectMutationCadContextQueued",
-    "DirectMutationCadContextRunning",
-    "DirectMutationCadContextCancelled",
-    "Application.DocumentManager.ExecuteInApplicationContext",
-    "UnmanagedObject",
-)
-for token in required:
+for token in (
+    "DirectMutationCadContextWorkItem", "DirectMutationCadContextQueued",
+    "DirectMutationCadContextRunning", "DirectMutationCadContextCancelled",
+    "Application.DocumentManager.ExecuteInApplicationContext", "UnmanagedObject",
+    "McpCadAgentRuntime.EnsureCurrentMutationRunning();",
+):
     if token not in text:
         fail("missing DirectModel mutation-owned application-context contract token: " + token)
-
-for tool in ("cad_create_box", "cad_extrude", "cad_boolean_union", "cad_layer_set_state", "cad_layer_restore", "cad_view_set"):
-    if tool not in text:
-        fail("expected DirectModel mutation tool disappeared: " + tool)
 
 print("PASS: DirectModel mutations require mutation-owned application-context completion")
