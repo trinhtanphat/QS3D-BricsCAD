@@ -181,7 +181,7 @@ namespace QS3D.Core.SmokeTests
             Equal(64, first.SourceSha256.Length, "pdf fingerprint length");
             True(!string.Equals(first.SourceSha256, second.SourceSha256, StringComparison.Ordinal), "content drift changes fingerprint");
 
-            var png = new byte[36] { 137,80,78,71,13,10,26,10, 0,0,0,13, 73,72,68,82, 0,0,0,32, 0,0,0,16, 0,0,0,0, 0,0,0,0,73,69,78,68 };
+            var png = new byte[36] { 137,80,78,71,13,10,26,10, 0,0,0,13, 73,72,68,82, 0,0,0,32, 0,0,0,16, 0,0,0,0,73,69,78,68,0,0,0,0 };
             var raster = ingestor.IngestRaster("A402", "Detail", "A402.png", "R1", calibration, png);
             Equal((RasterSheetFormat?)RasterSheetFormat.Png, raster.RasterFormat, "png format");
             Equal(32, raster.PixelWidth, "png width");
