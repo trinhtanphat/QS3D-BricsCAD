@@ -21,4 +21,10 @@ if "document.Editor.WriteMessage" not in command:
 if "MdiActiveDocument" not in command:
     raise SystemExit("FAIL: Agent Center command boundary must bind failure publication to captured document")
 
-print("PASS: Agent Center command boundary sanitizes exception publication and keeps document-bound feedback")
+# Adjacent public Agent Center surfaces must not publish raw exception text either.
+for sink in ("ShowToast", "McpAgentExperience.Error", "Editor.WriteMessage"):
+    for line in text.splitlines():
+        if sink in line and "ex.Message" in line:
+            raise SystemExit(f"FAIL: Agent Center public sink {sink} publishes raw exception text")
+
+print("PASS: Agent Center command/public sinks sanitize exception publication and keep document-bound feedback")
