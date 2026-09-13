@@ -131,10 +131,11 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (lines == null) throw new ArgumentNullException("lines");
             var snapshot = lines.ToList();
+            if (snapshot.Any(x => x == null)) throw new ArgumentException("Quantity collection contains null.", "lines");
             var inventory = new List<TakeoffInventoryLine>();
-            inventory.AddRange(snapshot.GroupBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).Select(g => new TakeoffInventoryLine(g.Key + ".CONCRETE", "m3", g.Sum(x => x.ConcreteVolume), g.Count())));
-            inventory.AddRange(snapshot.GroupBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).Select(g => new TakeoffInventoryLine(g.Key + ".FORMWORK", "m2", g.Sum(x => x.FormworkArea), g.Count())));
-            return new ReadOnlyCollection<TakeoffInventoryLine>(inventory.OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).ToList());
+            inventory.AddRange(snapshot.GroupBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).Select(g => new TakeoffInventoryLine(g.Key + ".CONCRETE", "m3", CubicostQuantityAggregation.SumFinite(g.Select(x => x.ConcreteVolume), g.Key + ".CONCRETE"), g.Count())));
+            inventory.AddRange(snapshot.GroupBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).Select(g => new TakeoffInventoryLine(g.Key + ".FORMWORK", "m2", CubicostQuantityAggregation.SumFinite(g.Select(x => x.FormworkArea), g.Key + ".FORMWORK"), g.Count())));
+            return new ReadOnlyCollection<TakeoffInventoryLine>(inventory.OrderBy(x => x.Classification, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Classification, StringComparer.Ordinal).ToList());
         }
     }
 
