@@ -87,6 +87,11 @@ require(
     "[string]::Equals($updatePackageUri.AbsoluteUri, $expectedPackageUri, [StringComparison]::Ordinal)",
     "packageUri admission does not compare the exact trusted release URI",
 )
+require(
+    source,
+    "[string]::Equals($updatePackageUriRaw, $expectedPackageUri, [StringComparison]::Ordinal)",
+    "packageUri admission must reject alternate textual origins, query/fragment drift and URI aliases",
+)
 require_order(
     source,
     '$expectedPackageUri = "https://github.com/trinhtanphat/QS3D-BricsCAD/releases/download/$ExpectedReleaseTag/QS3D-BricsCAD-V25.zip"',

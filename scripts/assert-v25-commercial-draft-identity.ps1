@@ -377,7 +377,7 @@ try {
         -not [string]::Equals([IO.Path]::GetFileName($updatePackageUri.AbsolutePath), 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal) -or
         -not [string]::Equals($updatePackageUriRaw, $expectedPackageUri, [StringComparison]::Ordinal) -or
         -not [string]::Equals($updatePackageUri.AbsoluteUri, $expectedPackageUri, [StringComparison]::Ordinal)) {
-        throw 'Downloaded V25 draft update manifest packageUri must be an absolute HTTPS package URL without embedded credentials and ending in QS3D-BricsCAD-V25.zip.'
+        throw "Downloaded V25 draft update manifest packageUri must exactly match the trusted release asset URI: $expectedPackageUri"
     }
 
     if ([int]$updateManifest.schemaVersion -ne 2 -or [string]$updateManifest.product -ne 'QS3D' -or [string]$updateManifest.target -ne 'BricsCAD V25 x64' -or
