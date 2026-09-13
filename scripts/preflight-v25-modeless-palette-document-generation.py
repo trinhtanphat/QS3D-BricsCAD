@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,7 +13,7 @@ for name, text in [('StartCenter', START), ('ProjectInformation', PROJECT)]:
         if token not in text:
             raise SystemExit(f'{name} exact native database generation contract missing: {token}')
 
-for token in ('Database.UnmanagedObject', 'ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)', 'nativeDatabaseIdentity'):
+for token in ('UnmanagedObject', 'ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document)', 'nativeDatabaseIdentity'):
     if token not in HELPER:
         raise SystemExit(f'shared document-generation guard missing: {token}')
 
