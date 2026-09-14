@@ -369,6 +369,10 @@ namespace QS3D.BricsCAD.V25
             var wallOpeningSource = CreateLineSource(document, 10d, 3.4d, 3d, 3.8d);
             var door = AddOpening(project, ElementCategory.Door, "bounded-door", doorSource, host.Id);
             var wallOpening = AddOpening(project, ElementCategory.WallOpening, "bounded-wall-opening", wallOpeningSource, host.Id);
+            Require(host.IsGeneratedSolidStale(), "opening Level mutation must stale host before rebuild");
+            Require(CadHandleService.Select(document, host.SourceHandles) == 1, "opening host source selection");
+            Require(WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall, false) == 1, "opening host rebuild");
+            Require(!host.IsGeneratedSolidStale(), "opening host rebuild must clear generated solid stale state");
             var hostHandle = Handles(host, "GeneratedSolidHandle").Single();
             var before = ReadSolidVolume(document, hostHandle, "opening host before cuts");
             Require(OpeningBooleanService.CutLinkedOpenings(document, project, new[] { door.Id }) == 1, "Door straight cut");

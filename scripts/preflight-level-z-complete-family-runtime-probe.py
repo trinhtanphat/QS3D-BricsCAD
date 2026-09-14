@@ -38,6 +38,30 @@ if COMMAND.is_file():
         if forbidden in text:
             errors.append("complete-family failure taxonomy leaks forbidden detail token: " + forbidden)
 
+    opening_start = text.find("private static int VerifyStraightHostedOpenings")
+    opening_end = text.find("private static ProjectElement AddOpening", opening_start)
+    if opening_start < 0 or opening_end < 0:
+        errors.append("complete-family opening verification boundary is missing")
+    else:
+        opening = text[opening_start:opening_end]
+        ordered = (
+            'var door = AddOpening(',
+            'var wallOpening = AddOpening(',
+            'Require(host.IsGeneratedSolidStale(), "opening Level mutation must stale host before rebuild");',
+            'Require(CadHandleService.Select(document, host.SourceHandles) == 1, "opening host source selection");',
+            'Require(WallSolidBuilder.BuildSelectedLineWalls(document, project, ElementCategory.ArchitecturalWall, false) == 1, "opening host rebuild");',
+            'Require(!host.IsGeneratedSolidStale(), "opening host rebuild must clear generated solid stale state");',
+            'OpeningBooleanService.CutLinkedOpenings(document, project, new[] { door.Id })',
+            'OpeningBooleanService.CutLinkedOpenings(document, project, new[] { wallOpening.Id })',
+        )
+        cursor = -1
+        for token in ordered:
+            position = opening.find(token, cursor + 1)
+            if position < 0:
+                errors.append("complete-family opening stale-host rebuild sequencing missing token: " + token)
+                break
+            cursor = position
+
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8-sig")
     for token in (
