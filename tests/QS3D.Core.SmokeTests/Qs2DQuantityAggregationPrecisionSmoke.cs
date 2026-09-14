@@ -1,14 +1,12 @@
-﻿using System;
+using System;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
 {
     internal static class Qs2DQuantityAggregationPrecisionSmoke
     {
-        [ModuleInitializer]
-        internal static void Initialize()
+        internal static void Run()
         {
             PreservesPositiveHighDynamicResidual();
             WorkflowPreservesPositiveHighDynamicResidual();
@@ -108,4 +106,3 @@ namespace QS3D.Core.SmokeTests
         }
     }
 }
-
