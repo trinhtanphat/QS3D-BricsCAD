@@ -280,7 +280,7 @@ namespace QS3D.Core.SmokeTests
                 new ConstructionCommitment("PO-S4", "Supplier 4", 1m, 0m, 0m, 1d)
             };
             var forward = new ConstructionLifecycleEngine().Summarize(highDynamic, 0m);
-            var reverse = new ConstructionLifecycleEngine().Summarize(highDynamic.Reverse(), 0m);
+            var reverse = new ConstructionLifecycleEngine().Summarize(highDynamic.AsEnumerable().Reverse(), 0m);
             Near(1d, forward.WeightedProgress, 0d, "high-dynamic forward weighted progress");
             Near(1d, reverse.WeightedProgress, 0d, "high-dynamic reverse weighted progress");
             Near(forward.WeightedProgress, reverse.WeightedProgress, 0d, "weighted progress order invariance");

@@ -8,7 +8,7 @@ smoke = (root / "tests/QS3D.Core.SmokeTests/BenchmarkParitySuiteSmoke.cs").read_
 checks = [
     ("finite progress admission", "double.IsNaN(progress)" in src and "double.IsInfinity(progress)" in src),
     ("summary weighted progress admission", "weightedProgress" in src and "double.IsNaN(weightedProgress)" in src and "double.IsInfinity(weightedProgress)" in src),
-    ("decimal weighted accumulator", "(decimal)x.Progress" in src or "decimal progress" in src),
+    ("decimal weighted accumulator", "(decimal)commitment.Progress" in src or "decimal progress" in src),
     ("high dynamic smoke", "PO-HUGE" in smoke and "weighted progress order invariance" in smoke),
 ]
 failed = [name for name, ok in checks if not ok]
