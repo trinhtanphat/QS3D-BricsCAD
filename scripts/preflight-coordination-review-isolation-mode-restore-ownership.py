@@ -18,37 +18,32 @@ session_start = text.find("private sealed class TransientReviewSession : IDispos
 if session_start < 0:
     raise SystemExit("TransientReviewSession was not found")
 session = text[session_start:]
-owner_affine = "private bool IsOwnerDocumentActive" in session
 
-# A successful UNISOLATE queue and a failed OBJECTISOLATIONMODE restore are
-# independent cleanup outcomes. UI/session ownership must remain visible while
-# either native obligation is outstanding, including debt transferred from a
-# failed Isolate launch whose synchronous mode compensation was not confirmed.
-if "public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;" not in session:
-    raise SystemExit("HasIsolation must retain UI/session ownership while isolation-mode restore is still owed")
+if "public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null || _impliedSelectionBeforeIsolation != null;" not in session:
+    raise SystemExit("HasIsolation must retain command, mode and PICKFIRST cleanup ownership")
+if "public bool IsOwnerNativeGenerationCurrent" not in session or "public bool IsOwnerGenerationActive" not in session:
+    raise SystemExit("isolation ownership requires distinct native-generation and active-owner predicates")
 
 restore = method_body(
     "public void RestoreIsolation()",
     "public void ApplySectionFocus(IReadOnlyList<ObjectId> ids)",
 )
 for token in (
+    "if (!IsOwnerNativeGenerationCurrent)",
+    "AbandonStaleGenerationState();",
+    "RequireOwnerGeneration(\"Isolation restore\")",
     "if (!_isolationActive)",
+    "RestorePendingImpliedSelectionBestEffort();",
     "RestoreObjectIsolationModeBestEffort();",
     'SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);',
     "_isolationActive = false;",
 ):
     if token not in restore:
-        raise SystemExit(f"RestoreIsolation missing independently retry-owned cleanup token: {token}")
-retry_without_command = restore.find("if (!_isolationActive)")
-mode_retry = restore.find("RestoreObjectIsolationModeBestEffort();", retry_without_command)
+        raise SystemExit(f"RestoreIsolation missing generation/retry-owned cleanup token: {token}")
 queue = restore.find('SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);')
 release_command = restore.find("_isolationActive = false;", queue)
-if not (0 <= retry_without_command < mode_retry < queue < release_command):
-    raise SystemExit("RestoreIsolation must retry pending mode compensation without re-queueing UNISOLATE and release command ownership only after queue success")
-if owner_affine:
-    owner_guard = restore.find("if (!IsOwnerDocumentActive)")
-    if owner_guard < 0 or owner_guard >= queue:
-        raise SystemExit("owner-affine RestoreIsolation must refuse inactive-owner mutation before queueing UNISOLATE")
+if queue < 0 or release_command < queue:
+    raise SystemExit("RestoreIsolation must release command ownership only after queue success")
 
 mode_restore = method_body(
     "private void RestoreObjectIsolationModeBestEffort()",
@@ -62,10 +57,6 @@ for token in (
 ):
     if token not in mode_restore:
         raise SystemExit(f"mode restore ownership helper missing: {token}")
-attempt = mode_restore.find("TryRestoreObjectIsolationModeBestEffort(value)")
-release = mode_restore.find("_objectIsolationModeBefore = null;")
-if attempt < 0 or release < attempt:
-    raise SystemExit("OBJECTISOLATIONMODE retry ownership may clear only after a successful native restore attempt")
 
 try_restore = method_body(
     "private bool TryRestoreObjectIsolationModeBestEffort(object? modeBefore)",
@@ -73,63 +64,39 @@ try_restore = method_body(
 )
 for token in (
     "if (modeBefore == null) return true;",
+    "if (!IsOwnerNativeGenerationCurrent)",
+    "AbandonStaleGenerationState();",
+    "if (!IsOwnerGenerationActive) return false;",
     'Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore);',
     "return true;",
     "catch",
     "return false;",
 ):
     if token not in try_restore:
-        raise SystemExit(f"native mode restore attempt must report success/failure without throwing: {token}")
-if owner_affine:
-    owner_guard = try_restore.find("if (!IsOwnerDocumentActive) return false;")
-    native_write = try_restore.find('Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore);')
-    if owner_guard < 0 or native_write < 0 or owner_guard >= native_write:
-        raise SystemExit("owner-affine mode restore must fail closed before application-level OBJECTISOLATIONMODE mutation")
+        raise SystemExit(f"native mode restore must report generation-safe success/failure: {token}")
 
 isolate = method_body(
     "public void Isolate(IReadOnlyList<ObjectId> ids)",
     "public void RestoreIsolation()",
 )
 for token in (
-    "var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable(\"OBJECTISOLATIONMODE\");",
-    "RestoreImpliedSelectionBestEffort(impliedSelectionBefore);",
-    "if (!TryRestoreObjectIsolationModeBestEffort(modeBefore))",
+    "if (!TryRestoreImpliedSelectionBestEffort(impliedSelectionBefore) && !_generationAbandoned)",
+    "_impliedSelectionBeforeIsolation = impliedSelectionBefore;",
+    "if (!TryRestoreObjectIsolationModeBestEffort(modeBefore) && !_generationAbandoned)",
     "_objectIsolationModeBefore = modeBefore;",
     "throw;",
 ):
     if token not in isolate:
         raise SystemExit(f"failed isolate launch rollback ownership missing: {token}")
-catch_at = isolate.find("catch")
-compensate_at = isolate.find("if (!TryRestoreObjectIsolationModeBestEffort(modeBefore))", catch_at)
-transfer_at = isolate.find("_objectIsolationModeBefore = modeBefore;", compensate_at)
-throw_at = isolate.find("throw;", transfer_at)
-success_publish_at = isolate.rfind("_objectIsolationModeBefore = modeBefore;")
-queue_at = isolate.find('SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);')
-if not (0 <= queue_at < catch_at < compensate_at < transfer_at < throw_at):
-    raise SystemExit("failed Isolate compensation must transfer exact prior mode before original exception rethrow")
-if success_publish_at <= queue_at:
-    raise SystemExit("successful Isolate mode ownership must still publish only after native queue success")
-if "TryRestoreObjectIsolationModeBestEffort(modeBefore);\n                    throw;" in isolate:
-    raise SystemExit("failed Isolate launch still discards the mode-compensation result")
-if owner_affine:
-    owner_guard = isolate.find("if (!IsOwnerDocumentActive)")
-    mode_read = isolate.find('GetSystemVariable("OBJECTISOLATIONMODE")')
-    if owner_guard < 0 or mode_read < 0 or owner_guard >= mode_read:
-        raise SystemExit("owner-affine Isolate must reject inactive-owner mutation before reading/writing application-level isolation mode")
 
 abandon = method_body(
     "public void AbandonDestroyedDocumentState()",
-    "private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)",
+    "private bool TryRestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)",
 )
-restore_attempt = abandon.find("RestoreObjectIsolationModeBestEffort();")
-explicit_abandon = abandon.find("_objectIsolationModeBefore = null;")
-if owner_affine:
-    if restore_attempt >= 0:
-        raise SystemExit("owner-affine destroyed-document path must not publish saved OBJECTISOLATIONMODE through a foreign active document")
-    if explicit_abandon < 0:
-        raise SystemExit("owner-affine destroyed-document path must explicitly abandon terminal mode ownership")
-else:
-    if restore_attempt < 0 or explicit_abandon < restore_attempt:
-        raise SystemExit("legacy destroyed-document path must attempt mode restore before explicitly abandoning remaining mode ownership")
+for token in ("_objectIsolationModeBefore = null;", "_impliedSelectionBeforeIsolation = null;"):
+    if token not in abandon:
+        raise SystemExit("destroyed-document path must abandon terminal isolation cleanup debt: " + token)
+if "RestoreObjectIsolationModeBestEffort();" in abandon:
+    raise SystemExit("destroyed-document path must not restore isolation mode through another active host context")
 
-print("PASS coordination review isolation mode restore and failed-launch rollback retry ownership")
+print("PASS coordination review isolation restore and failed-launch cleanup ownership is native-generation safe")
