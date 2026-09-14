@@ -35,7 +35,7 @@ namespace QS3D.Core.SmokeTests
             Equal(1, bundle.Concrete.Count, "concrete row count");
             Equal(1, bundle.Formwork.Count, "formwork row count");
             Equal(0.54d, bundle.Concrete[0].Quantity, "corrected concrete volume");
-            Equal(3.6d, bundle.Formwork[0].Quantity, "corrected formwork area");
+            Equal(6.0d, bundle.Formwork[0].Quantity, "corrected formwork area");
             Equal(ComponentRecognitionStatus.Corrected, bundle.Concrete[0].ReviewStatus, "downstream review status");
             True(ReferenceEquals(evidence, bundle.Concrete[0].Evidence), "downstream evidence identity preserved");
         }
