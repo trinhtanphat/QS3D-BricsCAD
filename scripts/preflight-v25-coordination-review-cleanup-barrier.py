@@ -23,28 +23,38 @@ validated_failure = '''catch (Exception ex)\n                {\n                
 if validated_failure not in text:
     failures.append("RunValidated failure does not fail closed when a native effect leaves transient cleanup debt")
 
-# Preserve the fail-closed UX and retry affordances around the corrected state transition.
 for contract in (
     'if (_cleanupBarrier)',
     'var cleanupFailure = _session.TryResetTransientStateBestEffort();',
+    'private bool IsOwnerDocumentGenerationActive',
+    'var ownerActive = IsOwnerDocumentGenerationActive;',
 ):
     if contract not in text:
         failures.append("review cleanup/action-state contract changed unexpectedly: " + contract)
 
-for legacy, owner_affine in (
-    ('_highlight.IsEnabled = mutationsAllowed;', '_highlight.IsEnabled = ownerActive && mutationsAllowed;'),
-    ('_isolate.IsEnabled = mutationsAllowed;', '_isolate.IsEnabled = ownerActive && mutationsAllowed;'),
-    ('_section.IsEnabled = mutationsAllowed;', '_section.IsEnabled = ownerActive && mutationsAllowed;'),
-    ('_clearHighlight.IsEnabled = _session.HasHighlight;', '_clearHighlight.IsEnabled = ownerActive && _session.HasHighlight;'),
-    ('_restoreIsolation.IsEnabled = _session.HasIsolation;', '_restoreIsolation.IsEnabled = ownerActive && _session.HasIsolation;'),
-    ('_restoreView.IsEnabled = _session.HasSectionView;', '_restoreView.IsEnabled = ownerActive && _session.HasSectionView;'),
+for owner_affine in (
+    '_highlight.IsEnabled = ownerActive && mutationsAllowed;',
+    '_isolate.IsEnabled = ownerActive && mutationsAllowed;',
+    '_section.IsEnabled = ownerActive && mutationsAllowed;',
+    '_clearHighlight.IsEnabled = ownerActive && _session.HasHighlight;',
+    '_restoreIsolation.IsEnabled = ownerActive && _session.HasIsolation;',
+    '_restoreView.IsEnabled = ownerActive && _session.HasSectionView;',
 ):
-    if legacy not in text and owner_affine not in text:
-        failures.append("review cleanup/action-state contract changed unexpectedly: " + legacy)
+    if owner_affine not in text:
+        failures.append("generation-aware action-state contract changed unexpectedly: " + owner_affine)
 
-if "ownerActive &&" in text:
-    if "var ownerActive = IsOwnerDocumentActive;" not in text:
-        failures.append("owner-affine action state must derive button enablement from IsOwnerDocumentActive")
+# A foreign MDI document is not itself native-generation drift. The controller may
+# disable mutations while inactive, but must retain same-generation cleanup debt.
+activated_start = text.find("private void OnDocumentActivated")
+activated_end = text.find("private void OnDocumentToBeDestroyed", activated_start)
+activated = text[activated_start:activated_end] if activated_start >= 0 and activated_end > activated_start else ""
+for contract in (
+    'if (!_session.IsOwnerNativeGenerationCurrent)',
+    'AbandonStaleGenerationIfNeeded();',
+    '_cleanupBarrier = _session.HasTransientState;',
+):
+    if contract not in activated:
+        failures.append("DocumentActivated must distinguish stale native generation from foreign MDI activity: " + contract)
 
 if failures:
     for failure in failures:
