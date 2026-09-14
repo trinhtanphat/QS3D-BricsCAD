@@ -69,11 +69,12 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Beam Rebar 3D: semantic Beam target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
                 RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
-                var count = BeamRebarSolidBuilder.BuildSelected(document, project, selectedIds);
+                var outcome = BeamRebarSolidBuilder.BuildSelected(document, project, selectedIds);
+                var count = outcome.Count;
                 var message = count == 0
                     ? SelectionGuidance
                     : "Cốt thép 3D Dầm: đã tạo/cập nhật " + count + " thanh dọc.";
-                FinalizeUi(document, nativeDatabaseIdentity, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message, outcome.PostCommitCleanupWarning);
             }
             catch (Exception)
             {
@@ -87,18 +88,19 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)
         {
             if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            var visibleMessage = postCommitCleanupWarning ? message + " " + UiSyncWarning : message;
             try
             {
                 RefreshModelTree(document, nativeDatabaseIdentity);
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.Regen();
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                TrySetPaletteStatus(document, nativeDatabaseIdentity, message);
+                TrySetPaletteStatus(document, nativeDatabaseIdentity, visibleMessage);
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                document.Editor.WriteMessage("\nQS3D " + message);
+                document.Editor.WriteMessage("\nQS3D " + visibleMessage);
             }
             catch (Exception ex)
             {
