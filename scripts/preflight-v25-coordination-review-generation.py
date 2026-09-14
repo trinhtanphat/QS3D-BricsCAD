@@ -25,7 +25,6 @@ for token, message in (
     ("public bool IsOwnerNativeGenerationCurrent", "review session needs a native-generation predicate independent of MDI activity"),
     ("public bool IsOwnerGenerationActive", "review session needs a separate active-owner predicate"),
     ("_document.Database.UnmanagedObject == _nativeDatabaseIdentity", "generation predicate must compare exact native database identity"),
-    ("private void AbandonStaleGenerationState()", "stale generation state needs an abandon-without-native-write path"),
     ("private ObjectId[]? _impliedSelectionBeforeIsolation;", "failed isolation must retain implied-selection compensation debt"),
     ("HasIsolation => _isolationActive || _objectIsolationModeBefore != null || _impliedSelectionBeforeIsolation != null", "pending implied selection must keep isolation cleanup ownership alive"),
 ):
@@ -38,6 +37,17 @@ active_predicate = method("public bool IsOwnerGenerationActive", "private static
 for token in ("IsOwnerNativeGenerationCurrent", "MdiActiveDocument"):
     if token not in active_predicate:
         errors.append("active-owner predicate must combine native generation and MDI activity: " + token)
+
+abandon_state = method("void AbandonStaleGenerationState()", "public void Highlight")
+if not abandon_state:
+    errors.append("stale generation state needs an abandon-without-native-write method regardless of accessibility")
+else:
+    for token in ("_generationAbandoned = true;", "_highlighted.Clear();", "_isolationActive = false;", "_objectIsolationModeBefore = null;", "_impliedSelectionBeforeIsolation = null;", "_viewBeforeSection = null;"):
+        if token not in abandon_state:
+            errors.append("stale generation abandon must discard generation-owned transient debt: " + token)
+    for forbidden in ("LockDocument(", "StartTransaction(", "SetImpliedSelection(", "SetSystemVariable(", "SendStringToExecute(", "SetCurrentView("):
+        if forbidden in abandon_state:
+            errors.append("stale generation abandon must not write native state: " + forbidden)
 
 for signature, next_signature, action in (
     ("public void Highlight(IReadOnlyList<ObjectId> ids)", "private IReadOnlyList<ObjectId> UnhighlightAttemptBestEffort", "highlight"),
