@@ -33,6 +33,20 @@ namespace QS3D.BricsCAD.V25.UI
                 try
                 {
                     var registration = Registrations.GetValue(window, key => new Registration(key, document));
+                    if (registration.HasFailedInitialAttach)
+                    {
+                        registration.TryCompleteFailedInitialAttachCleanup();
+                        if (!registration.CanRestartAfterFailedInitialAttach)
+                            throw new InvalidOperationException("A previous modeless QS3D window attach failed and its native lifecycle cleanup is still pending.");
+
+                        if (!Registrations.TryGetValue(window, out var failedRegistration) ||
+                            !ReferenceEquals(failedRegistration, registration))
+                            throw new InvalidOperationException("The modeless QS3D window registration changed while failed-attach cleanup was being finalized.");
+
+                        Registrations.Remove(window);
+                        registration = Registrations.GetValue(window, key => new Registration(key, document));
+                    }
+
                     var wasAttached = registration.IsAttached;
                     try
                     {
@@ -40,7 +54,7 @@ namespace QS3D.BricsCAD.V25.UI
                     }
                     catch
                     {
-                        if (!wasAttached &&
+                        if (!wasAttached && registration.CanRestartAfterFailedInitialAttach &&
                             Registrations.TryGetValue(window, out var currentRegistration) &&
                             ReferenceEquals(currentRegistration, registration))
                         {
@@ -65,6 +79,7 @@ namespace QS3D.BricsCAD.V25.UI
             private IDisposable? _nativeLifecycleSubscription;
             private bool _attached;
             private bool _projectAffinityBound;
+            private bool _initialAttachFailed;
             private int _invalidated;
             private int _documentCloseStarted;
             private int _windowClosedDuringQuiescence;
@@ -72,6 +87,11 @@ namespace QS3D.BricsCAD.V25.UI
             private string _drawingFingerprint = string.Empty;
 
             public bool IsAttached => _attached;
+            public bool HasFailedInitialAttach => _initialAttachFailed;
+            public bool CanRestartAfterFailedInitialAttach =>
+                _initialAttachFailed &&
+                !_attached &&
+                _nativeLifecycleSubscription == null;
 
             public Registration(Window window, Document document)
             {
@@ -119,9 +139,11 @@ namespace QS3D.BricsCAD.V25.UI
                     _window.PreviewKeyDown += OnPreviewKeyDown;
                     _window.Closed += OnWindowClosed;
                     _attached = true;
+                    _initialAttachFailed = false;
                 }
                 catch
                 {
+                    _initialAttachFailed = true;
                     _attached = true;
                     Detach();
                     _projectAffinityBound = false;
@@ -132,6 +154,13 @@ namespace QS3D.BricsCAD.V25.UI
                     _drawingFingerprint = string.Empty;
                     throw;
                 }
+            }
+
+            public void TryCompleteFailedInitialAttachCleanup()
+            {
+                if (!_initialAttachFailed) return;
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
+                if (_attached) Detach();
             }
 
             private static IntPtr GetNativeDatabaseIdentity(Document document)
