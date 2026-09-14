@@ -50,8 +50,8 @@ if not (0 <= first_gate < restore < second_gate < reject < first_mutation):
     raise SystemExit("FAIL coordination isolate pending mode barrier: prior isolation ownership must be drained and rechecked before any host-state observation/mutation")
 
 for fence in (
-    'RequireOwnerGeneration("Isolation / PICKFIRST capture")',
-    'RequireOwnerGeneration("Isolation / mode capture")',
+    'RequireOwnerGeneration("Isolation / capture")',
+    'RequireOwnerGeneration("Isolation / system variable read")',
     'RequireOwnerGeneration("Isolation / command dispatch")',
     'RequireOwnerGeneration("Isolation / publication")',
 ):
