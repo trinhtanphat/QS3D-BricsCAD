@@ -407,7 +407,7 @@ namespace QS3D.BricsCAD.V25
                         "desktop_sequence failed at step " + (i + 1).ToString(CultureInfo.InvariantCulture)
                         + " (" + step.Tool + ") after " + completed.ToString(CultureInfo.InvariantCulture)
                         + " completed step(s). Sequence execution is fail-fast. Sequence does not roll back completed steps. Cause: "
-                        + ex.Message, ex);
+                        + McpPublicTextSanitizer.Sanitize(ex.ToString()), ex);
                 }
             }
 

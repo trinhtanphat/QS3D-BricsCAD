@@ -108,7 +108,7 @@ namespace QS3D.BricsCAD.V25
                         unchecked { _consentGeneration++; }
                     }
                     ReleaseKeyboardHook();
-                    throw new InvalidOperationException("Không resume được MCP Agent khi bật quyền desktop: " + ex.Message, ex);
+                    throw new InvalidOperationException("Không resume được MCP Agent khi bật quyền desktop: " + McpPublicTextSanitizer.Sanitize(ex.ToString()), ex);
                 }
             }
 
@@ -221,6 +221,7 @@ namespace QS3D.BricsCAD.V25
 
         private static string BoundMessage(string value)
         {
+            value = McpPublicTextSanitizer.Sanitize(value);
             value = (value ?? string.Empty).Replace("\0", string.Empty).Trim();
             return value.Length <= 300 ? value : value.Substring(0, 300);
         }
@@ -264,7 +265,7 @@ namespace QS3D.BricsCAD.V25
                     {
                         McpAgentExperience.Error(
                             "desktop-control",
-                            "Emergency Stop thành công nhưng không gửi được CAD cancel: " + BoundMessage(ex.Message),
+                            "Emergency Stop thành công nhưng không gửi được CAD cancel: " + BoundMessage(McpPublicTextSanitizer.Sanitize(ex.ToString())),
                             "Nếu BricsCAD command vẫn chờ input, nhấn Esc trực tiếp trong BricsCAD.");
                     }
                 });
