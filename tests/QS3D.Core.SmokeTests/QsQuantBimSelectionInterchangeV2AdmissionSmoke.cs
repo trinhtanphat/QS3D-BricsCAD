@@ -36,17 +36,9 @@ namespace QS3D.Core.SmokeTests
             var unknownEncoded = QuantBimSelectionInterchangeV2Codec.Encode(unknownPackage);
             Expect<InvalidOperationException>(() => new QuantBimSelectionInterchangeV2Admission().Admit(session, unknownEncoded), "unknown selection guid");
 
-            var ambiguous = QuantBimStandaloneIfcSession.Parse("generation-bound.ifc", Ifc("G1", "G1"));
-            var ambiguousPackage = new QuantBimSelectionInterchangePackage(
-                ambiguous.Path,
-                ambiguous.Revision,
-                "Review set",
-                new[] { "G1" },
-                bundle.BoqCsv,
-                bundle.EvidenceCsv);
-            Expect<InvalidOperationException>(() => new QuantBimSelectionInterchangeV2Admission().Admit(
-                ambiguous,
-                QuantBimSelectionInterchangeV2Codec.Encode(ambiguousPackage)), "ambiguous selection guid");
+            Expect<System.IO.InvalidDataException>(
+                () => QuantBimStandaloneIfcSession.Parse("generation-bound.ifc", Ifc("G1", "G1")),
+                "duplicate IFC GlobalId parser invariant");
         }
 
         private static string Ifc(params string[] guids)
