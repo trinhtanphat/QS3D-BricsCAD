@@ -29,7 +29,6 @@ for label, (relative, semantic_call) in families.items():
         "transaction.Commit();",
         "cadCommitted = true",
         "catch (Exception operationError)",
-        "if (!cadCommitted)",
         "rollback.Restore(project)",
         "AggregateException(operationError, restoreError)",
         semantic_call,
@@ -37,6 +36,15 @@ for label, (relative, semantic_call) in families.items():
     ):
         if token not in text:
             errors.append(label + ": missing generated replacement contract: " + token)
+
+    if "if (!cadCommitted)" not in text:
+        beam_committed_cleanup = (
+            label == "beam longitudinal"
+            and "if (cadCommitted)" in text
+            and "return new BeamRebarBuildOutcome(totalBars, postCommitCleanupWarning: true);" in text
+        )
+        if not beam_committed_cleanup:
+            errors.append(label + ": missing generated replacement rollback/committed-cleanup discriminator")
 
     semantic = text.find(semantic_call)
     commit = text.find("transaction.Commit();", semantic if semantic >= 0 else 0)
