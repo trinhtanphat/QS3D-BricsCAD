@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import hashlib
 import json
 import os
@@ -21,32 +22,25 @@ CRITICAL_PROVENANCE_FIELDS = (
     "hostReferences",
 )
 
-unique_loop = "foreach ($propertyName in @('product', 'target', 'releaseTag', 'sourceCommit', 'productVersion', 'packageSha256', 'installerSha256', 'hostReferences'))"
-if unique_loop not in ASSERT:
+set_match = re.search(r"\$provenanceExpectedPropertyCounts\s*=\s*@\{([^}]*)\}", ASSERT)
+if set_match is None:
     raise SystemExit(
-        "FAIL v26 provenance unique identity: release-critical provenance properties are not all uniqueness-checked before parsing"
+        "FAIL v26 provenance unique identity: path-scoped provenance property-count set is missing"
+    )
+set_keys = tuple(re.findall(r"([A-Za-z][A-Za-z0-9]*)\s*=\s*1\b", set_match.group(1)))
+if len(set_keys) != len(CRITICAL_PROVENANCE_FIELDS) or set(set_keys) != set(CRITICAL_PROVENANCE_FIELDS):
+    raise SystemExit(
+        "FAIL v26 provenance unique identity: release-critical provenance property-count set drifted"
     )
 
 parse_token = "$provenance = $provenanceText | ConvertFrom-Json -ErrorAction Stop"
-loop_at = ASSERT.find(unique_loop)
-parse_at = ASSERT.find(parse_token)
-if parse_at < 0 or loop_at < 0 or loop_at >= parse_at:
+parse_at = ASSERT.find(parse_token, set_match.start())
+assert_token = "Assert-JsonPropertyCounts -JsonText $provenanceText -ExpectedPropertyCounts $provenanceExpectedPropertyCounts"
+assert_at = ASSERT.find(assert_token, set_match.start(), parse_at if parse_at >= 0 else len(ASSERT))
+if parse_at < 0 or assert_at < 0 or not set_match.start() < assert_at < parse_at:
     raise SystemExit(
-        "FAIL v26 provenance unique identity: byte-level duplicate checks must precede ConvertFrom-Json provenance parsing"
+        "FAIL v26 provenance unique identity: path-scoped duplicate checks must precede ConvertFrom-Json provenance parsing"
     )
-
-loop_body_end = ASSERT.find("try { $provenance =", loop_at)
-if loop_body_end < 0:
-    raise SystemExit("FAIL v26 provenance unique identity: uniqueness loop is not adjacent to provenance parsing")
-loop_body = ASSERT[loop_at:loop_body_end]
-for token in (
-    "Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName $propertyName",
-    'throw "V26 candidate provenance must contain exactly one $propertyName property."',
-):
-    if token not in loop_body:
-        raise SystemExit(
-            f"FAIL v26 provenance unique identity: uniqueness loop is missing required fail-closed behavior: {token}"
-        )
 
 
 def run_windows_duplicate_behavior() -> None:
