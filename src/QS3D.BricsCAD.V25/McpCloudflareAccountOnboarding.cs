@@ -34,7 +34,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                document.Editor.WriteMessage("\nQS3D MCP account setup lỗi: " + ex.Message);
+                document.Editor.WriteMessage("\nQS3D MCP account setup lỗi: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
         }
     }
@@ -245,7 +245,7 @@ namespace QS3D.BricsCAD.V25
                         File.Delete(CertificatePath);
                 }
                 catch { }
-                error = "Không nhập được cert.pem: " + ex.Message;
+                error = "Không nhập được cert.pem: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 SetState(error, error);
                 return false;
             }
@@ -314,7 +314,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                error = "Không ghi lại được Named Tunnel config an toàn: " + ex.Message;
+                error = "Không ghi lại được Named Tunnel config an toàn: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 return false;
             }
             McpCloudflareTunnelManager.StopForHostShutdown();
@@ -343,7 +343,7 @@ namespace QS3D.BricsCAD.V25
                     }
                     catch (Exception ex)
                     {
-                        SetState("Named Tunnel auto-start failed.", ex.Message);
+                        SetState("Named Tunnel auto-start failed.", McpPublicTextSanitizer.Sanitize(ex.ToString()));
                     }
                     finally
                     {
@@ -354,7 +354,7 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex)
             {
                 Interlocked.Exchange(ref _autoStartWorkerActive, 0);
-                SetState("Named Tunnel auto-start scheduling failed.", ex.Message);
+                SetState("Named Tunnel auto-start scheduling failed.", McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
         }
 
@@ -405,7 +405,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                error = "Không lưu được Named Tunnel config: " + ex.Message;
+                error = "Không lưu được Named Tunnel config: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 return false;
             }
 
@@ -781,7 +781,7 @@ namespace QS3D.BricsCAD.V25
                     return false;
                 }
             }
-            catch (Exception ex) { error = ex.Message; return false; }
+            catch (Exception ex) { error = McpPublicTextSanitizer.Sanitize(ex.ToString()); return false; }
         }
 
         private static void AppendBounded(StringBuilder builder, string line)
@@ -882,7 +882,7 @@ namespace QS3D.BricsCAD.V25
                     _publicReady = false;
                 }
                 try { process?.Dispose(); } catch { }
-                error = ex.Message;
+                error = McpPublicTextSanitizer.Sanitize(ex.ToString());
                 SetState(error, error);
                 return false;
             }
@@ -1421,8 +1421,8 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                _lastUiDetail = ex.ToString();
-                Notify("Không kết nối được", Friendly(ex.Message));
+                _lastUiDetail = McpPublicTextSanitizer.Sanitize(ex.ToString());
+                Notify("Không kết nối được", Friendly(McpPublicTextSanitizer.Sanitize(ex.ToString())));
                 EndConnectOperation();
             }
         }
@@ -1618,8 +1618,8 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                _lastUiDetail = ex.ToString();
-                Notify("MCP local lỗi", Friendly(ex.Message));
+                _lastUiDetail = McpPublicTextSanitizer.Sanitize(ex.ToString());
+                Notify("MCP local lỗi", Friendly(McpPublicTextSanitizer.Sanitize(ex.ToString())));
             }
         }
 
@@ -1656,8 +1656,8 @@ namespace QS3D.BricsCAD.V25
                    + "\nQuick/token tunnel: " + (McpCloudflareTunnelManager.IsRunning ? "RUNNING" : "STOPPED")
                    + "\nPublic MCP: " + (string.IsNullOrWhiteSpace(publicUrl) ? "chưa có" : publicUrl)
                    + (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.LastMessage) ? string.Empty : "\nStatus: " + McpCloudflareAccountTunnelManager.LastMessage)
-                   + (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.LastError) ? string.Empty : "\nCloudflare detail: " + McpCloudflareAccountTunnelManager.LastError)
-                   + (string.IsNullOrWhiteSpace(_lastUiDetail) ? string.Empty : "\nUI detail: " + _lastUiDetail);
+                   + (string.IsNullOrWhiteSpace(McpCloudflareAccountTunnelManager.LastError) ? string.Empty : "\nCloudflare detail: " + McpPublicTextSanitizer.Sanitize(McpCloudflareAccountTunnelManager.LastError))
+                   + (string.IsNullOrWhiteSpace(_lastUiDetail) ? string.Empty : "\nUI detail: " + McpPublicTextSanitizer.Sanitize(_lastUiDetail));
         }
 
         private void Notify(string title, string message)
