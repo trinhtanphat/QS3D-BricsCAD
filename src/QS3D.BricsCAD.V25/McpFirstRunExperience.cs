@@ -167,7 +167,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                McpAgentExperience.Error("onboarding", "Không mở được MCP Agent Center từ toast: " + ex.Message,
+                McpAgentExperience.Error("onboarding", "Không mở được MCP Agent Center từ toast: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                     "Chạy command QS3DMCPAGENTCENTER trong BricsCAD.");
             }
         }
