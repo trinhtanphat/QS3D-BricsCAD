@@ -58,7 +58,7 @@ def _require_helper(helper: str) -> None:
         "$SourceSha",
         "$CurrentMainSha",
         "$releaseRelevantPathspecs = @(",
-        '& git diff --quiet --no-ext-diff "$SourceSha..$CurrentMainSha" -- @releaseRelevantPathspecs',
+        '& git diff --quiet --no-ext-diff "$source..$currentMain" -- @releaseRelevantPathspecs',
         "$releaseDriftStatus = $LASTEXITCODE",
         "if ($releaseDriftStatus -eq 1)",
         "if ($releaseDriftStatus -ne 0)",
@@ -110,10 +110,35 @@ def validate(workflow: str, helper: str) -> None:
     )
 
 
+def _remove_once(text: str, token: str) -> str:
+    index = text.find(token)
+    if index < 0:
+        raise GuardFailure(f"mutation fixture could not find token: {token}")
+    return text[:index] + text[index + len(token):]
+
+
+def _must_reject(workflow: str, helper: str, label: str) -> None:
+    try:
+        validate(workflow, helper)
+    except GuardFailure:
+        return
+    raise GuardFailure(f"mutation self-check was not rejected: {label}")
+
+
 def main() -> int:
     workflow = WORKFLOW.read_text(encoding="utf-8")
     helper = HELPER.read_text(encoding="utf-8")
     validate(workflow, helper)
+
+    fetch = "git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'"
+    call = ".\\scripts\\assert-v26-release-main-drift.ps1 -SourceSha $env:GITHUB_SHA -CurrentMainSha $currentMain"
+    _must_reject(_remove_once(workflow, fetch), helper, "missing qualification main refresh")
+    _must_reject(_remove_once(workflow, call), helper, "missing qualification drift admission")
+    _must_reject(workflow.replace(fetch, "# removed publication refresh", 2), helper, "missing publication main refresh")
+    _must_reject(workflow.replace(call, "# removed publication drift admission", 2), helper, "missing publication drift admission")
+    _must_reject(workflow, helper.replace("if ($releaseDriftStatus -eq 1) {", "if ($releaseDriftStatus -eq 2) {", 1), "drift status no longer rejected")
+    _must_reject(workflow, helper.replace("if ($releaseDriftStatus -ne 0) {", "if ($releaseDriftStatus -eq 0) {", 1), "git diff errors no longer fail closed")
+
     print("PASS: V26 release re-admits exact workflow SHA against release-relevant protected-main drift before qualification and publication.")
     return 0
 
