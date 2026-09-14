@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             QaGateRejectsNonFiniteDimensions();
             CalibratedTwoDimensionalTakeoff();
             Qs2DTakeoffWorkflowSmoke.Run();
+            Qs2DQuantityAggregationPrecisionSmoke.Run();
             QsTakeoffPackageUxSmoke.Run();
             QsTakeoffPackageRevisionNumericPrecisionSmoke.Run();
             WorkbookLiveLinkRefresh();
