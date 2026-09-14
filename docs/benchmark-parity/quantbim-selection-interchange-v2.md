@@ -27,6 +27,8 @@ Decode validates the outer framing and digest before delegating to the V1 decode
 
 V1 remains unchanged and independently decodable. V2 is an additive wrapper and deliberately uses a new version header instead of changing V1 semantics. Systems that only understand V1 can continue using V1 packages; systems requiring whole-envelope integrity should use V2.
 
+The V2 wrapper is also deliberately transport-neutral: the same canonical text may be archived, attached to review evidence, or passed between standalone hosts without changing quantity or BOQ authority. Consumers must decode and validate the envelope before trusting its metadata or nested V1 payload.
+
 ## Evidence and security boundary
 
 The SHA-256 digest is an integrity checksum, not a signature or trust assertion. It detects accidental or uncoordinated modification of document/revision/selection/CSV identity but does not authenticate who produced the package. Commercial quantity remains authoritative only through the generation-bound IFC session and traceable evidence pipeline that created the original export bundle.
