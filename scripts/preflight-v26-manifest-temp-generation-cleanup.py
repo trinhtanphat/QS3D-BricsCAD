@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed unless V26 update-manifest temp cleanup is generation-owned."""
-
+"""Fail closed unless every generated V26 manifest dependency is generation-owned through cleanup."""
 from pathlib import Path
 import sys
 
@@ -13,54 +12,61 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def main() -> None:
-    try:
-        source = TARGET.read_text(encoding="utf-8")
-    except Exception as exc:
-        fail(f"cannot read {TARGET.relative_to(ROOT)}: {exc}")
-
+def validate(source: str) -> list[str]:
+    errors: list[str] = []
     required = {
-        "generated-script identity capture": "$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream",
-        "exact script cleanup": "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity",
-        "held workspace acquisition": "$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot",
-        "held workspace deletion": "Remove-HeldManifestWorkspace -Handle $workspaceHandle",
-        "native identity proof": "GetFileInformationByHandle(handle",
-        "native delete disposition": "SetFileInformationByHandle(handle",
-        "delete access": "GENERIC_READ | DELETE",
-        "directory share closes delete/rename": "FILE_SHARE_READ | FILE_SHARE_WRITE",
-        "directory backup semantics": "FILE_FLAG_BACKUP_SEMANTICS",
-        "reparse-open suppression": "FILE_FLAG_OPEN_REPARSE_POINT",
-        "reparse attribute rejection": "FILE_ATTRIBUTE_REPARSE_POINT",
+        "three-dependency generation plan": "$generationPlan = @(",
+        "validation-core dependency": "Source = 'new-v25-update-manifest-validation-core.ps1'",
+        "native-helper dependency": "Source = 'Qs3dV25UpdateManifestPublicationNative.cs'",
+        "wrapper dependency": "Source = 'new-v25-update-manifest.ps1'",
+        "held graph": "$heldGenerations = [Collections.Generic.List[object]]::new()",
+        "held admission": "$heldGenerations.Add([pscustomobject]@{ Admission = $admission; Path = $entry.Output; Label = $entry.Label })",
+        "graph revalidation": "Assert-HeldGeneratedTemplate -Admission $held.Admission -ExpectedPath $held.Path -Label $held.Label",
+        "per-generation identity": "$identity = [string]$held.Admission.Identity",
+        "per-generation stream dispose": "$held.Admission.Stream.Dispose()",
+        "exact generation cleanup": "Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity",
+        "held workspace cleanup": "Remove-HeldManifestWorkspace -Handle $workspaceHandle",
     }
     for label, token in required.items():
         if token not in source:
-            fail(f"missing {label}: {token}")
-
-    forbidden = (
-        "Remove-Item -LiteralPath $ScriptPath",
-        "Remove-Item -LiteralPath $RootPath",
+            errors.append(f"missing {label}: {token}")
+    for token in (
         "Remove-Item -LiteralPath $tempScript",
         "Remove-Item -LiteralPath $tempRoot",
+        "Remove-Item -LiteralPath $held.Path",
         "FILE_SHARE_DELETE",
-    )
-    for token in forbidden:
+    ):
         if token in source:
-            fail(f"unsafe temp-generation cleanup primitive remains: {token}")
+            errors.append(f"unsafe pathname/delete-share cleanup remains: {token}")
 
-    workspace_open = source.find("$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot")
-    generated_open = source.find("$generatedStream = [IO.File]::Open(")
-    capture = source.find("$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream")
-    invoke = source.find("& $tempScript @forward")
-    post_assert = source.find("Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript", invoke + 1)
-    dispose = source.find("$generatedStream.Dispose()", post_assert + 1)
-    script_cleanup = source.find("Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity", dispose + 1)
-    workspace_cleanup = source.find("Remove-HeldManifestWorkspace -Handle $workspaceHandle", script_cleanup + 1)
-    if min(workspace_open, generated_open, capture, invoke, post_assert, dispose, script_cleanup, workspace_cleanup) < 0:
-        fail("could not prove held-workspace/script identity lifecycle")
-    if not (workspace_open < generated_open < capture < invoke < post_assert < dispose < script_cleanup < workspace_cleanup):
-        fail("workspace must stay held while exact script generation is executed, validated, and safely deleted")
+    plan = source.find("$generationPlan = @(")
+    add = source.find("$heldGenerations.Add(", plan)
+    invoke = source.find("& $tempScript @forward", add)
+    cleanup_loop = source.find("for ($index = $heldGenerations.Count - 1; $index -ge 0; $index--)", invoke)
+    dispose = source.find("$held.Admission.Stream.Dispose()", cleanup_loop)
+    cleanup = source.find("Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity", dispose)
+    workspace = source.find("Remove-HeldManifestWorkspace -Handle $workspaceHandle", cleanup)
+    if min(plan, add, invoke, cleanup_loop, dispose, cleanup, workspace) < 0 or not (
+        plan < add < invoke < cleanup_loop < dispose < cleanup < workspace
+    ):
+        errors.append("graph lifecycle must be plan -> hold all dependencies -> invoke -> reverse dispose/exact cleanup -> held workspace cleanup")
+    return errors
 
-    print("PASS: V26 update-manifest script/workspace cleanup is exact non-reparse generation owned.")
+
+def main() -> None:
+    source = TARGET.read_text(encoding="utf-8")
+    errors = validate(source)
+    if errors:
+        fail("; ".join(errors))
+    probes = {
+        "held graph admission": source.replace("$heldGenerations.Add(", "# removed(", 1),
+        "exact generation cleanup": source.replace("Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity", "# removed", 1),
+        "workspace cleanup": source.replace("Remove-HeldManifestWorkspace -Handle $workspaceHandle", "# removed", 1),
+    }
+    for label, mutated in probes.items():
+        if not validate(mutated):
+            fail(f"mutation probe was not rejected: {label}")
+    print("PASS: V26 wrapper/core/native temp generations remain held, revalidated, and exact-generation cleaned.")
 
 
 if __name__ == "__main__":
