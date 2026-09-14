@@ -313,6 +313,112 @@ namespace QS3D.Core.Domain
         private void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
+    internal interface ICatalogMutationObserver<T> where T : class
+    {
+        void ValidateAdd(T item);
+        void CommitAdd(T item);
+        void ValidateReplace(T previous, T replacement);
+        void CommitReplace(T previous, T replacement);
+        void CommitRemove(T item);
+        void CommitClear();
+    }
+
+    internal sealed class AuditHistoryBudgetObserver : ICatalogMutationObserver<AuditEvent>
+    {
+        private sealed class ReferenceComparer : IEqualityComparer<AuditEvent>
+        {
+            internal static readonly ReferenceComparer Instance = new ReferenceComparer();
+            public bool Equals(AuditEvent? x, AuditEvent? y) => ReferenceEquals(x, y);
+            public int GetHashCode(AuditEvent obj) => RuntimeHelpers.GetHashCode(obj);
+        }
+
+        private readonly Dictionary<AuditEvent, int> _referenceCounts = new Dictionary<AuditEvent, int>(ReferenceComparer.Instance);
+        private int _storedCount;
+        private long _storedTextCharacters;
+
+        public void ValidateAdd(AuditEvent item)
+        {
+            if (_storedCount >= AuditTrail.MaxStoredEvents)
+                throw new InvalidOperationException("Audit trail already contains 10000 events and cannot record another event.");
+            RequireTextCapacity(AuditTrail.CountStoredTextCharacters(item));
+        }
+
+        public void CommitAdd(AuditEvent item)
+        {
+            _storedCount++;
+            _storedTextCharacters += AuditTrail.CountStoredTextCharacters(item);
+            if (_referenceCounts.TryGetValue(item, out var count)) _referenceCounts[item] = checked(count + 1);
+            else _referenceCounts.Add(item, 1);
+        }
+
+        public void ValidateReplace(AuditEvent previous, AuditEvent replacement)
+        {
+            var removed = AuditTrail.CountStoredTextCharacters(previous);
+            var added = AuditTrail.CountStoredTextCharacters(replacement);
+            var retained = _storedTextCharacters - removed;
+            if (retained < 0L || added > AuditTrail.MaxStoredTextCharacters - retained)
+                throw new InvalidOperationException("Audit trail text exceeds the supported aggregate text budget. Repair the existing audit history before modifying it.");
+        }
+
+        public void CommitReplace(AuditEvent previous, AuditEvent replacement)
+        {
+            _storedTextCharacters = _storedTextCharacters - AuditTrail.CountStoredTextCharacters(previous) + AuditTrail.CountStoredTextCharacters(replacement);
+            DecrementReference(previous);
+            IncrementReference(replacement);
+        }
+
+        public void CommitRemove(AuditEvent item)
+        {
+            _storedCount--;
+            _storedTextCharacters -= AuditTrail.CountStoredTextCharacters(item);
+            DecrementReference(item);
+        }
+
+        public void CommitClear()
+        {
+            _storedCount = 0;
+            _storedTextCharacters = 0L;
+            _referenceCounts.Clear();
+        }
+
+        internal void ValidateOwnedMutation(AuditEvent item, long perOccurrenceDelta)
+        {
+            if (!_referenceCounts.TryGetValue(item, out var count) || count <= 0)
+                throw new InvalidOperationException("Owned audit event is missing from project history accounting.");
+            var totalDelta = checked(perOccurrenceDelta * count);
+            if (totalDelta > 0L) RequireTextCapacity(totalDelta);
+            else if (totalDelta < 0L && _storedTextCharacters + totalDelta < 0L)
+                throw new InvalidOperationException("Audit trail text accounting would become negative.");
+        }
+
+        internal void CommitOwnedMutation(AuditEvent item, long perOccurrenceDelta)
+        {
+            if (!_referenceCounts.TryGetValue(item, out var count) || count <= 0)
+                throw new InvalidOperationException("Owned audit event is missing from project history accounting.");
+            _storedTextCharacters = checked(_storedTextCharacters + checked(perOccurrenceDelta * count));
+        }
+
+        private void RequireTextCapacity(long additionalCharacters)
+        {
+            if (additionalCharacters < 0L || additionalCharacters > AuditTrail.MaxStoredTextCharacters - _storedTextCharacters)
+                throw new InvalidOperationException("Audit trail text exceeds the supported aggregate text budget. Repair the existing audit history before modifying it.");
+        }
+
+        private void IncrementReference(AuditEvent item)
+        {
+            if (_referenceCounts.TryGetValue(item, out var count)) _referenceCounts[item] = checked(count + 1);
+            else _referenceCounts.Add(item, 1);
+        }
+
+        private void DecrementReference(AuditEvent item)
+        {
+            if (!_referenceCounts.TryGetValue(item, out var count) || count <= 0)
+                throw new InvalidOperationException("Audit history reference accounting is inconsistent.");
+            if (count == 1) _referenceCounts.Remove(item);
+            else _referenceCounts[item] = count - 1;
+        }
+    }
+
     internal sealed class CatalogOwnershipList<T> : IList<T> where T : class
     {
         private readonly List<T> _items = new List<T>();
@@ -320,18 +426,25 @@ namespace QS3D.Core.Domain
         private readonly Action<T> _detach;
         private readonly Action _beforeMutation;
         private readonly Action<T>? _validateCandidate;
+        private readonly ICatalogMutationObserver<T>? _mutationObserver;
 
         internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation)
-            : this(attach, detach, beforeMutation, null)
+            : this(attach, detach, beforeMutation, null, null)
         {
         }
 
         internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation, Action<T>? validateCandidate)
+            : this(attach, detach, beforeMutation, validateCandidate, null)
+        {
+        }
+
+        internal CatalogOwnershipList(Action<T> attach, Action<T> detach, Action beforeMutation, Action<T>? validateCandidate, ICatalogMutationObserver<T>? mutationObserver)
         {
             _attach = attach ?? throw new ArgumentNullException(nameof(attach));
             _detach = detach ?? throw new ArgumentNullException(nameof(detach));
             _beforeMutation = beforeMutation ?? throw new ArgumentNullException(nameof(beforeMutation));
             _validateCandidate = validateCandidate;
+            _mutationObserver = mutationObserver;
         }
 
         public T this[int index]
@@ -343,12 +456,14 @@ namespace QS3D.Core.Domain
                 var previous = _items[index];
                 if (ReferenceEquals(previous, value)) return;
                 _validateCandidate?.Invoke(value);
+                _mutationObserver?.ValidateReplace(previous, value);
                 var previousWasLastReference = CountReferences(previous) == 1;
                 var valueAlreadyOwned = ContainsReference(value);
                 _beforeMutation();
                 _items[index] = value;
                 if (previousWasLastReference && previous != null) _detach(previous);
                 if (!valueAlreadyOwned) _attach(value);
+                _mutationObserver?.CommitReplace(previous, value);
             }
         }
 
@@ -359,19 +474,23 @@ namespace QS3D.Core.Domain
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             _validateCandidate?.Invoke(item);
+            _mutationObserver?.ValidateAdd(item);
             var alreadyOwned = ContainsReference(item);
             _beforeMutation();
             _items.Add(item);
             if (!alreadyOwned) _attach(item);
+            _mutationObserver?.CommitAdd(item);
         }
 
         internal void AddRestoredPersistenceState(T item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
+            _mutationObserver?.ValidateAdd(item);
             var alreadyOwned = ContainsReference(item);
             _beforeMutation();
             _items.Add(item);
             if (!alreadyOwned) _attach(item);
+            _mutationObserver?.CommitAdd(item);
         }
 
         public void Clear()
@@ -397,6 +516,7 @@ namespace QS3D.Core.Domain
                 var item = owned[index];
                 if (item != null) _detach(item);
             }
+            _mutationObserver?.CommitClear();
         }
 
         public bool Contains(T item) => _items.Contains(item);
@@ -410,10 +530,12 @@ namespace QS3D.Core.Domain
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (index < 0 || index > _items.Count) throw new ArgumentOutOfRangeException(nameof(index));
             _validateCandidate?.Invoke(item);
+            _mutationObserver?.ValidateAdd(item);
             var alreadyOwned = ContainsReference(item);
             _beforeMutation();
             _items.Insert(index, item);
             if (!alreadyOwned) _attach(item);
+            _mutationObserver?.CommitAdd(item);
         }
 
         public bool Remove(T item)
@@ -431,6 +553,7 @@ namespace QS3D.Core.Domain
             _beforeMutation();
             _items.RemoveAt(index);
             if (detach && item != null) _detach(item);
+            _mutationObserver?.CommitRemove(item);
         }
 
         private bool ContainsReference(T item)
@@ -520,6 +643,7 @@ namespace QS3D.Core.Domain
     public sealed class ProjectState
     {
         public const int CurrentSchemaVersion = 4;
+        private readonly AuditHistoryBudgetObserver _auditHistoryBudget = new AuditHistoryBudgetObserver();
         private string _name;
         private string _drawingPath = string.Empty;
         private string _drawingFingerprint = string.Empty;
@@ -539,7 +663,7 @@ namespace QS3D.Core.Domain
             QuantityRules = new StructuralRevisionList<QuantityRule>(Touch);
             Metadata = new ProjectMetadataDictionary();
             MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(this, Metadata);
-            AuditEvents = new CatalogOwnershipList<AuditEvent>(AttachAuditEvent, DetachAuditEvent, Touch, ValidateAuditEventCandidate);
+            AuditEvents = new CatalogOwnershipList<AuditEvent>(AttachAuditEvent, DetachAuditEvent, Touch, ValidateAuditEventCandidate, _auditHistoryBudget);
         }
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -645,8 +769,20 @@ namespace QS3D.Core.Domain
         private void DetachFloor(FloorDefinition floor) => floor.PersistenceMutationRequested -= Touch;
         private void AttachFamily(ProjectFamily family) => family.PersistenceMutationRequested += Touch;
         private void DetachFamily(ProjectFamily family) => family.PersistenceMutationRequested -= Touch;
-        private void AttachAuditEvent(AuditEvent auditEvent) => auditEvent.PersistenceMutationRequested += Touch;
-        private void DetachAuditEvent(AuditEvent auditEvent) => auditEvent.PersistenceMutationRequested -= Touch;
+
+        private void AttachAuditEvent(AuditEvent auditEvent)
+        {
+            auditEvent.PersistenceTextMutationValidating += _auditHistoryBudget.ValidateOwnedMutation;
+            auditEvent.PersistenceMutationRequested += Touch;
+            auditEvent.PersistenceTextMutationCommitted += _auditHistoryBudget.CommitOwnedMutation;
+        }
+
+        private void DetachAuditEvent(AuditEvent auditEvent)
+        {
+            auditEvent.PersistenceTextMutationValidating -= _auditHistoryBudget.ValidateOwnedMutation;
+            auditEvent.PersistenceMutationRequested -= Touch;
+            auditEvent.PersistenceTextMutationCommitted -= _auditHistoryBudget.CommitOwnedMutation;
+        }
 
         private static void ValidateAuditEventCandidate(AuditEvent auditEvent)
         {
