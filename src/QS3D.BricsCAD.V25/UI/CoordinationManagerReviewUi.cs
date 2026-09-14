@@ -554,6 +554,7 @@ namespace QS3D.BricsCAD.V25.UI
             private readonly List<ObjectId> _highlighted = new List<ObjectId>();
             private bool _isolationActive;
             private object? _objectIsolationModeBefore;
+            private ObjectId[]? _impliedSelectionBeforeIsolation;
             private ViewSnapshot? _viewBeforeSection;
             private bool _destroyed;
             private bool _generationAbandoned;
@@ -569,7 +570,7 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             public bool HasHighlight => _highlighted.Count > 0;
-            public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;
+            public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null || _impliedSelectionBeforeIsolation != null;
             public bool HasSectionView => _viewBeforeSection != null;
             public bool HasTransientState => HasHighlight || HasIsolation || HasSectionView;
 
@@ -626,6 +627,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _highlighted.Clear();
                 _isolationActive = false;
                 _objectIsolationModeBefore = null;
+                _impliedSelectionBeforeIsolation = null;
                 _viewBeforeSection = null;
             }
 
@@ -791,7 +793,8 @@ namespace QS3D.BricsCAD.V25.UI
                 }
                 catch
                 {
-                    RestoreImpliedSelectionBestEffort(impliedSelectionBefore);
+                    if (!TryRestoreImpliedSelectionBestEffort(impliedSelectionBefore) && !_generationAbandoned)
+                        _impliedSelectionBeforeIsolation = impliedSelectionBefore;
                     if (!TryRestoreObjectIsolationModeBestEffort(modeBefore) && !_generationAbandoned)
                         _objectIsolationModeBefore = modeBefore;
                     throw;
@@ -811,6 +814,7 @@ namespace QS3D.BricsCAD.V25.UI
                 RequireOwnerGeneration("Isolation restore");
                 if (!_isolationActive)
                 {
+                    RestorePendingImpliedSelectionBestEffort();
                     RestoreObjectIsolationModeBestEffort();
                     return;
                 }
@@ -818,6 +822,7 @@ namespace QS3D.BricsCAD.V25.UI
                 {
                     _isolationActive = false;
                     _objectIsolationModeBefore = null;
+                    _impliedSelectionBeforeIsolation = null;
                     return;
                 }
 
@@ -825,6 +830,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _document.SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);
                 RequireOwnerGeneration("Isolation restore / publication");
                 _isolationActive = false;
+                RestorePendingImpliedSelectionBestEffort();
                 RestoreObjectIsolationModeBestEffort();
             }
 
@@ -1056,18 +1062,35 @@ namespace QS3D.BricsCAD.V25.UI
                 _isolationActive = false;
                 _viewBeforeSection = null;
                 _objectIsolationModeBefore = null;
+                _impliedSelectionBeforeIsolation = null;
             }
 
-            private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)
+            private bool TryRestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)
             {
-                if (impliedSelectionBefore == null || _destroyed) return;
+                if (impliedSelectionBefore == null || _destroyed) return true;
                 if (!IsOwnerNativeGenerationCurrent)
                 {
                     AbandonStaleGenerationState();
-                    return;
+                    return true;
                 }
-                if (!IsOwnerGenerationActive) return;
-                try { _document.Editor.SetImpliedSelection(impliedSelectionBefore); } catch { }
+                if (!IsOwnerGenerationActive) return false;
+                try
+                {
+                    _document.Editor.SetImpliedSelection(impliedSelectionBefore);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
+            private void RestorePendingImpliedSelectionBestEffort()
+            {
+                if (_impliedSelectionBeforeIsolation == null) return;
+                var pending = _impliedSelectionBeforeIsolation;
+                if (TryRestoreImpliedSelectionBestEffort(pending))
+                    _impliedSelectionBeforeIsolation = null;
             }
 
             private void RestoreObjectIsolationModeBestEffort()
