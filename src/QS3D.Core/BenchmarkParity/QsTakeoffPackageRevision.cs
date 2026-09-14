@@ -61,19 +61,10 @@ namespace QS3D.Core.BenchmarkParity
     {
         internal static double CompensatedSum(IEnumerable<double> values, string label)
         {
-            var sum = 0d;
-            var compensation = 0d;
+            var accumulator = new QS3D.Core.Reporting.QuantityReportMath.FiniteAccumulator();
             foreach (var value in values)
-            {
-                var next = sum + value;
-                var correction = Math.Abs(sum) >= Math.Abs(value) ? (sum - next) + value : (value - next) + sum;
-                sum = next;
-                compensation += correction;
-                if (double.IsNaN(sum) || double.IsInfinity(sum) || double.IsNaN(compensation) || double.IsInfinity(compensation)) throw new OverflowException(label + " exceeded the representable numeric range.");
-            }
-            var result = sum + compensation;
-            if (double.IsNaN(result) || double.IsInfinity(result)) throw new OverflowException(label + " exceeded the representable numeric range.");
-            return result == 0d ? 0d : result;
+                accumulator.Add(QsModelElementSnapshot.Finite(value, label), label);
+            return accumulator.Value(label);
         }
     }
 
