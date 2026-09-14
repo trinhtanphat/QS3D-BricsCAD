@@ -82,11 +82,11 @@ foreach ($HostMajor in @(25,26)) {
                     $UiDriver -cne $mode.UiDriver -or $PauseForOperator -ne $mode.Pause -or -not $ConfirmDisposableCopy) {
                     throw 'FAIL: wrapper changed runner mode or disposable authorization.'
                 }
-                $expectedHash = if ($HostMajor -eq 25) { 'bdb13f23208036f01880e57ab740066a9ce9a698e37a6ea0c4ff00d47aa454b4' }
-                    else { '3fda628c3bb37b9242076b68bf3cd1766cedd1d382b2a799ee655a8bd85effaf' }
+                $expectedHash = if ($HostMajor -eq 25) { '536a71a0c630ef6b1dcd9f3327efd177827853832cc8ff4d161a17cf56c44f65' }
+                    else { 'c90d88327b6b635c08e7aee4988989a121c9e4d069191207a4e09eab75fa9f20' }
                 $expectedTimeout = if ($mode.UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
                 $expectedFramework = if ($HostMajor -eq 25) { 'net48' } else { 'net8.0-windows' }
-                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne '21c7946447b1383efd53ee000d527b84acfc8969' -or
+                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne '17b09685478960299453bdb5dd00fdfbd4145a47' -or
                     $ProductDir -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor" -or
                     $PackageZip -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor.zip" -or
                     $ProbeDll -cne "C:\host-free-harness\tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$expectedFramework\QS3D.LocalQualification.V$HostMajor.dll" -or
@@ -123,7 +123,7 @@ function New-NativePredecessor {
     [pscustomobject]@{
         Receipt = [pscustomobject]@{
             schema='QS3D_LOCAL022_RECEIPT_V1'; run_id=('a' * 32); status='LOCAL_PASS_BOUNDED'
-            product_source_sha='21c7946447b1383efd53ee000d527b84acfc8969'; phases_verified=3
+            product_source_sha='17b09685478960299453bdb5dd00fdfbd4145a47'; phases_verified=3
             interactive_ui_executed=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
             private_cleanup_verified=$true; protected_state_unchanged=$true
             profile_cleanup=[pscustomobject]@{
@@ -133,8 +133,8 @@ function New-NativePredecessor {
         }
         Allocation = [pscustomobject]@{
             schema='QS3D_LOCAL022_ALLOCATION_V1'; run_id=('a' * 32); host_version='25.2.10'
-            product_source_sha='21c7946447b1383efd53ee000d527b84acfc8969'
-            package_sha256='bdb13f23208036f01880e57ab740066a9ce9a698e37a6ea0c4ff00d47aa454b4'
+            product_source_sha='17b09685478960299453bdb5dd00fdfbd4145a47'
+            package_sha256='536a71a0c630ef6b1dcd9f3327efd177827853832cc8ff4d161a17cf56c44f65'
             interactive_ui=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
         }
         Restoration = [pscustomobject]@{ restored=$true }
@@ -143,8 +143,8 @@ function New-NativePredecessor {
 function Invoke-PredecessorGate($Fixture, [bool]$Native=$true) {
     $HostMajor=26; $NativeApi=$Native; $UiDriver='NATIVE_V1'; $operatorWaitPolicy='WALL_CLOCK_V1'; $QuantityUi=$false
     $PrecedingV25Receipt='C:\host-free-receipts\native-v25\receipt.json'; $V26ProvenancePath='C:\host-free-provenance.json'
-    $source='21c7946447b1383efd53ee000d527b84acfc8969'
-    $v25PackageSha256='bdb13f23208036f01880e57ab740066a9ce9a698e37a6ea0c4ff00d47aa454b4'
+    $source='17b09685478960299453bdb5dd00fdfbd4145a47'
+    $v25PackageSha256='536a71a0c630ef6b1dcd9f3327efd177827853832cc8ff4d161a17cf56c44f65'
     $script:phaseAdmissionCalled=$false
     function Assert-Local022NativeV25Phases($RunnerPath,$EvidenceRoot,$ExpectedRunId) {
         if ((Split-Path $RunnerPath -Leaf) -cne 'test-bricscad-v25-single-footing.ps1' -or
