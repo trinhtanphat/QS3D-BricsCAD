@@ -160,6 +160,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (Entries.TryGetValue(entry.NativeDatabaseIdentity, out var current) && ReferenceEquals(current, entry))
                 {
+                    entry.ReleasePendingNativeDetachOwnershipAfterDestroy(document);
                     Entries.Remove(entry.NativeDatabaseIdentity);
                     entry.ClearCallbacks();
                 }
@@ -432,6 +433,20 @@ namespace QS3D.BricsCAD.V25.UI
                 ForgetPendingNativeDetach(destroyedDocument);
             }
 
+            public void ReleasePendingNativeDetachOwnershipAfterDestroy(Document destroyedDocument)
+            {
+                ForgetPendingNativeDetach(destroyedDocument);
+                var pendingDocuments = _pendingNativeDetachDocuments.ToArray();
+                foreach (var pending in pendingDocuments)
+                {
+                    TryDetachNativeHandlers(pending);
+                }
+                // The coordinator entry is terminal after the current lifecycle is destroyed.
+                // Never let failed host unsubscription leave the retired entry strongly retaining
+                // obsolete managed Document wrappers after dictionary ownership is removed.
+                _pendingNativeDetachDocuments.Clear();
+            }
+
             private bool TryClearPendingNativeDetaches()
             {
                 if (_pendingNativeDetachDocuments.Count == 0) return true;
@@ -459,7 +474,7 @@ namespace QS3D.BricsCAD.V25.UI
             public void Add(Callbacks callbacks)
             {
                 PruneDeadCallbacks();
-                _callbacks.Add(new WeakReference<Callbacks>(callbacks));
+                _callbacks.Add(new WeakReference<Callbacks>>(callbacks));
             }
             public void Remove(Callbacks callbacks)
             {
