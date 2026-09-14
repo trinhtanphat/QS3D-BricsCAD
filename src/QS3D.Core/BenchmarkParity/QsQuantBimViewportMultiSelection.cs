@@ -44,18 +44,18 @@ namespace QS3D.Core.BenchmarkParity
             if (string.IsNullOrWhiteSpace(pickedGuid))
                 return clearOnMiss ? new IfcSelectionSet(current.Name, Array.Empty<string>()) : Snapshot(current.Name, selected);
 
-            pickedGuid = QsModelElementSnapshot.Require(pickedGuid, "pickedGuid");
+            var canonicalGuid = QsModelElementSnapshot.Require(pickedGuid!, "pickedGuid");
             switch (mode)
             {
                 case QuantBimSelectionInteractionMode.Replace:
                     selected.Clear();
-                    selected.Add(pickedGuid);
+                    selected.Add(canonicalGuid);
                     break;
                 case QuantBimSelectionInteractionMode.Add:
-                    selected.Add(pickedGuid);
+                    selected.Add(canonicalGuid);
                     break;
                 case QuantBimSelectionInteractionMode.Toggle:
-                    if (!selected.Remove(pickedGuid)) selected.Add(pickedGuid);
+                    if (!selected.Remove(canonicalGuid)) selected.Add(canonicalGuid);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException("mode");
