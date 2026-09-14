@@ -11,6 +11,9 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             RestoresVerifiedPriorGenerationFromExactCurrentCheckpoint();
+            RestoresPriorPersistenceAgainstReboundSemanticTarget();
+            RejectsRebindAcrossReplacementProjectGeneration();
+            RejectsRebindAcrossReplacementElementGeneration();
             RejectsProjectRevisionDriftAfterGuard();
             RejectsTargetSemanticMismatch();
         }
@@ -43,6 +46,59 @@ namespace QS3D.Core.SmokeTests
             True(before.Matches(project), "Transition restore did not reproduce the verified target checkpoint.");
         }
 
+        private static void RestoresPriorPersistenceAgainstReboundSemanticTarget()
+        {
+            var project = NewTransitionProject("P-CHECKPOINT-TRANSITION-REBOUND", out var owner);
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
+            var beforeDirty = owner.Dirty;
+            var beforeOwnerUpdatedUtc = owner.UpdatedUtc;
+            var persistenceTarget = ProjectPersistenceCheckpoint.Capture(project, new[] { owner.Id });
+
+            owner.SetQuantity("GrossVolumeM3", 12.5d);
+            owner.MarkClean(ElementDirtyFlags.All);
+            project.Touch();
+            var reboundTarget = persistenceTarget.RebindSemanticState(project);
+            True(!reboundTarget.Matches(project), "Rebound target must retain prior persistence stamps before restore.");
+            True(reboundTarget.SemanticMatches(project), "Rebound target must match the rebound semantic state.");
+
+            owner.SetProperty("GeneratedSolidHandle", "B2");
+            project.Touch();
+            var current = ProjectPersistenceCheckpoint.Capture(project, new[] { owner.Id });
+            var guard = current.PrepareTransitionRestore(project);
+            owner.SetProperty("GeneratedSolidHandle", "A1");
+            reboundTarget.RestoreTransition(project, guard);
+
+            Equal(12.5d, owner.Quantities["GrossVolumeM3"], "Rebound transition lost regenerated semantic quantity.");
+            Equal(beforeVersion, project.ChangeVersion, "Rebound transition did not restore prior project revision.");
+            Equal(beforeUpdatedUtc, project.UpdatedUtc, "Rebound transition did not restore prior project timestamp.");
+            Equal(beforeDirty, owner.Dirty, "Rebound transition did not restore prior owner Dirty state.");
+            Equal(beforeOwnerUpdatedUtc, owner.UpdatedUtc, "Rebound transition did not restore prior owner timestamp.");
+            True(reboundTarget.Matches(project), "Rebound transition did not reproduce the composite target.");
+        }
+        private static void RejectsRebindAcrossReplacementProjectGeneration()
+        {
+            var project = NewTransitionProject("P-CHECKPOINT-REBIND-PROJECT", out var owner);
+            var target = ProjectPersistenceCheckpoint.Capture(project, new[] { owner.Id });
+            var replacement = new ProjectState(project.ProjectId, "Replacement project");
+            var replacementOwner = new ProjectElement(owner.Id, ElementCategory.GlassWall);
+            replacementOwner.SetProperty("GeneratedSolidHandle", "A1");
+            replacement.Elements.Add(replacementOwner);
+            replacement.Touch();
+            Throws<InvalidOperationException>(() => target.RebindSemanticState(replacement));
+        }
+
+        private static void RejectsRebindAcrossReplacementElementGeneration()
+        {
+            var project = NewTransitionProject("P-CHECKPOINT-REBIND-ELEMENT", out var owner);
+            var target = ProjectPersistenceCheckpoint.Capture(project, new[] { owner.Id });
+            project.Elements.Remove(owner);
+            var replacement = new ProjectElement(owner.Id, ElementCategory.GlassWall);
+            replacement.SetProperty("GeneratedSolidHandle", "A1");
+            project.Elements.Add(replacement);
+            project.Touch();
+            Throws<InvalidOperationException>(() => target.RebindSemanticState(project));
+        }
         private static void RejectsProjectRevisionDriftAfterGuard()
         {
             var project = NewTransitionProject("P-CHECKPOINT-TRANSITION-REVISION", out var owner);
