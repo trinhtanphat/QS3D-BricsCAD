@@ -257,7 +257,7 @@ jobs:
           if ($smokeExitCode -ne 0) {
             $diagnostic = (($smokeOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_.Length -gt 0 }) -join ' | ')
             if ([string]::IsNullOrWhiteSpace($diagnostic)) { $diagnostic = "Core smoke process exited with code $smokeExitCode without captured output." }
-            if ($diagnostic.Length -gt 3500) { $diagnostic = $diagnostic.Substring(0, 3500) + 'â€¦' }
+            if ($diagnostic.Length -gt 3500) { $diagnostic = $diagnostic.Substring(0, 3500) + '…' }
             $diagnostic = $diagnostic.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Host "::error title=Deterministic Core smoke failure::$diagnostic"
             exit $smokeExitCode
