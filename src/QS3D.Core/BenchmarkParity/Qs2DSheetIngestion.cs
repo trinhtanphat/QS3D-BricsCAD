@@ -208,14 +208,30 @@ namespace QS3D.Core.BenchmarkParity
             height = 0;
             if (payload.Length < 4 || payload[0] != 0xFF || payload[1] != 0xD8) return false;
             var offset = 2;
-            while (offset + 3 < payload.Length)
+            while (offset + 1 < payload.Length)
             {
-                if (payload[offset] != 0xFF) { offset++; continue; }
+                if (payload[offset] != 0xFF)
+                    throw new InvalidOperationException("JPEG marker stream contains data outside a length-delimited segment before SOF.");
+
                 while (offset < payload.Length && payload[offset] == 0xFF) offset++;
                 if (offset >= payload.Length) break;
                 var marker = payload[offset++];
-                if (marker == 0xD9 || marker == 0xDA) break;
-                if (offset + 1 >= payload.Length) break;
+
+                if (marker == 0x00)
+                    throw new InvalidOperationException("JPEG byte-stuffing marker is invalid before entropy-coded scan data.");
+                if (marker == 0xD8)
+                    throw new InvalidOperationException("JPEG payload contains a nested SOI marker before SOF.");
+                if (IsRestartMarker(marker))
+                    throw new InvalidOperationException("JPEG restart markers are invalid before entropy-coded scan data.");
+                if (marker == 0xD9)
+                    throw new InvalidOperationException("JPEG payload reached EOI before a supported SOF marker.");
+                if (marker == 0xDA)
+                    throw new InvalidOperationException("JPEG payload reached SOS before a supported SOF marker.");
+                if (marker == 0x01)
+                    continue;
+
+                if (offset + 1 >= payload.Length)
+                    throw new InvalidOperationException("JPEG segment is truncated before its length field.");
                 var length = (payload[offset] << 8) | payload[offset + 1];
                 if (length < 2 || offset + length > payload.Length) throw new InvalidOperationException("JPEG segment length is invalid.");
                 if (IsStartOfFrame(marker))
@@ -267,6 +283,11 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (payload.Length < 2 || payload[payload.Length - 2] != 0xFF || payload[payload.Length - 1] != 0xD9)
                 throw new InvalidOperationException("JPEG payload is truncated or missing the terminal EOI marker.");
+        }
+
+        private static bool IsRestartMarker(byte marker)
+        {
+            return marker >= 0xD0 && marker <= 0xD7;
         }
 
         private static bool IsStartOfFrame(byte marker)
