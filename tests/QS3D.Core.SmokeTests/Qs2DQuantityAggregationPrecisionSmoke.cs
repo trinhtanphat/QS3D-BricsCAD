@@ -12,6 +12,7 @@ namespace QS3D.Core.SmokeTests
             WorkflowPreservesPositiveHighDynamicResidual();
             LiveWorkbookPreservesPositiveHighDynamicResidual();
             CubicostInventoryPreservesPositiveHighDynamicResidual();
+            AggregatorsPreserveOverflowExceptionContract();
         }
 
         private static void PreservesPositiveHighDynamicResidual()
@@ -89,6 +90,31 @@ namespace QS3D.Core.SmokeTests
 
             Equal(10000000000000004d, inventory.Quantity, "Cubicost canonical positive residual");
             if (inventory.SourceCount != 4) throw new InvalidOperationException("Cubicost precision component cardinality drifted.");
+        }
+
+        private static void AggregatorsPreserveOverflowExceptionContract()
+        {
+            try
+            {
+                new TakeoffQuantityAggregator2D().Aggregate(new[]
+                {
+                    Evidence("O-1", double.MaxValue), Evidence("O-2", double.MaxValue)
+                }).ToArray();
+                throw new InvalidOperationException("2D overflow was accepted.");
+            }
+            catch (ArgumentOutOfRangeException) { }
+
+            var evidence = new[]
+            {
+                new TakeoffQuantityEvidence2D("WO-1", "S-W", "R1", "overflow.pdf", "h-wo-1", "OVERFLOW", "ZONE", "QTO", double.MaxValue, "m"),
+                new TakeoffQuantityEvidence2D("WO-2", "S-W", "R1", "overflow.pdf", "h-wo-2", "OVERFLOW", "ZONE", "QTO", double.MaxValue, "m")
+            };
+            try
+            {
+                new AutodeskTakeoffWorkflow().BuildInventoryAndEstimate(evidence, Array.Empty<IfcQtoItem>(), (c, q) => q, (c, u) => 1d).ToArray();
+                throw new InvalidOperationException("Workflow overflow was accepted.");
+            }
+            catch (ArgumentOutOfRangeException) { }
         }
 
         private static TakeoffQuantityEvidence2D Evidence(string markupId, double quantity)
