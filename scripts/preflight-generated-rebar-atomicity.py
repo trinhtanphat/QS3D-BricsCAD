@@ -52,6 +52,11 @@ for label, (relative, semantic_call) in families.items():
             and "if (cadCommitted)" in text
             and "cleanupWarning = true;" in text
             and "return new SlabMeshBuildResult(pending.Count, pending.Sum(x => x.Handles.Count), cleanupWarning);" in text
+        ) or (
+            label == "beam stirrup"
+            and "if (cadCommitted)" in text
+            and "cleanupWarning = true;" in text
+            and "return new BeamStirrupBuildResult(pending.Count, count, cleanupWarning);" in text
         )
         if not committed_cleanup:
             errors.append(label + ": missing generated replacement rollback/committed-cleanup discriminator")
