@@ -272,21 +272,17 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("Native command queueing requires the active MCP DWG writer mutation scope.");
 
             var reservation = PreparedNativeCommand.Value;
-            if (reservation != null)
-            {
-                if (!reservation.Matches(document, command))
-                    throw new InvalidOperationException("Prepared native-command barrier does not match the command being queued.");
-            }
-            else
-            {
+            if (reservation == null)
                 reservation = ArmNativeCommandInCadContext(command, audit, false);
-            }
+            reservation.RequireMatches(document, command);
 
             try
             {
                 // Bind retry identity before dispatch so even an unusually fast terminal event
                 // can be correlated to the logical MCP action without weakening writer ownership.
                 reservation.BindActionId(McpMutationAckLedger.CurrentActionId);
+                reservation.RequireMatches(document, command);
+                RequireActiveNativeDatabaseGeneration(document, reservation.NativeDatabaseIdentity, "dispatch");
 
                 // Make the post-return barrier durable before handing the command to BricsCAD.
                 // Reset/emergency-stop may clean a merely prepared reservation, but once dispatch
@@ -362,13 +358,14 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) throw new InvalidOperationException("No active BricsCAD document is available for native command coordination.");
             RequireNoModalCommandInCadContext();
+            var nativeDatabaseIdentity = RequireActiveNativeDatabaseGeneration(document, IntPtr.Zero, "reservation");
             PendingNativeCommand pending;
             lock (Sync)
             {
                 CleanupExpiredStateLocked(DateTime.UtcNow);
                 if (_pending != null)
                     throw new InvalidOperationException("Another queued native command already owns the DWG write lane.");
-                pending = new PendingNativeCommand(document, NormalizeCommand(command), audit);
+                pending = new PendingNativeCommand(document, nativeDatabaseIdentity, NormalizeCommand(command), audit);
                 pending.WillStartHandler = (sender, e) => OnCommandWillStart(pending, sender, e);
                 pending.EndedHandler = (sender, e) => OnCommandEnded(pending, sender, e);
                 pending.CancelledHandler = (sender, e) => OnCommandCancelled(pending, sender, e);
@@ -492,10 +489,35 @@ namespace QS3D.BricsCAD.V25
 
         private static bool PendingMatchesLocked(PendingNativeCommand pending, object sender, CommandEventArgs e)
         {
-            if (!ReferenceEquals(_pending, pending) || !pending.AcceptCallbacks || !ReferenceEquals(sender, pending.Document)) return false;
+            if (!ReferenceEquals(_pending, pending) || !pending.AcceptCallbacks || !ReferenceEquals(sender, pending.Document)
+                || !HasNativeDatabaseGeneration(pending.Document, pending.NativeDatabaseIdentity)) return false;
             var eventName = NormalizeLifecycleCommand(e == null ? string.Empty : e.GlobalCommandName);
             var pendingName = NormalizeLifecycleCommand(pending.Command);
             return eventName.Length != 0 && string.Equals(eventName, pendingName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static IntPtr RequireActiveNativeDatabaseGeneration(Document document, IntPtr expected, string phase)
+        {
+            if (!ReferenceEquals(Application.DocumentManager.MdiActiveDocument, document))
+                throw new InvalidOperationException("Active BricsCAD document changed before native command " + phase + "; command was not queued.");
+            var database = document.Database;
+            var identity = database == null ? IntPtr.Zero : database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("Active BricsCAD document has no stable native database generation before native command " + phase + ".");
+            if (expected != IntPtr.Zero && identity != expected)
+                throw new InvalidOperationException("Active BricsCAD database generation changed before native command " + phase + "; command was not queued.");
+            return identity;
+        }
+
+        private static bool HasNativeDatabaseGeneration(Document document, IntPtr expected)
+        {
+            if (expected == IntPtr.Zero) return false;
+            try
+            {
+                var database = document.Database;
+                return database != null && database.UnmanagedObject != IntPtr.Zero && database.UnmanagedObject == expected;
+            }
+            catch { return false; }
         }
 
         private static void CleanupExpiredStateLocked(DateTime now)
@@ -680,13 +702,15 @@ namespace QS3D.BricsCAD.V25
 
         internal sealed class PendingNativeCommand
         {
-            public PendingNativeCommand(Document document, string command, Action<string>? audit)
+            public PendingNativeCommand(Document document, IntPtr nativeDatabaseIdentity, string command, Action<string>? audit)
             {
                 Document = document;
+                NativeDatabaseIdentity = nativeDatabaseIdentity;
                 Command = command;
                 Audit = audit;
             }
             public Document Document { get; private set; }
+            public IntPtr NativeDatabaseIdentity { get; private set; }
             public string Command { get; private set; }
             public string ActionId { get; set; } = string.Empty;
             public bool Started { get; set; }
@@ -735,10 +759,17 @@ namespace QS3D.BricsCAD.V25
                 return ReferenceEquals(_pending, pending);
             }
 
-            internal bool Matches(Document document, string command)
+            internal IntPtr NativeDatabaseIdentity
             {
-                return ReferenceEquals(_pending.Document, document)
-                       && string.Equals(_pending.Command, NormalizeCommand(command), StringComparison.OrdinalIgnoreCase);
+                get { return _pending.NativeDatabaseIdentity; }
+            }
+
+            internal void RequireMatches(Document document, string command)
+            {
+                if (!ReferenceEquals(_pending.Document, document)
+                    || !string.Equals(_pending.Command, NormalizeCommand(command), StringComparison.OrdinalIgnoreCase)
+                    || !HasNativeDatabaseGeneration(document, _pending.NativeDatabaseIdentity))
+                    throw new InvalidOperationException("Prepared native-command barrier does not match the active document database generation and command being queued.");
             }
 
             internal void BindActionId(string actionId)
