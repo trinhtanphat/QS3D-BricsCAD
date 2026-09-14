@@ -813,14 +813,14 @@ namespace QS3D.Core.Domain
         private void AttachAuditEvent(AuditEvent auditEvent)
         {
             auditEvent.PersistenceTextMutationValidating += ValidateAuditOwnedMutation;
-            auditEvent.PersistenceMutationRequested += ValidateAuditHistoryAndTouch;
+            auditEvent.PersistenceMutationRequested += Touch;
             auditEvent.PersistenceTextMutationCommitted += _auditHistoryBudget.CommitOwnedMutation;
         }
 
         private void DetachAuditEvent(AuditEvent auditEvent)
         {
             auditEvent.PersistenceTextMutationValidating -= ValidateAuditOwnedMutation;
-            auditEvent.PersistenceMutationRequested -= ValidateAuditHistoryAndTouch;
+            auditEvent.PersistenceMutationRequested -= Touch;
             auditEvent.PersistenceTextMutationCommitted -= _auditHistoryBudget.CommitOwnedMutation;
         }
 
