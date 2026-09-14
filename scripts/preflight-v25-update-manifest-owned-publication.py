@@ -9,9 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "new-v25-update-manifest.ps1"
 CORE = ROOT / "scripts" / "new-v25-update-manifest-validation-core.ps1"
 HELPER = ROOT / "scripts" / "Qs3dV25UpdateManifestPublicationNative.cs"
+TRANSFORMER = ROOT / "scripts" / "new-v26-script-from-v25.ps1"
 source = SCRIPT.read_text(encoding="utf-8")
 core = CORE.read_text(encoding="utf-8")
 helper = HELPER.read_text(encoding="utf-8")
+transformer = TRANSFORMER.read_text(encoding="utf-8")
 
 
 def require(text: str, token: str, message: str) -> None:
@@ -26,8 +28,19 @@ require(source, "new-v25-update-manifest-validation-core.ps1", "canonical wrappe
 require(source, "-WhatIf 6>$null", "validation core is not forced into non-publishing validation mode")
 require(source, "$wrapperCmdlet.ShouldProcess", "canonical wrapper does not own final ShouldProcess authority")
 
+# Audit executable PowerShell references, not test/source-guard documentation. The
+# previous repository-wide grep treated every Python preflight that named the split
+# validation core as an executable caller and therefore false-failed Clean20.
 completed = subprocess.run(
-    ["git", "grep", "-l", "new-v25-update-manifest-validation-core.ps1", "--", ":(exclude)scripts/new-v25-update-manifest-validation-core.ps1"],
+    [
+        "git",
+        "grep",
+        "-l",
+        "new-v25-update-manifest-validation-core.ps1",
+        "--",
+        "scripts/*.ps1",
+        ":(exclude)scripts/new-v25-update-manifest-validation-core.ps1",
+    ],
     cwd=ROOT,
     capture_output=True,
     text=True,
@@ -36,15 +49,28 @@ completed = subprocess.run(
     check=False,
 )
 if completed.returncode not in (0, 1):
-    raise SystemExit(f"ERROR: could not audit validation-core callers: {(completed.stderr or completed.stdout).strip()}")
-allowed_callers = {
+    raise SystemExit(f"ERROR: could not audit validation-core PowerShell references: {(completed.stderr or completed.stdout).strip()}")
+allowed_references = {
     "scripts/new-v25-update-manifest.ps1",
-    "scripts/preflight-v25-update-manifest-owned-publication.py",
+    "scripts/new-v26-script-from-v25.ps1",
 }
-callers = {line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()}
-unexpected = sorted(callers - allowed_callers)
+references = {line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()}
+unexpected = sorted(references - allowed_references)
 if unexpected:
-    raise SystemExit(f"ERROR: internal V25 validation core has unauthorized caller/reference(s): {unexpected}")
+    raise SystemExit(f"ERROR: internal V25 validation core has unauthorized PowerShell reference(s): {unexpected}")
+if "new-v25-update-manifest-validation-core.ps1" not in transformer:
+    raise SystemExit("ERROR: V26 transformer no longer declares the split validation core as a transform input")
+for unsafe_transformer_call in (
+    ". 'new-v25-update-manifest-validation-core.ps1'",
+    '& "new-v25-update-manifest-validation-core.ps1"',
+    "& 'new-v25-update-manifest-validation-core.ps1'",
+    '. "new-v25-update-manifest-validation-core.ps1"',
+):
+    if unsafe_transformer_call in transformer:
+        raise SystemExit(
+            "ERROR: V26 transformer must transform the validation core, not execute it directly: "
+            + unsafe_transformer_call
+        )
 
 
 for token, message in (
