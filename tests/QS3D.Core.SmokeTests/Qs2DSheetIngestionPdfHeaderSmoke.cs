@@ -15,6 +15,8 @@ namespace QS3D.Core.SmokeTests
             AcceptsLfTerminatedHeader();
             AcceptsCrTerminatedHeader();
             AcceptsCrLfTerminatedHeader();
+            AcceptsPdf10And20();
+            RejectsUnsupportedPdfVersions();
             RejectsInlineDataAfterVersion();
             RejectsSpaceAfterVersion();
             RejectsTruncatedVersionOnlyHeader();
@@ -36,6 +38,20 @@ namespace QS3D.Core.SmokeTests
         {
             var result = Ingest("%PDF-1.7\r\n%%EOF");
             Equal(1, result.PdfPageNumber, "CRLF page number");
+        }
+
+        private static void AcceptsPdf10And20()
+        {
+            Equal(1, Ingest("%PDF-1.0\n%%EOF").PdfPageNumber, "PDF 1.0 page number");
+            Equal(1, Ingest("%PDF-2.0\n%%EOF").PdfPageNumber, "PDF 2.0 page number");
+        }
+
+        private static void RejectsUnsupportedPdfVersions()
+        {
+            ThrowsInvalidOperation(() => Ingest("%PDF-0.9\n%%EOF"), "PDF 0.9");
+            ThrowsInvalidOperation(() => Ingest("%PDF-1.8\n%%EOF"), "PDF 1.8");
+            ThrowsInvalidOperation(() => Ingest("%PDF-2.1\n%%EOF"), "PDF 2.1");
+            ThrowsInvalidOperation(() => Ingest("%PDF-9.9\n%%EOF"), "PDF 9.9");
         }
 
         private static void RejectsInlineDataAfterVersion()
