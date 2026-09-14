@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -20,6 +22,7 @@ namespace QS3D.Core.SmokeTests
             OwnedPropertyGrowthIsAtomicAtTextBudget();
             DuplicateReferencePropertyDeltaUsesMultiplicity();
             RemovalAndClearReleaseBudget();
+            CorruptBackingCountRejectsMutationWithoutRepair();
         }
 
         private static void DirectAddAndInsertRejectAtCapacityWithoutMutation()
@@ -129,6 +132,39 @@ namespace QS3D.Core.SmokeTests
             project.AuditEvents.Clear();
             project.AuditEvents.Add(full);
             Equal(1, project.AuditEvents.Count, "clear releases text budget");
+        }
+
+        private static void CorruptBackingCountRejectsMutationWithoutRepair()
+        {
+            var project = Project("CORRUPT-COUNT");
+            var admitted = Event("a");
+            var injected = Event("b");
+            project.AuditEvents.Add(admitted);
+            InjectWithoutAccounting(project, injected);
+
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
+
+            Throws<InvalidOperationException>(() => project.AuditEvents.RemoveAt(1));
+            Equal(2, project.AuditEvents.Count, "corrupt removal count");
+            Same(admitted, project.AuditEvents[0], "corrupt removal admitted reference");
+            Same(injected, project.AuditEvents[1], "corrupt removal injected reference");
+            Equal(beforeVersion, project.ChangeVersion, "corrupt removal revision");
+            Equal(beforeUpdatedUtc, project.UpdatedUtc, "corrupt removal timestamp");
+
+            Throws<InvalidOperationException>(() => project.AuditEvents.Add(Event("c")));
+            Equal(2, project.AuditEvents.Count, "corrupt add count");
+            Equal(beforeVersion, project.ChangeVersion, "corrupt add revision");
+            Equal(beforeUpdatedUtc, project.UpdatedUtc, "corrupt add timestamp");
+        }
+
+        private static void InjectWithoutAccounting(ProjectState project, AuditEvent item)
+        {
+            var itemsField = project.AuditEvents.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("AuditHistoryBudgetMutationSmoke could not resolve corruption-injection storage.");
+            var items = itemsField.GetValue(project.AuditEvents) as List<AuditEvent>
+                ?? throw new Exception("AuditHistoryBudgetMutationSmoke corruption-injection storage has an unexpected shape.");
+            items.Add(item);
         }
 
         private static ProjectState Project(string suffix) => new ProjectState("AUDIT-BUDGET-" + suffix, "Audit budget " + suffix);
