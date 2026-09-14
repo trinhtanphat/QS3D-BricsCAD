@@ -52,6 +52,8 @@ if not errors:
         "private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)",
         "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
         "document.Database.UnmanagedObject == nativeDatabaseIdentity",
+        "document.Editor.WriteMessage(\"\\nQS3D \" + visibleMessage);",
+        "TryWriteMessage(document, nativeDatabaseIdentity, \"\\nQS3D \" + visibleMessage + \" UI sync warning.\");",
     ]
     for token in required_command:
         if token not in command:

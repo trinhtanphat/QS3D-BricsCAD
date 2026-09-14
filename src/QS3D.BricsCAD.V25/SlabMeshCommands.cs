@@ -134,16 +134,14 @@ namespace QS3D.BricsCAD.V25
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 PaletteCoordinator.SetStatus(visibleMessage);
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                document.Editor.WriteMessage("
-QS3D " + visibleMessage);
+                document.Editor.WriteMessage("\nQS3D " + visibleMessage);
             }
             catch
             {
                 uiSyncFailed = true;
             }
             if (uiSyncFailed && IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
-                TryWriteMessage(document, nativeDatabaseIdentity, "
-QS3D " + visibleMessage + " UI sync warning.");
+                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + visibleMessage + " UI sync warning.");
         }
 
         private static IntPtr GetNativeDatabaseIdentity(Document document)
