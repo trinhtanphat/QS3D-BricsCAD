@@ -37,8 +37,8 @@ if ($RenderExperiment -and ($NativeApi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) 
 }
 $operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$source = '21c7946447b1383efd53ee000d527b84acfc8969'
-$v25PackageSha256 = 'bdb13f23208036f01880e57ab740066a9ce9a698e37a6ea0c4ff00d47aa454b4'
+$source = '17b09685478960299453bdb5dd00fdfbd4145a47'
+$v25PackageSha256 = '536a71a0c630ef6b1dcd9f3327efd177827853832cc8ff4d161a17cf56c44f65'
 # Matched V25/V26 identities are frozen; V26 still requires a cleaned V25 predecessor.
 $base = Join-Path $taskRepo 'artifacts\issue-5718-local022'
 $runRoot = Join-Path $base $AllocationName
@@ -196,7 +196,7 @@ try {
     $parameters = @{
         ProductDir = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor"
         PackageZip = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor.zip"
-        PackageSha256 = if ($HostMajor -eq 25) { $v25PackageSha256 } else { '3fda628c3bb37b9242076b68bf3cd1766cedd1d382b2a799ee655a8bd85effaf' }
+        PackageSha256 = if ($HostMajor -eq 25) { $v25PackageSha256 } else { 'c90d88327b6b635c08e7aee4988989a121c9e4d069191207a4e09eab75fa9f20' }
         ProductSourceSha = $source
         ProbeDll = Join-Path $taskRepo "tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$framework\QS3D.LocalQualification.V$HostMajor.dll"
         ArtifactDir = $runRoot

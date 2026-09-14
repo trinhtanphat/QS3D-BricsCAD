@@ -88,8 +88,8 @@ $candidates = @{
         PackageSha256 = '4d9869e38682674772196a3e238f115624ff357a276bb0b976000b63c9a833b5'
         ProductVersion = '0.1.0-preview.10307'; Kind = 'LOCAL_PR_CANDIDATE'
     }
-    '21c7946447b1383efd53ee000d527b84acfc8969' = @{
-        PackageSha256 = 'bdb13f23208036f01880e57ab740066a9ce9a698e37a6ea0c4ff00d47aa454b4'
+    '17b09685478960299453bdb5dd00fdfbd4145a47' = @{
+        PackageSha256 = '536a71a0c630ef6b1dcd9f3327efd177827853832cc8ff4d161a17cf56c44f65'
         ProductVersion = '0.2.0-preview.20'; Kind = 'LOCAL_PR_CANDIDATE'
     }
 }
