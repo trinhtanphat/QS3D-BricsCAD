@@ -18,3 +18,24 @@ if '+ ex.Message' in files['first'] and 'McpAgentExperience.Error("onboarding"' 
 if 'McpPublicTextSanitizer.Sanitize(ex.ToString())' not in files['first']:
     raise SystemExit('FAIL first-run: canonical public sanitizer missing')
 print('PASS: MCP embedded/public runtime error boundaries are sanitized')
+extra = {
+    'recovery': Path('src/QS3D.BricsCAD.V25/McpProjectRecoveryService.cs').read_text(encoding='utf-8-sig'),
+    'persistent': Path('src/QS3D.BricsCAD.V25/McpPersistentAgentCenterAugmenter.cs').read_text(encoding='utf-8-sig'),
+    'cloudflare': Path('src/QS3D.BricsCAD.V25/McpCloudflareAccountOnboarding.cs').read_text(encoding='utf-8-sig'),
+}
+raw_extra = {
+    'recovery': ['"Periodic backup lỗi: " + ex.Message', '"Backup thất bại: " + ex.Message', '"Khôi phục thất bại: " + ex.Message'],
+    'persistent': ['Credential Manager: " + ex.Message', '"unknown error" : error.Message'],
+    'cloudflare': ['account setup lỗi: " + ex.Message', 'SetState("Named Tunnel auto-start failed.", ex.Message)', 'SetState("Named Tunnel auto-start scheduling failed.", ex.Message)', 'Notify("Không kết nối được", Friendly(ex.Message))', 'Notify("MCP local lỗi", Friendly(ex.Message))'],
+}
+for name, needles in raw_extra.items():
+    for needle in needles:
+        if needle in extra[name]:
+            raise SystemExit(f'FAIL {name}: raw public exception sink: {needle}')
+    if 'McpPublicTextSanitizer.Sanitize(' not in extra[name]:
+        raise SystemExit(f'FAIL {name}: canonical public sanitizer missing')
+if '_lastUiDetail = ex.ToString();' in extra['cloudflare']:
+    raise SystemExit('FAIL cloudflare: raw exception retained in user-visible technical UI detail')
+if '"\\nCloudflare detail: " + McpCloudflareAccountTunnelManager.LastError' in extra['cloudflare']:
+    raise SystemExit('FAIL cloudflare: raw tunnel LastError reaches technical details dialog')
+print('PASS: adjacent recovery/persistent/cloudflare exception sinks are sanitized')

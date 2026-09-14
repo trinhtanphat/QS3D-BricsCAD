@@ -120,7 +120,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                message = "Backup thất bại: " + ex.Message;
+                message = "Backup thất bại: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 SetError(message);
                 McpAgentExperience.Error("recovery", message, "Mở Backup & khôi phục để kiểm tra đường dẫn/quyền ghi.");
                 return false;
@@ -169,7 +169,7 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex)
             {
                 recoveredPath = string.Empty;
-                message = "Khôi phục thất bại: " + ex.Message;
+                message = "Khôi phục thất bại: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 SetError(message);
                 McpAgentExperience.Error("recovery", message, "Giữ nguyên drawing gốc và thử mở thư mục backup thủ công.");
                 return false;
@@ -191,8 +191,8 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                SetError("Periodic backup: " + ex.Message);
-                McpAgentExperience.Error("recovery", "Periodic backup lỗi: " + ex.Message,
+                SetError("Periodic backup: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
+                McpAgentExperience.Error("recovery", "Periodic backup lỗi: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                     "QS3D sẽ thử lại ở chu kỳ sau; BricsCAD autosave/BAK vẫn độc lập.");
             }
         }
@@ -207,7 +207,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                SetError("Không cấu hình được SAVETIME: " + ex.Message);
+                SetError("Không cấu hình được SAVETIME: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
 
             try
@@ -217,7 +217,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                SetError("Không cấu hình được ISAVEBAK: " + ex.Message);
+                SetError("Không cấu hình được ISAVEBAK: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
         }
 
