@@ -46,7 +46,7 @@ else:
             "var promptUnit = (object)CadUnitService.GetLengthUnit(document);",
             "var promptUcs = document.Editor.CurrentUserCoordinateSystem;",
             "document.Editor.GetPoint(",
-            "RequirePromptContextUnchanged(document, promptUnit, promptUcs, \"" + command + "\");",
+            "RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, \"" + command + "\");",
         ))
 
     for helper_name, next_helper in (
@@ -61,7 +61,7 @@ else:
             "var promptUnit = (object)CadUnitService.GetLengthUnit(document);",
             "var promptUcs = editor.CurrentUserCoordinateSystem;",
             "editor.GetPoint(",
-            "RequirePromptContextUnchanged(document, promptUnit, promptUcs, label);",
+            "RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, label);",
             "ValidatePlanView(document, points, label);",
         ))
 

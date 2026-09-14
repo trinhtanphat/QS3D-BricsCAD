@@ -38,7 +38,7 @@ if SOURCE.is_file():
         "DirectDrawProjectPreviewContext.Capture(document)": 8,
         "var defaultsProject = projectPreview.DefaultsProject;": 8,
         "var hasDefaultsProject = projectPreview.HasProject;": 8,
-        "projectPreview);": 8,
+        "projectPreview,": 8,
     }
     for token, expected in freshness_counts.items():
         actual = text.count(token)
@@ -76,18 +76,18 @@ if SOURCE.is_file():
 
     quick_requirements = {
         "beam quick": (
-            'AcquireFixedPath(document, "Dầm nhanh", 2)',
+            'AcquireFixedPath(document, nativeDatabaseIdentity, "Dầm nhanh", 2)',
             'FamilyNumber(defaultsProject!, ElementCategory.Beam, "WidthM", 0.3d)',
             'FamilyNumber(defaultsProject!, ElementCategory.Beam, "HeightM", 0.5d)',
             'FamilyFiniteNumber(defaultsProject!, ElementCategory.Beam, "BottomOffsetM", 0d)',
-            '() => CreateLine(document, points[0], points[1])',
+            '() => CreateLine(document, points[0], points[1], nativeDatabaseIdentity)',
             'QS3DDRAWBEAMADV',
         ),
         "slab quick": (
-            'AcquirePath(document, "Sàn nhanh", minimumPoints: 3, close: true)',
+            'AcquirePath(document, nativeDatabaseIdentity, "Sàn nhanh", minimumPoints: 3, close: true)',
             'FamilyNumber(defaultsProject!, ElementCategory.Slab, "ThicknessM", 0.12d)',
             'FamilyFiniteNumber(defaultsProject!, ElementCategory.Slab, "BottomOffsetM", 0d)',
-            '() => CreatePolyline(document, points, true)',
+            '() => CreatePolyline(document, points, true, nativeDatabaseIdentity)',
             'QS3DDRAWSLABADV',
         ),
         "column quick": (
@@ -96,7 +96,7 @@ if SOURCE.is_file():
             'FamilyNumber(defaultsProject!, ElementCategory.Column, "DepthM", 0.4d)',
             'FamilyNumber(defaultsProject!, ElementCategory.Column, "HeightM", 3.6d)',
             'FamilyFiniteNumber(defaultsProject!, ElementCategory.Column, "BottomOffsetM", 0d)',
-            'CreateColumnFootprint(document, centerResult.Value, widthM, depthM)',
+            'CreateColumnFootprint(document, centerResult.Value, widthM, depthM, nativeDatabaseIdentity)',
             'QS3DDRAWCOLUMNADV',
         ),
     }
@@ -112,7 +112,7 @@ if SOURCE.is_file():
             errors.append(label + " must reuse ExecuteDirect")
         if "element.SetProperty(" not in body:
             errors.append(label + " must configure semantic overrides through ProjectElement.SetProperty")
-        if "DirectDrawProjectPreviewContext.Capture(document)" not in body or "projectPreview);" not in body:
+        if "DirectDrawProjectPreviewContext.Capture(document)" not in body or "projectPreview," not in body or "nativeDatabaseIdentity: nativeDatabaseIdentity);" not in body:
             errors.append(label + " must carry guarded project preview freshness through ExecuteDirect")
 
     advanced_requirements = {
@@ -124,7 +124,7 @@ if SOURCE.is_file():
         ),
         "slab advanced": (
             'Guard(document, "QS3DDRAWSLABADV"',
-            'AcquirePath(document, "Sàn tùy chỉnh", minimumPoints: 3, close: true)',
+            'AcquirePath(document, nativeDatabaseIdentity, "Sàn tùy chỉnh", minimumPoints: 3, close: true)',
             'PromptPositiveMeters(document.Editor, "Bề dày Sàn (m)"',
             'PromptFiniteMeters(document.Editor, "Offset đáy Sàn so với Z source (m)"',
         ),
@@ -145,7 +145,7 @@ if SOURCE.is_file():
             errors.append(label + " must reuse ExecuteDirect")
         if "element.SetProperty(" not in body:
             errors.append(label + " must configure semantic overrides through ProjectElement.SetProperty")
-        if "DirectDrawProjectPreviewContext.Capture(document)" not in body or "projectPreview);" not in body:
+        if "DirectDrawProjectPreviewContext.Capture(document)" not in body or "projectPreview," not in body or "nativeDatabaseIdentity: nativeDatabaseIdentity);" not in body:
             errors.append(label + " must carry guarded project preview freshness through ExecuteDirect")
 
 if RIBBON.is_file():

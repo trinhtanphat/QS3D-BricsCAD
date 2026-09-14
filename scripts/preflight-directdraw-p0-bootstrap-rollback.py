@@ -41,7 +41,7 @@ def main():
     require_order(
         execute,
         "P0 Direct Draw bootstrap ownership",
-        "EnsureActive(document, operation);",
+        "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + \" / mutation admission\");",
         "var projectExistedBeforeAuthoring = projectPreview != null",
         "? projectPreview.HasProject",
         ": ProjectContextCoordinator.TryGetReadOnly(document, out _);",
@@ -53,14 +53,16 @@ def main():
         "P0 Direct Draw failed bootstrap cleanup",
         "EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles);",
         "rollback.Restore(project);",
-        "if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);",
+        "if (!projectExistedBeforeAuthoring && IsActiveDocumentGeneration(document, nativeDatabaseIdentity))",
+        "ProjectContextCoordinator.Forget(document);",
         "document.Editor.SetImpliedSelection(Array.Empty<ObjectId>());")
 
     require(execute, "if (ownershipDiscoveryError != null || cadCleanupError != null || restoreError != null)", "rollback error aggregation")
     require(execute, "new AggregateException(errors)", "rollback aggregate preservation")
 
-    cleanup_index = execute.find("if (!projectExistedBeforeAuthoring) ProjectContextCoordinator.Forget(document);")
-    success_index = execute.find("FinalizeUi(document, createdElement!, sourceId, solids, regenerated);")
+    rollback_index = execute.find("rollback.Restore(project);")
+    cleanup_index = execute.find("if (!projectExistedBeforeAuthoring && IsActiveDocumentGeneration(document, nativeDatabaseIdentity))", rollback_index)
+    success_index = execute.find("FinalizeUi(document, nativeDatabaseIdentity, createdElement!, sourceId, solids, regenerated);")
     if cleanup_index < 0 or success_index < 0 or cleanup_index > success_index:
         raise AssertionError("Project cleanup must remain failure-path behavior before successful UI finalization.")
 

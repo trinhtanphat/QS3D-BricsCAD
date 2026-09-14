@@ -30,13 +30,13 @@ if "private static void TrySetPaletteStatus" in p0:
 
 # P0 post-commit Workspace refresh is process-wide too. Prove the captured source Document is
 # still active before that refresh, while leaving the irreversible native/semantic commit intact.
-finalize_start = p0.find("private static void FinalizeUi(Document document")
+finalize_start = p0.find("private static void FinalizeUi(")
 finalize_end = p0.find("private static void EnsureActive", finalize_start if finalize_start >= 0 else 0)
 finalize_body = p0[finalize_start:finalize_end if finalize_end >= 0 else len(p0)] if finalize_start >= 0 else ""
 if finalize_start < 0:
     errors.append("missing DirectDrawCommands.FinalizeUi")
 else:
-    post_commit_fence = finalize_body.find('EnsureActive(document, "Direct Draw post-commit UI refresh");')
+    post_commit_fence = finalize_body.find('if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;')
     refresh_project = finalize_body.find("PaletteCoordinator.RefreshProject();")
     if post_commit_fence < 0:
         errors.append("FinalizeUi must exact-document-fence process-wide post-commit Workspace refresh")
@@ -90,7 +90,7 @@ if fence_start < 0 or identity < 0 or publish < 0 or identity > publish:
 
 # Preserve the native/semantic authoring safety fences that this presentation-only fix must not weaken.
 for required in [
-    "EnsureActive(document, operation);",
+    "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity",
     "ProjectStateSnapshot.Capture(project)",
     "EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)",
 ]:
