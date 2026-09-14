@@ -33,6 +33,27 @@ if module is not None:
     expect(module.path_claims_overlap("src/Owned/", "src/Owned/File.cs"), "directory-prefix overlap must be detected")
     expect(not module.path_claims_overlap("src/A/", "src/B/File.cs"), "non-overlapping directory claims must stay independent")
 
+    crlf_issue = {
+        "number": 250,
+        "state": "open",
+        "created_at": "2026-09-09T00:15:00Z",
+        "body": "\r\n".join((
+            "Reservation-Protocol: v2",
+            "Lane-Key: issue-250",
+            "Canonical owner/session: account:test|session:reservation-crlf",
+            "Canonical carrier: agent/reservation-crlf/issue-250-test",
+            "Ownership-Key: ci/reservation-crlf",
+            "Expected-Paths: scripts/crlf.py",
+            "",
+        )),
+    }
+    try:
+        module._validate_current_identity(crlf_issue)
+        crlf_core = module._reservation_core(crlf_issue, strict=True)
+        expect(crlf_core == ("ci/reservation-crlf", ["scripts/crlf.py"]), "CRLF Reservation-v2 core fields must parse exactly")
+    except ValueError as exc:
+        errors.append("live GitHub CRLF Reservation-v2 metadata must parse: " + str(exc))
+
     current = {
         "number": 200,
         "state": "open",

@@ -12,12 +12,12 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-PROTOCOL_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?reservation[- ]protocol\s*:\s*([^\r\n]*)$")
-LANE_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?lane[- ]key\s*:\s*([^\r\n]*)$")
-OWNER_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?canonical owner/session\s*:\s*([^\r\n]*)$")
-CARRIER_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?canonical carrier\s*:\s*([^\r\n]*)$")
-OWNERSHIP_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?ownership[- ]key\s*:\s*([^\r\n]*)$")
-EXPECTED_PATHS_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?expected[- ]paths\s*:\s*([^\r\n]*)$")
+PROTOCOL_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?reservation[- ]protocol\s*:\s*([^\r\n]*)\r?$")
+LANE_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?lane[- ]key\s*:\s*([^\r\n]*)\r?$")
+OWNER_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?canonical owner/session\s*:\s*([^\r\n]*)\r?$")
+CARRIER_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?canonical carrier\s*:\s*([^\r\n]*)\r?$")
+OWNERSHIP_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?ownership[- ]key\s*:\s*([^\r\n]*)\r?$")
+EXPECTED_PATHS_RE = re.compile(r"(?im)^\s*(?:[-*]\s*)?expected[- ]paths\s*:\s*([^\r\n]*)\r?$")
 
 VALID_OWNERSHIP_RE = re.compile(r"^[a-z0-9][a-z0-9._/-]{4,120}$")
 VALID_OWNER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/|+~-]{5,200}$")
