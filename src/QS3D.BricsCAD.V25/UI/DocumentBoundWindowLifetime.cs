@@ -361,7 +361,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (_initialAttachFailed)
                 {
-                    TryCompleteFailedInitialAttachCleanup();
+                    TryScheduleFailedInitialAttachCleanupAfterQuitAbort();
                     return;
                 }
 
@@ -373,6 +373,19 @@ namespace QS3D.BricsCAD.V25.UI
 
                 if (Volatile.Read(ref _documentCloseStarted) == 0 || Volatile.Read(ref _invalidated) == 0) return;
                 TryRecoverAfterQuitAbort();
+            }
+
+            private void TryScheduleFailedInitialAttachCleanupAfterQuitAbort()
+            {
+                try
+                {
+                    _window.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
+                        TryCompleteFailedInitialAttachCleanup();
+                    }));
+                }
+                catch { }
             }
 
             private void TryRecoverClosedWindowAfterQuitAbort()
