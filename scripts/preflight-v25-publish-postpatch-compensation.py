@@ -41,7 +41,10 @@ def validate(source: str) -> list[str]:
     compensation_body = "$compensationBody = @{ draft = $true; prerelease = $true } | ConvertTo-Json"
     compensation_patch = "$compensatedRelease = Invoke-RestMethod -Method Patch -Uri $releaseUri"
     reconcile_get = "$authoritativeCompensatedRelease = Invoke-RestMethod -Method Get -Uri $releaseUri"
-    terminal = "throw \"V25 release publication safety validation failed after publish PATCH"
+    terminal_message = "V25 release publication safety validation failed after publish PATCH"
+    terminal_throw = re.compile(
+        r"throw\s+(['\"])" + re.escape(terminal_message) + r"[^'\"]*\1"
+    )
     post_main = "$publishMainAfterResponse = Invoke-RestMethod -Method Get -Uri \"https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main\""
 
     required = (
@@ -62,7 +65,7 @@ def validate(source: str) -> list[str]:
         ("$authoritativeCompensatedRelease.prerelease -ne $true", "prerelease postcondition"),
         (post_main, "post-PATCH protected-main revalidation"),
         ("$publishMainAfter -ne $publishMain", "post-PATCH protected-main identity comparison"),
-        (terminal, "fail-closed terminal error after compensation"),
+        (terminal_message, "fail-closed terminal error after compensation"),
     )
     for token, label in required:
         if token not in transaction:
@@ -79,7 +82,10 @@ def validate(source: str) -> list[str]:
     compensation_body_index = transaction.find(compensation_body, catch_index)
     compensate_index = transaction.find(compensation_patch, catch_index)
     reconcile_index = transaction.find(reconcile_get, catch_index)
-    terminal_index = transaction.find(terminal, catch_index)
+    terminal_match = terminal_throw.search(transaction, catch_index)
+    terminal_index = terminal_match.start() if terminal_match else -1
+    if terminal_match is None:
+        errors.append("missing fail-closed terminal throw after compensation")
 
     ordered = (
         publish_in_transaction,
@@ -195,9 +201,11 @@ def main() -> None:
             "$publishMainAfterResponse = Invoke-RestMethod -Method Get -Uri \"https://api.github.com/repos/$env:GITHUB_REPOSITORY/commits/main\"",
             "$publishMainAfterResponse = $publishMainResponse",
         ),
-        "drop terminal failure": source.replace(
-            "throw \"V25 release publication safety validation failed after publish PATCH",
-            "Write-Warning \"V25 release publication safety validation failed after publish PATCH",
+        "drop terminal failure": re.sub(
+            r"throw\s+(['\"])V25 release publication safety validation failed after publish PATCH[^'\"]*\1",
+            "Write-Warning 'V25 release publication safety validation failed after publish PATCH'",
+            source,
+            count=0,
         ),
     }
     for label, mutated in mutations.items():
