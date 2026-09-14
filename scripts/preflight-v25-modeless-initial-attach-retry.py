@@ -46,6 +46,7 @@ for token in (
     "public bool IsAttaching;",
     "ConditionalWeakTable<Window, AttachGate>",
     "AttachGates",
+    "public bool IsAttached => _attached;",
 ):
     require(token in source, "initial Attach retry gate missing token: " + token, errors)
 
@@ -54,7 +55,9 @@ for token in (
     "if (attachGate.IsAttaching)",
     "attachGate.IsAttaching = true;",
     "Registrations.GetValue(window",
+    "var wasAttached = registration.IsAttached;",
     "registration.Attach(document);",
+    "if (!wasAttached &&",
     "Registrations.TryGetValue(window, out var currentRegistration)",
     "ReferenceEquals(currentRegistration, registration)",
     "Registrations.Remove(window);",
@@ -68,18 +71,20 @@ if attach:
     fence_index = attach.find("if (attachGate.IsAttaching)", lock_index)
     mark_index = attach.find("attachGate.IsAttaching = true;", fence_index)
     get_index = attach.find("Registrations.GetValue(window", mark_index)
-    call_index = attach.find("registration.Attach(document);", get_index)
+    state_index = attach.find("var wasAttached = registration.IsAttached;", get_index)
+    call_index = attach.find("registration.Attach(document);", state_index)
     catch_index = attach.find("catch", call_index)
-    exact_index = attach.find("Registrations.TryGetValue(window, out var currentRegistration)", catch_index)
+    initial_only_index = attach.find("if (!wasAttached &&", catch_index)
+    exact_index = attach.find("Registrations.TryGetValue(window, out var currentRegistration)", initial_only_index)
     identity_index = attach.find("ReferenceEquals(currentRegistration, registration)", exact_index)
     remove_index = attach.find("Registrations.Remove(window);", identity_index)
     throw_index = attach.find("throw;", remove_index)
     finally_index = attach.find("finally", throw_index)
     clear_index = attach.find("attachGate.IsAttaching = false;", finally_index)
     require(
-        0 <= lock_index < fence_index < mark_index < get_index < call_index < catch_index
-        < exact_index < identity_index < remove_index < throw_index < finally_index < clear_index,
-        "failed initial Attach must reject reentrancy, evict only the exact failed registration, rethrow, then clear the in-progress fence",
+        0 <= lock_index < fence_index < mark_index < get_index < state_index < call_index < catch_index
+        < initial_only_index < exact_index < identity_index < remove_index < throw_index < finally_index < clear_index,
+        "failed initial Attach must capture pre-call ownership, reject reentrancy, evict only the exact never-attached registration, preserve failed rebind ownership, rethrow, then clear the in-progress fence",
         errors,
     )
 
@@ -90,4 +95,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: failed initial modeless Attach is serialized per Window, rejects reentrant replacement, and evicts only the exact failed registration before a retry can bind stale wrapper/native-generation affinity.")
+print("PASS: initial modeless Attach retries are serialized and evict only the exact never-attached failed registration; failed repeated/rebind Attach preserves the already-successful lifecycle owner.")
