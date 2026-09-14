@@ -19,7 +19,7 @@ forbidden_session = [
 ]
 for token in forbidden_session:
     if token in session:
-        errors.append(f'McpDesktopControlSession raw public exception sink remains: {token}')
+        errors.append('McpDesktopControlSession raw public exception sink remains')
 
 if 'Cause: "\\n                        + ex.Message' in automation:
     errors.append('McpDesktopAutomationRuntime desktop_sequence exposes raw exception message')
