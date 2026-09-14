@@ -56,6 +56,7 @@ public static class Qs3dV25UpdateManifestPublicationNative
     private const uint FileFlagBackupSemantics = 0x02000000;
     private const uint FileFlagOpenReparsePoint = 0x00200000;
     private const int FileRenameInfo = 3;
+    private const int NativeFileRenameInformation = 10;
     private const int FileDispositionInfo = 4;
     private const uint FileNameNormalized = 0x0;
 
@@ -64,6 +65,13 @@ public static class Qs3dV25UpdateManifestPublicationNative
     {
         public uint LowDateTime;
         public uint HighDateTime;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoStatusBlock
+    {
+        public IntPtr Status;
+        public UIntPtr Information;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -98,6 +106,17 @@ public static class Qs3dV25UpdateManifestPublicationNative
         int fileInformationClass,
         IntPtr fileInformation,
         uint bufferSize);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtSetInformationFile(
+        SafeFileHandle file,
+        out IoStatusBlock ioStatusBlock,
+        IntPtr fileInformation,
+        uint length,
+        int fileInformationClass);
+
+    [DllImport("ntdll.dll")]
+    private static extern uint RtlNtStatusToDosError(int status);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -444,13 +463,17 @@ public static class Qs3dV25UpdateManifestPublicationNative
             Marshal.WriteIntPtr(buffer, rootOffset, rootDirectory);
             Marshal.WriteInt32(buffer, fileNameLengthOffset, nameBytes.Length);
             Marshal.Copy(nameBytes, 0, IntPtr.Add(buffer, fileNameOffset), nameBytes.Length);
-            if (!SetFileInformationByHandle(
-                    generation.Stream.SafeFileHandle,
-                    FileRenameInfo,
-                    buffer,
-                    (uint)total))
+            IoStatusBlock ioStatus;
+            int status = NtSetInformationFile(
+                generation.Stream.SafeFileHandle,
+                out ioStatus,
+                buffer,
+                (uint)total,
+                NativeFileRenameInformation);
+            if (status < 0)
             {
-                throw LastWin32("Could not rename owned generation to " + expectedFullPath);
+                int error = unchecked((int)RtlNtStatusToDosError(status));
+                throw new Win32Exception(error, "Could not rename owned generation to " + expectedFullPath);
             }
             generation.CurrentPath = Path.GetFullPath(expectedFullPath);
             AssertOwnedPath(generation, expectedFullPath);
