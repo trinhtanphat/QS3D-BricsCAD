@@ -65,10 +65,16 @@ for needle in [
 # caller/policy failures remain excluded by transientFailure classification.
 if "private const int CircuitOpenOccurrence = 4;" not in source:
     fail("repair circuit threshold drifted")
-if "var transientFailure = !callerOrPolicyFailure && IsTransientFailure(code, message);" not in record:
-    fail("transient circuit classification no longer excludes caller/policy failures")
-if "var circuitOpen = (sourceRepairEligible || transientFailure)" not in record:
-    fail("source-repair failures no longer participate in the bounded repair circuit")
+for needle in [
+    "var transientFailure = !callerOrPolicyFailure &&",
+    "!fatalNativeFailure && IsTransientFailure(code, message);",
+    "var circuitOpen = fatalNativeFailure || repeatedRetryCircuitOpen;",
+    "if (fatalNativeFailure) recommendedAction = \"human_review\";",
+]:
+    if needle not in record:
+        fail(f"transient/fatal-native circuit classification drifted: {needle}")
+if "var repeatedRetryCircuitOpen = (sourceRepairEligible || transientFailure)" not in record:
+    fail("source-repair/transient failures no longer participate in the bounded repair circuit")
 if "&& occurrenceCount >= CircuitOpenOccurrence;" not in record:
     fail("repair circuit no longer uses the bounded occurrence threshold")
 if "var circuitOpen = sourceRepairEligible && occurrenceCount >= CircuitOpenOccurrence;" in record:
