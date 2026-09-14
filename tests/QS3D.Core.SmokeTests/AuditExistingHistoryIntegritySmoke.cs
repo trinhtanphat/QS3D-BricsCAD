@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -24,7 +26,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNonCanonicalExistingActionWithoutMutation()
         {
             var project = new ProjectState("AUDIT-ACTION", "Audit action history");
-            project.AuditEvents.Add(new AuditEvent
+            SeedMalformedLegacyHistory(project, new AuditEvent
             {
                 Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc),
                 Action = " existing.action "
@@ -40,7 +42,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNonUtcExistingTimestampWithoutMutation()
         {
             var project = new ProjectState("AUDIT-UTC", "Audit timestamp history");
-            project.AuditEvents.Add(new AuditEvent
+            SeedMalformedLegacyHistory(project, new AuditEvent
             {
                 Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Unspecified),
                 Action = "existing.action"
@@ -111,7 +113,7 @@ namespace QS3D.Core.SmokeTests
         private static void AssertStoredIdentityRejected(AuditEvent item, string label)
         {
             var project = new ProjectState("AUDIT-STORED-" + label, "Audit stored identity integrity");
-            project.AuditEvents.Add(item);
+            SeedMalformedLegacyHistory(project, item);
             var beforeVersion = project.ChangeVersion;
 
             Throws<InvalidOperationException>(() => _ = AuditTrail.ForProject(project).Events);
@@ -130,7 +132,7 @@ namespace QS3D.Core.SmokeTests
         private static void AssertClearRejected(AuditEvent? item, string label)
         {
             var project = new ProjectState("AUDIT-CLEAR-" + label, "Audit clear integrity");
-            project.AuditEvents.Add(item!);
+            SeedMalformedLegacyHistory(project, item);
             var beforeVersion = project.ChangeVersion;
             var beforeCount = project.AuditEvents.Count;
 
@@ -198,6 +200,30 @@ namespace QS3D.Core.SmokeTests
 
             Equal(beforeVersion, project.ChangeVersion, "empty clear version");
             Equal(0, project.AuditEvents.Count, "empty clear count");
+        }
+
+        private static void SeedMalformedLegacyHistory(ProjectState project, AuditEvent? item)
+        {
+            // Intentionally bypass the current public AuditEvents admission contract to model
+            // malformed data loaded by an older writer. Production code must never use this path.
+            var ownerList = project.AuditEvents;
+            FieldInfo? storageField = null;
+            var storageFieldCount = 0;
+            for (var type = ownerList.GetType(); type != null; type = type.BaseType)
+            {
+                foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
+                {
+                    if (!typeof(IList<AuditEvent>).IsAssignableFrom(field.FieldType))
+                        continue;
+                    storageField = field;
+                    storageFieldCount++;
+                }
+            }
+
+            if (storageFieldCount != 1 || storageField?.GetValue(ownerList) is not IList<AuditEvent> storage)
+                throw new Exception("AuditExistingHistoryIntegritySmoke could not resolve unique AuditEvents backing storage.");
+
+            storage.Add(item!);
         }
 
         private static void Equal<T>(T expected, T actual, string label)
