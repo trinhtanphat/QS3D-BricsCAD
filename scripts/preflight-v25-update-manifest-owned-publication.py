@@ -10,10 +10,12 @@ SCRIPT = ROOT / "scripts" / "new-v25-update-manifest.ps1"
 CORE = ROOT / "scripts" / "new-v25-update-manifest-validation-core.ps1"
 HELPER = ROOT / "scripts" / "Qs3dV25UpdateManifestPublicationNative.cs"
 TRANSFORMER = ROOT / "scripts" / "new-v26-script-from-v25.ps1"
+V26_MANIFEST = ROOT / "scripts" / "new-v26-update-manifest.ps1"
 source = SCRIPT.read_text(encoding="utf-8")
 core = CORE.read_text(encoding="utf-8")
 helper = HELPER.read_text(encoding="utf-8")
 transformer = TRANSFORMER.read_text(encoding="utf-8")
+v26_manifest = V26_MANIFEST.read_text(encoding="utf-8")
 
 
 def require(text: str, token: str, message: str) -> None:
@@ -30,7 +32,9 @@ require(source, "$wrapperCmdlet.ShouldProcess", "canonical wrapper does not own 
 
 # Audit executable PowerShell references, not test/source-guard documentation. The
 # previous repository-wide grep treated every Python preflight that named the split
-# validation core as an executable caller and therefore false-failed Clean20.
+# validation core as an executable caller and therefore false-failed Clean20. V26's
+# transformer and orchestrator may name the V25 template strictly as transform input;
+# they must not directly invoke it.
 completed = subprocess.run(
     [
         "git",
@@ -53,6 +57,7 @@ if completed.returncode not in (0, 1):
 allowed_references = {
     "scripts/new-v25-update-manifest.ps1",
     "scripts/new-v26-script-from-v25.ps1",
+    "scripts/new-v26-update-manifest.ps1",
 }
 references = {line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()}
 unexpected = sorted(references - allowed_references)
@@ -60,17 +65,32 @@ if unexpected:
     raise SystemExit(f"ERROR: internal V25 validation core has unauthorized PowerShell reference(s): {unexpected}")
 if "new-v25-update-manifest-validation-core.ps1" not in transformer:
     raise SystemExit("ERROR: V26 transformer no longer declares the split validation core as a transform input")
-for unsafe_transformer_call in (
-    ". 'new-v25-update-manifest-validation-core.ps1'",
-    '& "new-v25-update-manifest-validation-core.ps1"',
-    "& 'new-v25-update-manifest-validation-core.ps1'",
-    '. "new-v25-update-manifest-validation-core.ps1"',
+require(
+    v26_manifest,
+    "Source = 'new-v25-update-manifest-validation-core.ps1'",
+    "V26 manifest orchestrator no longer declares the V25 validation core as a transform input",
+)
+require(
+    v26_manifest,
+    "Generated = 'new-v26-update-manifest-validation-core.ps1'",
+    "V26 manifest orchestrator no longer binds the transformed validation-core output",
+)
+require(v26_manifest, "& $transformer -TemplateScript", "V26 manifest orchestrator does not route generation through the transformer")
+for label, text in (
+    ("V26 transformer", transformer),
+    ("V26 manifest orchestrator", v26_manifest),
 ):
-    if unsafe_transformer_call in transformer:
-        raise SystemExit(
-            "ERROR: V26 transformer must transform the validation core, not execute it directly: "
-            + unsafe_transformer_call
-        )
+    for unsafe_transformer_call in (
+        ". 'new-v25-update-manifest-validation-core.ps1'",
+        '& "new-v25-update-manifest-validation-core.ps1"',
+        "& 'new-v25-update-manifest-validation-core.ps1'",
+        '. "new-v25-update-manifest-validation-core.ps1"',
+    ):
+        if unsafe_transformer_call in text:
+            raise SystemExit(
+                f"ERROR: {label} must transform the validation core, not execute it directly: "
+                + unsafe_transformer_call
+            )
 
 
 for token, message in (
