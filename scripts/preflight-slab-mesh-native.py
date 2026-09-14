@@ -78,10 +78,15 @@ if command.is_file():
     for needle in (
         'CommandMethod("QS3DSLABREBAR3D"', "SlabMeshSolidBuilder.BuildSelected", "RebarSlabXNotation/RebarSlabYNotation",
         'CommandMethod("QS3DSLABREBARHEALTH"', "GeneratedSlabMeshHealthService", "GeneratedSlabMeshHandles",
-        'Report(document, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.")',
+        'Report(document, nativeDatabaseIdentity, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.")',
+        "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
+        "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);",
+        "FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);",
+        "private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)",
+        "document.Database.UnmanagedObject == nativeDatabaseIdentity",
         'Report(document, "QS3DSLABREBARHEALTH không thể hoàn tất kiểm tra. Project/native geometry không bị thay đổi.")',
         "var uiSyncFailed = false;", "PaletteCoordinator.RefreshProject()", "document.Editor.Regen()",
-        "native update đã hoàn tất; một phần UI không thể đồng bộ", "TryWriteMessage(document",
+        "PostCommitCleanupWarning", "UI sync warning.", "TryWriteMessage(document",
     ):
         if needle not in text: errors.append("native slab-mesh command missing lifecycle/redaction token: " + needle)
     for forbidden in ("ex.Message", "Exception.Message", "GetBaseException()", "StackTrace", "UI sync warning:"):

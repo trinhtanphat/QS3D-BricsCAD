@@ -17,12 +17,14 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try
             {
                 var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
                 if (selectedIds.Length == 0)
                 {
-                    Report(document, "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y.");
+                    Report(document, nativeDatabaseIdentity, "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y.");
                     return;
                 }
 
@@ -34,20 +36,20 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (selectedHandles.Count == 0)
                 {
-                    Report(document, "Slab Mesh 3D: selection không có source handle hợp lệ.");
+                    Report(document, nativeDatabaseIdentity, "Slab Mesh 3D: selection không có source handle hợp lệ.");
                     return;
                 }
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
                 {
-                    Report(document, "Slab Mesh 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
+                    Report(document, nativeDatabaseIdentity, "Slab Mesh 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
                     return;
                 }
 
                 var previewTargets = ResolveSlabTargets(previewProject, selectedHandles);
                 if (previewTargets.Count == 0)
                 {
-                    Report(document, "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y.");
+                    Report(document, nativeDatabaseIdentity, "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y.");
                     return;
                 }
 
@@ -64,15 +66,16 @@ namespace QS3D.BricsCAD.V25
                 if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
                     throw new InvalidOperationException("Slab Mesh 3D: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
                 var result = SlabMeshSolidBuilder.BuildSelected(document, project);
                 var message = result.Bars == 0
                     ? "Slab Mesh 3D: chọn Slab semantic có closed straight-segment plan-view POLYLINE + RebarSlabXNotation/RebarSlabYNotation. Rectangle giữ local-axis legacy; polygon dùng drawing X/Y."
                     : "Slab Mesh 3D: đã tạo/cập nhật " + result.Bars + " thanh trên " + result.Elements + " sàn.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);
             }
             catch (Exception)
             {
-                Report(document, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.");
+                Report(document, nativeDatabaseIdentity, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.");
             }
         }
 
@@ -116,15 +119,65 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private static void FinalizeUi(Document document, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            const string cleanupWarning = "Native update Ä‘Ã£ hoÃ n táº¥t nhÆ°ng cleanup host gáº·p lá»—i; dá»¯ liá»‡u CAD/project Ä‘Ã£ Ä‘Æ°á»£c giá»¯ nguyÃªn.";
+            var visibleMessage = postCommitCleanupWarning ? message + " " + cleanupWarning : message;
             var uiSyncFailed = false;
-            try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }
-            try { document.Editor.Regen(); } catch { uiSyncFailed = true; }
-            try { PaletteCoordinator.SetStatus(message); } catch { uiSyncFailed = true; }
-            TryWriteMessage(document, "\nQS3D " + message);
-            if (uiSyncFailed)
-                TryWriteMessage(document, "\nQS3D Slab Mesh 3D: native update đã hoàn tất; một phần UI không thể đồng bộ.");
+            try
+            {
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                PaletteCoordinator.RefreshProject();
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                document.Editor.Regen();
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                PaletteCoordinator.SetStatus(visibleMessage);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                document.Editor.WriteMessage("
+QS3D " + visibleMessage);
+            }
+            catch
+            {
+                uiSyncFailed = true;
+            }
+            if (uiSyncFailed && IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                TryWriteMessage(document, nativeDatabaseIdentity, "
+QS3D " + visibleMessage + " UI sync warning.");
+        }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            try { return document.Database.UnmanagedObject; }
+            catch { return IntPtr.Zero; }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                return false;
+            try { return document.Database.UnmanagedObject == nativeDatabaseIdentity; }
+            catch { return false; }
+        }
+
+        private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException("Slab Mesh 3D document generation changed before geometry mutation.");
+        }
+
+        private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try { PaletteCoordinator.SetStatus(message); } catch { }
+            TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message);
+        }
+
+        private static void TryWriteMessage(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            try { document.Editor.WriteMessage(message); } catch { }
         }
 
         private static void Report(Document document, string message)
