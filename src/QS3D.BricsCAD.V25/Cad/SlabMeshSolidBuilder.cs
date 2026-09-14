@@ -16,8 +16,16 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal sealed class SlabMeshBuildResult
     {
-        public int Elements { get; set; }
-        public int Bars { get; set; }
+        public SlabMeshBuildResult(int elements, int bars, bool postCommitCleanupWarning)
+        {
+            Elements = elements;
+            Bars = bars;
+            PostCommitCleanupWarning = postCommitCleanupWarning;
+        }
+
+        public int Elements { get; }
+        public int Bars { get; }
+        public bool PostCommitCleanupWarning { get; }
     }
 
     internal static class SlabMeshSolidBuilder
@@ -51,7 +59,7 @@ namespace QS3D.BricsCAD.V25.Cad
             if (selection.Status != PromptStatus.OK || selection.Value == null)
             {
                 selection = document.Editor.GetSelection();
-                if (selection.Status != PromptStatus.OK || selection.Value == null) return new SlabMeshBuildResult();
+                if (selection.Status != PromptStatus.OK || selection.Value == null) return new SlabMeshBuildResult(0, 0, false);
                 document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
             }
             var selectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -62,7 +70,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 .Where(x => x.Category == ElementCategory.Slab && x.SourceHandles.Any(selectedHandles.Contains))
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            if (elements.Count == 0) return new SlabMeshBuildResult();
+            if (elements.Count == 0) return new SlabMeshBuildResult(0, 0, false);
 
             var duplicateSelectedSource = elements
                 .SelectMany(element => element.SourceHandles
@@ -79,6 +87,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var batchBars = 0;
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
+            var cleanupWarning = false;
 
             try
             {
@@ -169,7 +178,11 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             catch (Exception operationError)
             {
-                if (!cadCommitted)
+                if (cadCommitted)
+                {
+                    cleanupWarning = true;
+                }
+                else
                 {
                     try { rollback.Restore(project); }
                     catch (Exception restoreError)
@@ -178,10 +191,10 @@ namespace QS3D.BricsCAD.V25.Cad
                             "Slab mesh replacement failed before CAD commit and project rollback also failed.",
                             new AggregateException(operationError, restoreError));
                     }
+                    throw;
                 }
-                throw;
             }
-            return new SlabMeshBuildResult { Elements = pending.Count, Bars = pending.Sum(x => x.Handles.Count) };
+            return new SlabMeshBuildResult(pending.Count, pending.Sum(x => x.Handles.Count), cleanupWarning);
         }
 
         private static PendingUpdate CreateUpdate(
