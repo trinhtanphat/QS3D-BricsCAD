@@ -2,7 +2,8 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = ROOT / "scripts" / "new-v25-update-manifest.ps1"
+WRAPPER = ROOT / "scripts" / "new-v25-update-manifest.ps1"
+VALIDATION_CORE = ROOT / "scripts" / "new-v25-update-manifest-validation-core.ps1"
 UPDATER = ROOT / "scripts" / "update-v25.ps1"
 
 
@@ -23,8 +24,21 @@ def reject(text: str, needle: str, label: str) -> None:
 
 
 def main() -> int:
-    manifest = read(MANIFEST)
+    wrapper = read(WRAPPER)
+    manifest = read(VALIDATION_CORE)
     updater = read(UPDATER)
+
+    # The public wrapper owns publication. The internal validation core is invoked
+    # only with -WhatIf so its legacy publisher can never become write authority.
+    for token in (
+        "$validationCorePath = Join-Path $PSScriptRoot 'new-v25-update-manifest-validation-core.ps1'",
+        ". $validationCorePath",
+        "-WhatIf 6>$null",
+        "$wrapperCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')",
+        "PublishOwnedGenerationInDirectory",
+    ):
+        require(wrapper, token, "split manifest wrapper delegation/publication")
+    reject(wrapper, "& $validationCorePath", "validation core child-process invocation")
 
     require(manifest, "function Convert-ToStrictSemVerText", "manifest strict SemVer validation")
     require(manifest, "PACKAGE-METADATA is missing productVersion", "manifest package productVersion requirement")
@@ -60,7 +74,7 @@ def main() -> int:
     require(updater, "if ($signedPluginVersion -ne $targetVersion)", "signed DLL assembly binding")
     require(updater, "if ($packageVersion -ne $targetVersion)", "package metadata assembly binding")
 
-    print("PASS: update manifests bind both managed payload identities to one product SemVer, and updater accepts only a signed package with monotonically newer matching productVersion.")
+    print("PASS: split update-manifest validation binds both managed payload identities to one product SemVer; publication remains wrapper-owned and updater accepts only a matching monotonically newer signed productVersion.")
     return 0
 
 
