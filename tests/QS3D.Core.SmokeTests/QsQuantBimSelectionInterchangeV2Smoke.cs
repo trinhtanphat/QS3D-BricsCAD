@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Text;
 using QS3D.Core.BenchmarkParity;
 
 namespace QS3D.Core.SmokeTests
@@ -29,9 +30,13 @@ namespace QS3D.Core.SmokeTests
 
             var lines = encoded.Split(new[] { '\n' }, StringSplitOptions.None);
             var payloadBytes = Convert.FromBase64String(lines[2].Substring("Payload=".Length));
-            var v1 = System.Text.Encoding.UTF8.GetString(payloadBytes);
-            var metadataTamperedV1 = v1.Replace(bundle.Revision, bundle.Revision + "-tampered");
-            var metadataTamperedPayload = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(metadataTamperedV1));
+            var v1 = Encoding.UTF8.GetString(payloadBytes);
+            var revisionField = "Revision=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(bundle.Revision));
+            var tamperedRevisionField = "Revision=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(bundle.Revision + "-tampered"));
+            var metadataTamperedV1 = v1.Replace(revisionField, tamperedRevisionField);
+            if (string.Equals(v1, metadataTamperedV1, StringComparison.Ordinal))
+                throw new InvalidOperationException("QuantBIM selection interchange V2 smoke failed to construct revision metadata tamper.");
+            var metadataTamperedPayload = Convert.ToBase64String(Encoding.UTF8.GetBytes(metadataTamperedV1));
             var metadataTamperedV2 = lines[0] + "\n" + lines[1] + "\nPayload=" + metadataTamperedPayload + "\n";
             Expect<InvalidOperationException>(() => QuantBimSelectionInterchangeV2Codec.Decode(metadataTamperedV2), "metadata tamper bound by whole-envelope digest");
 
