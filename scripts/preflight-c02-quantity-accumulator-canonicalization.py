@@ -7,10 +7,12 @@ SOURCES = {
     "workflow": ROOT / "src/QS3D.Core/BenchmarkParity/Qs2DTakeoffWorkflow.cs",
     "workbook": ROOT / "src/QS3D.Core/BenchmarkParity/QsLiveWorkbook2.cs",
     "cubicost": ROOT / "src/QS3D.Core/BenchmarkParity/QsCubicostQuantityAggregation.cs",
+    "package": ROOT / "src/QS3D.Core/BenchmarkParity/QsTakeoffPackageUx.cs",
 }
 SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/Qs2DQuantityAggregationPrecisionSmoke.cs"
+PACKAGE_SMOKE = ROOT / "tests/QS3D.Core.SmokeTests/QsTakeoffPackageUxSmoke.cs"
 RUNNER = ROOT / "tests/QS3D.Core.SmokeTests/BenchmarkParitySuiteSmoke.cs"
-for path in (*SOURCES.values(), SMOKE, RUNNER):
+for path in (*SOURCES.values(), SMOKE, PACKAGE_SMOKE, RUNNER):
     if not path.is_file():
         raise SystemExit("C02 accumulator preflight missing file: " + str(path.relative_to(ROOT)))
 texts = {name: path.read_text(encoding="utf-8") for name, path in SOURCES.items()}
@@ -30,6 +32,8 @@ if "Invalid Cubicost inventory quantity" not in texts["cubicost"]:
     raise SystemExit("C02 Cubicost non-finite diagnostic contract drifted")
 if "Cubicost inventory quantity overflow" not in texts["cubicost"]:
     raise SystemExit("C02 Cubicost overflow diagnostic contract drifted")
+if 'accumulator.Add(line.EstimatedCost, "estimatedCost")' not in texts["package"]:
+    raise SystemExit("C02 package estimated-cost aggregation drifted")
 smoke = SMOKE.read_text(encoding="utf-8")
 for token in (
     "PreservesPositiveHighDynamicResidual();",
@@ -42,6 +46,10 @@ for token in (
 ):
     if token not in smoke:
         raise SystemExit("C02 accumulator smoke missing contract: " + token)
+package_smoke = PACKAGE_SMOKE.read_text(encoding="utf-8")
+for token in ("PreservesHighDynamicRangeEstimatedCost();", "RejectsAggregateEstimatedCostOverflow();", "10000000000000004d", "estimated cost evidence count invariant", "aggregate estimated cost overflow"):
+    if token not in package_smoke:
+        raise SystemExit("C02 package accumulator smoke missing contract: " + token)
 runner = RUNNER.read_text(encoding="utf-8")
 if "Qs2DQuantityAggregationPrecisionSmoke.Run();" not in runner:
     raise SystemExit("C02 accumulator smoke is not wired into deterministic suite")
