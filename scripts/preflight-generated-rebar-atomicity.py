@@ -47,6 +47,16 @@ for label, (relative, semantic_call) in families.items():
             and "if (cadCommitted)" in text
             and "cleanupWarning = true;" in text
             and "return new ColumnRebarBuildOutcome(totalBars, cleanupWarning);" in text
+        ) or (
+            label == "slab mesh"
+            and "if (cadCommitted)" in text
+            and "cleanupWarning = true;" in text
+            and "return new SlabMeshBuildResult(pending.Count, pending.Sum(x => x.Handles.Count), cleanupWarning);" in text
+        ) or (
+            label == "beam stirrup"
+            and "if (cadCommitted)" in text
+            and "cleanupWarning = true;" in text
+            and "return new BeamStirrupBuildResult(pending.Count, count, cleanupWarning);" in text
         )
         if not committed_cleanup:
             errors.append(label + ": missing generated replacement rollback/committed-cleanup discriminator")
@@ -93,8 +103,9 @@ for label, relative in commands.items():
         # and a stable warning instead of the legacy raw-detail-era warning prefix.
         for token in (
             "var uiSyncFailed = false;",
-            "catch { uiSyncFailed = true; }",
-            "native update đã hoàn tất; một phần UI không thể đồng bộ.",
+            "PostCommitCleanupWarning",
+            "UI sync warning.",
+            "IsActiveDocumentGeneration(document, nativeDatabaseIdentity)",
         ):
             if token not in text:
                 errors.append(label + ": stable post-commit UI isolation missing: " + token)

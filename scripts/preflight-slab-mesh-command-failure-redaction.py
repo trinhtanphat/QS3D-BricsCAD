@@ -20,7 +20,7 @@ required = (
     "expectedTargetIds.SetEquals",
     "ExistingProjectMutationContext.Require(document, \"Slab Mesh 3D\")",
     "SlabMeshSolidBuilder.BuildSelected(document, project)",
-    'Report(document, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.")',
+    'Report(document, nativeDatabaseIdentity, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.")',
     'CommandMethod("QS3DSLABREBARHEALTH"',
     "ProjectContextCoordinator.TryGetReadOnly(document, out var project)",
     "GeneratedSlabMeshHealthService().Inspect(project, live)",
@@ -28,10 +28,10 @@ required = (
     "Report(document, message);",
     "TryWriteMessage(document, \"\\n  [\" + issue.Severity",
     "var uiSyncFailed = false;",
-    "try { PaletteCoordinator.RefreshProject(); } catch { uiSyncFailed = true; }",
-    "try { document.Editor.Regen(); } catch { uiSyncFailed = true; }",
-    "try { PaletteCoordinator.SetStatus(message); } catch { uiSyncFailed = true; }",
-    "native update đã hoàn tất; một phần UI không thể đồng bộ.",
+    "PaletteCoordinator.RefreshProject();",
+    "document.Editor.Regen();",
+    "PaletteCoordinator.SetStatus(visibleMessage);",
+    "PostCommitCleanupWarning", "UI sync warning.",
 )
 for token in required:
     if token not in text:
@@ -42,7 +42,7 @@ for forbidden in ("ex.Message", "Exception.Message", "GetBaseException()", "Stac
         errors.append("raw host exception detail remains: " + forbidden)
 
 build_at = text.find("SlabMeshSolidBuilder.BuildSelected(document, project)")
-finalize_at = text.find("FinalizeUi(document, message)", build_at)
+finalize_at = text.find("FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning)", build_at)
 if build_at < 0 or finalize_at < 0 or build_at >= finalize_at:
     errors.append("successful native slab-mesh build must precede best-effort post-commit UI finalization")
 
