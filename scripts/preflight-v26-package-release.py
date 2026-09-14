@@ -104,10 +104,9 @@ template_expectations = {
         "install-v26-autoload.ps1", "uninstall-v26-autoload.ps1", "update-v26.ps1"
     ],
     "scripts/new-v25-update-manifest.ps1": [
-        "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip",
-        "QS3D-BricsCAD-V26.update.json", "install-v26-autoload.ps1",
-        "uninstall-v26-autoload.ps1", "update-v26.ps1",
-        "new-v26-update-manifest-validation-core.ps1", "Qs3dV26UpdateManifestPublicationNative.cs"
+        "QS3D-BricsCAD-V26", "QS3D-BricsCAD-V26.update.json",
+        "new-v26-update-manifest-validation-core.ps1", "Qs3dV26UpdateManifestPublicationNative.cs",
+        "V26 update-manifest publication requires Windows"
     ],
     "scripts/new-v25-update-manifest-validation-core.ps1": [
         "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip",

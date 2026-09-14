@@ -347,7 +347,7 @@ $requiredTokens = switch ($SourceScript) {
     'uninstall-v25-autoload.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', '^V26', 'QS3D-BricsCAD-V26-Update-'); break }
     'update-v25.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', 'QS3D-BricsCAD-V26.update.json', 'QS3D-BricsCAD-V26.zip', 'install-v26-autoload.ps1', 'QS3D-BricsCAD-V26-Update-'); break }
     'finalize-v25-signed-package.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1'); break }
-    'new-v25-update-manifest.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.update.json', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1', 'new-v26-update-manifest-validation-core.ps1', 'Qs3dV26UpdateManifestPublicationNative.cs'); break }
+    'new-v25-update-manifest.ps1' { @('QS3D-BricsCAD-V26', 'QS3D-BricsCAD-V26.update.json', 'new-v26-update-manifest-validation-core.ps1', 'Qs3dV26UpdateManifestPublicationNative.cs', 'V26 update-manifest publication requires Windows'); break }
     'new-v25-update-manifest-validation-core.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.update.json', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1'); break }
     'Qs3dV25UpdateManifestPublicationNative.cs' { @('Qs3dV26UpdateManifestPublicationNative', 'NtSetInformationFile', 'FileRenameInformation', 'PublishOwnedGenerationInDirectory', 'RollbackOwnedGenerationInDirectory'); break }
     default { throw "Unsupported V25 template: $SourceScript" }
