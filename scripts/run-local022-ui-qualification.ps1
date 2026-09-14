@@ -38,7 +38,7 @@ if ($RenderExperiment -and ($NativeApi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) 
 $operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $source = '602947c4d8b41e0127ab84dd47c17f56ce25ace1'
-$v25PackageSha256 = '12f76207939e9a87f4f77f0a1a0fbda8368a5e0c86ee64503cb9f72785a4c00d'
+$v25PackageSha256 = '45ffdfd96c575c5a8a899ad7815d470d2387a092eff228602a1acc65feff9973'
 # Matched V25/V26 identities are frozen; V26 still requires a cleaned V25 predecessor.
 $base = Join-Path $taskRepo 'artifacts\issue-5718-local022'
 $runRoot = Join-Path $base $AllocationName

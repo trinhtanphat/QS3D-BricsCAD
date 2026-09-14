@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $source = '602947c4d8b41e0127ab84dd47c17f56ce25ace1'
-$v25Hash = '12f76207939e9a87f4f77f0a1a0fbda8368a5e0c86ee64503cb9f72785a4c00d'
+$v25Hash = '45ffdfd96c575c5a8a899ad7815d470d2387a092eff228602a1acc65feff9973'
 $v26Hash = '71914c172370db13bf0eadfa00ad47977823f877f409dfc825975abc7d0416b4'
 $version = '0.2.0-preview.19'
 

@@ -82,7 +82,7 @@ foreach ($HostMajor in @(25,26)) {
                     $UiDriver -cne $mode.UiDriver -or $PauseForOperator -ne $mode.Pause -or -not $ConfirmDisposableCopy) {
                     throw 'FAIL: wrapper changed runner mode or disposable authorization.'
                 }
-                $expectedHash = if ($HostMajor -eq 25) { '12f76207939e9a87f4f77f0a1a0fbda8368a5e0c86ee64503cb9f72785a4c00d' }
+                $expectedHash = if ($HostMajor -eq 25) { '45ffdfd96c575c5a8a899ad7815d470d2387a092eff228602a1acc65feff9973' }
                     else { '71914c172370db13bf0eadfa00ad47977823f877f409dfc825975abc7d0416b4' }
                 $expectedTimeout = if ($mode.UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
                 $expectedFramework = if ($HostMajor -eq 25) { 'net48' } else { 'net8.0-windows' }
@@ -134,7 +134,7 @@ function New-NativePredecessor {
         Allocation = [pscustomobject]@{
             schema='QS3D_LOCAL022_ALLOCATION_V1'; run_id=('a' * 32); host_version='25.2.10'
             product_source_sha='602947c4d8b41e0127ab84dd47c17f56ce25ace1'
-            package_sha256='12f76207939e9a87f4f77f0a1a0fbda8368a5e0c86ee64503cb9f72785a4c00d'
+            package_sha256='45ffdfd96c575c5a8a899ad7815d470d2387a092eff228602a1acc65feff9973'
             interactive_ui=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
         }
         Restoration = [pscustomobject]@{ restored=$true }
@@ -144,7 +144,7 @@ function Invoke-PredecessorGate($Fixture, [bool]$Native=$true) {
     $HostMajor=26; $NativeApi=$Native; $UiDriver='NATIVE_V1'; $operatorWaitPolicy='WALL_CLOCK_V1'; $QuantityUi=$false
     $PrecedingV25Receipt='C:\host-free-receipts\native-v25\receipt.json'; $V26ProvenancePath='C:\host-free-provenance.json'
     $source='602947c4d8b41e0127ab84dd47c17f56ce25ace1'
-    $v25PackageSha256='12f76207939e9a87f4f77f0a1a0fbda8368a5e0c86ee64503cb9f72785a4c00d'
+    $v25PackageSha256='45ffdfd96c575c5a8a899ad7815d470d2387a092eff228602a1acc65feff9973'
     $script:phaseAdmissionCalled=$false
     function Assert-Local022NativeV25Phases($RunnerPath,$EvidenceRoot,$ExpectedRunId) {
         if ((Split-Path $RunnerPath -Leaf) -cne 'test-bricscad-v25-single-footing.ps1' -or

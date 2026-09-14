@@ -89,7 +89,7 @@ $candidates = @{
         ProductVersion = '0.1.0-preview.10307'; Kind = 'LOCAL_PR_CANDIDATE'
     }
     '602947c4d8b41e0127ab84dd47c17f56ce25ace1' = @{
-        PackageSha256 = '12f76207939e9a87f4f77f0a1a0fbda8368a5e0c86ee64503cb9f72785a4c00d'
+        PackageSha256 = '45ffdfd96c575c5a8a899ad7815d470d2387a092eff228602a1acc65feff9973'
         ProductVersion = '0.2.0-preview.19'; Kind = 'LOCAL_PR_CANDIDATE'
     }
 }
