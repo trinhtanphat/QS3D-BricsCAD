@@ -40,6 +40,13 @@ def _section(text: str, start: str, end: str) -> str:
     return text[start_index:end_index]
 
 
+def _section_to_end(text: str, start: str) -> str:
+    start_index = text.find(start)
+    if start_index < 0:
+        raise GuardFailure(f"missing workflow section start: {start}")
+    return text[start_index:]
+
+
 def _require_order(section: str, before: str, after: str, label: str) -> None:
     before_index = section.find(before)
     after_index = section.find(after)
@@ -108,11 +115,7 @@ def validate(workflow: str, helper: str) -> None:
     if release_readmission.count(release_call) != 1:
         raise GuardFailure("release-job re-admission must invoke exact release-main-drift helper once")
 
-    publish = _section(
-        workflow,
-        "      - name: Publish GitHub prerelease",
-        "      - name: Cleanup held V25 release assets",
-    )
+    publish = _section_to_end(workflow, "      - name: Publish GitHub prerelease")
     pre_mutation_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $preMutationPublishMain"
     final_publish_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $publishMain"
     if publish.count(pre_mutation_call) != 1:
@@ -148,16 +151,14 @@ def main() -> int:
     helper = HELPER.read_text(encoding="utf-8")
     validate(workflow, helper)
 
-    workflow_calls = (
-        ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $sourceSha -CurrentMainSha $currentMain",
-        ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $preMutationPublishMain",
-        ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $publishMain",
-    )
+    shared_early_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $sourceSha -CurrentMainSha $currentMain"
+    pre_mutation_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $preMutationPublishMain"
+    final_publish_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $publishMain"
     mutations = (
-        (_remove_nth(workflow, workflow_calls[0], 1), helper),
-        (_remove_nth(workflow, workflow_calls[0], 2), helper),
-        (_remove_nth(workflow, workflow_calls[1], 1), helper),
-        (_remove_nth(workflow, workflow_calls[2], 1), helper),
+        (_remove_nth(workflow, shared_early_call, 1), helper),
+        (_remove_nth(workflow, shared_early_call, 2), helper),
+        (_remove_nth(workflow, pre_mutation_call, 1), helper),
+        (_remove_nth(workflow, final_publish_call, 1), helper),
         (workflow, helper.replace("if ($releaseDriftStatus -eq 1) {", "if ($releaseDriftStatus -eq 2) {", 1)),
         (workflow, helper.replace("if ($releaseDriftStatus -ne 0) {", "if ($releaseDriftStatus -eq 0) {", 1)),
     )
