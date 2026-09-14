@@ -30,11 +30,9 @@ require(source, "new-v25-update-manifest-validation-core.ps1", "canonical wrappe
 require(source, "-WhatIf 6>$null", "validation core is not forced into non-publishing validation mode")
 require(source, "$wrapperCmdlet.ShouldProcess", "canonical wrapper does not own final ShouldProcess authority")
 
-# Audit executable PowerShell references, not test/source-guard documentation. The
-# previous repository-wide grep treated every Python preflight that named the split
-# validation core as an executable caller and therefore false-failed Clean20. V26's
-# transformer and orchestrator may name the V25 template strictly as transform input;
-# they must not directly invoke it.
+# Audit executable references without mistaking Python source-guard/test references
+# for callers. Repository-wide discovery is intentional so a workflow/action or a
+# different shell cannot silently bypass the wrapper in a future change.
 completed = subprocess.run(
     [
         "git",
@@ -42,7 +40,6 @@ completed = subprocess.run(
         "-l",
         "new-v25-update-manifest-validation-core.ps1",
         "--",
-        "scripts/*.ps1",
         ":(exclude)scripts/new-v25-update-manifest-validation-core.ps1",
     ],
     cwd=ROOT,
@@ -53,16 +50,30 @@ completed = subprocess.run(
     check=False,
 )
 if completed.returncode not in (0, 1):
-    raise SystemExit(f"ERROR: could not audit validation-core PowerShell references: {(completed.stderr or completed.stdout).strip()}")
+    raise SystemExit(f"ERROR: could not audit validation-core references: {(completed.stderr or completed.stdout).strip()}")
+all_references = {line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()}
 allowed_references = {
     "scripts/new-v25-update-manifest.ps1",
     "scripts/new-v26-script-from-v25.ps1",
     "scripts/new-v26-update-manifest.ps1",
 }
-references = {line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()}
-unexpected = sorted(references - allowed_references)
+script_execution_suffixes = {".ps1", ".psm1", ".psd1", ".cmd", ".bat", ".sh"}
+execution_references: set[str] = set()
+for reference in all_references:
+    path = Path(reference)
+    suffix = path.suffix.lower()
+    if reference.startswith("scripts/") and suffix in script_execution_suffixes:
+        execution_references.add(reference)
+        continue
+    if reference.startswith(".github/workflows/") and suffix in {".yml", ".yaml"}:
+        execution_references.add(reference)
+        continue
+    if reference.startswith(".github/actions/") and suffix in {".yml", ".yaml"}:
+        execution_references.add(reference)
+
+unexpected = sorted(execution_references - allowed_references)
 if unexpected:
-    raise SystemExit(f"ERROR: internal V25 validation core has unauthorized PowerShell reference(s): {unexpected}")
+    raise SystemExit(f"ERROR: internal V25 validation core has unauthorized execution-surface reference(s): {unexpected}")
 if "new-v25-update-manifest-validation-core.ps1" not in transformer:
     raise SystemExit("ERROR: V26 transformer no longer declares the split validation core as a transform input")
 require(
@@ -95,6 +106,9 @@ for label, text in (
                 f"ERROR: {label} must transform the validation core, not execute it directly: "
                 + unsafe_transformer_call
             )
+for unsafe_dynamic_call in ("& $entry.Source", ". $entry.Source", "Invoke-Expression"):
+    if unsafe_dynamic_call in v26_manifest:
+        raise SystemExit(f"ERROR: V26 manifest orchestrator exposes a dynamic validation-core execution path: {unsafe_dynamic_call}")
 
 
 for token, message in (
