@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -31,8 +32,10 @@ namespace QS3D.BricsCAD.V25
             bool contractFailure)
         {
             var callerOrPolicyFailure = contractFailure || IsCallerOrPolicyFailure(code, message);
-            var transientFailure = !callerOrPolicyFailure && IsTransientFailure(code, message);
+            var fatalNativeFailure = IsFatalNativeFailure(exception);
+            var transientFailure = !callerOrPolicyFailure && !fatalNativeFailure && IsTransientFailure(code, message);
             var sourceRepairEligible = !callerOrPolicyFailure
+                                       && !fatalNativeFailure
                                        && !transientFailure
                                        && IsSourceRepairFailure(code, message);
 
@@ -104,12 +107,14 @@ namespace QS3D.BricsCAD.V25
 
             // Both source-repair loops and repeated transient loops must eventually fail closed.
             // Caller/policy failures remain non-retryable and never enter this circuit.
-            var circuitOpen = (sourceRepairEligible || transientFailure)
-                              && occurrenceCount >= CircuitOpenOccurrence;
+            var repeatedRetryCircuitOpen = (sourceRepairEligible || transientFailure)
+                                           && occurrenceCount >= CircuitOpenOccurrence;
+            var circuitOpen = fatalNativeFailure || repeatedRetryCircuitOpen;
             var humanReviewRequired = circuitOpen;
 
             string recommendedAction;
-            if (circuitOpen) recommendedAction = "human_review";
+            if (fatalNativeFailure) recommendedAction = "human_review";
+            else if (circuitOpen) recommendedAction = "human_review";
             else if (sourceRepairEligible) recommendedAction = "open_source_repair";
             else if (callerOrPolicyFailure) recommendedAction = "correct_call_or_refresh_tools";
             else if (transientFailure) recommendedAction = "retry_transient";
@@ -282,6 +287,12 @@ namespace QS3D.BricsCAD.V25
                 " IS REQUIRED",
                 "MUST MATCH",
                 "EXCEEDS");
+        }
+
+        private static bool IsFatalNativeFailure(Exception? exception)
+        {
+            return exception is AccessViolationException
+                   || exception is SEHException;
         }
 
         private static bool IsTransientFailure(string code, string message)
