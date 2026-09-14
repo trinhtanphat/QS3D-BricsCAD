@@ -63,6 +63,19 @@ if COMMAND.is_file():
         'level_lifecycle_qualified=',
         'FileMode.CreateNew',
         'File.Move(temporaryPath, fullPath)',
+        'private sealed class ProbeFailureException : InvalidOperationException',
+        'RunProbeStep(',
+        '"UNDO_LEVEL_CONFIG_REJECTED"',
+        '"UNDO_HOST_OWNERSHIP_REJECTED"',
+        '"UNDO_HOST_LIVENESS_REJECTED"',
+        '"UNDO_HOST_RANGE_REJECTED"',
+        '"UNDO_HOST_BOTTOM_REJECTED"',
+        '"UNDO_HOST_TOP_REJECTED"',
+        '"UNDO_LEGACY_SNAPSHOT_REJECTED"',
+        '"UNDO_FRAME_OWNERSHIP_REJECTED"',
+        '"UNDO_PANEL_OWNERSHIP_REJECTED"',
+        '"UNDO_HOST_STALE_REJECTED"',
+        '"UNDO_GENERATED_AFTER_PRESENT"',
     ):
         if token not in text:
             errors.append("Level lifecycle command missing contract token: " + token)
