@@ -7,7 +7,7 @@ builder = (ROOT / "src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs").read_tex
 command = (ROOT / "src/QS3D.BricsCAD.V25/BeamRebarCommands.cs").read_text(encoding="utf-8")
 
 required_builder = [
-    "internal readonly struct BeamRebarBuildOutcome",
+    "internal struct BeamRebarBuildOutcome",
     "public int Count { get; }",
     "public bool PostCommitCleanupWarning { get; }",
     "public static BeamRebarBuildOutcome BuildSelected",
@@ -26,6 +26,10 @@ required_command = [
 
 missing = [token for token in required_builder if token not in builder]
 missing += [token for token in required_command if token not in command]
+
+# Keep the compatibility form immutable from callers even though the struct itself is not marked readonly.
+if "public int Count { get; set; }" in builder or "public bool PostCommitCleanupWarning { get; set; }" in builder:
+    missing.append("BeamRebarBuildOutcome properties must remain getter-only")
 
 committed_index = builder.find("if (cadCommitted)")
 warning_index = builder.find("return new BeamRebarBuildOutcome(totalBars, postCommitCleanupWarning: true);", committed_index)
