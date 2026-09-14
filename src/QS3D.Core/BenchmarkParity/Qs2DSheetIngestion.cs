@@ -164,10 +164,30 @@ namespace QS3D.Core.BenchmarkParity
             if (payload[12] != (byte)'I' || payload[13] != (byte)'H' || payload[14] != (byte)'D' || payload[15] != (byte)'R')
                 throw new InvalidOperationException("PNG first chunk must be IHDR.");
 
+            ValidatePngChunkCrc(payload, 12, 13, "IHDR");
             width = ReadInt32BigEndian(payload, 16);
             height = ReadInt32BigEndian(payload, 20);
             if (width <= 0 || height <= 0) throw new InvalidOperationException("PNG dimensions are invalid.");
             return true;
+        }
+
+        private static void ValidatePngChunkCrc(byte[] payload, int typeOffset, int dataLength, string chunkName)
+        {
+            var crcOffset = typeOffset + 4 + dataLength;
+            if (typeOffset < 0 || dataLength < 0 || crcOffset < typeOffset || crcOffset + 4 > payload.Length)
+                throw new InvalidOperationException("PNG " + chunkName + " chunk is truncated before its CRC.");
+
+            uint crc = 0xffffffffu;
+            for (var i = typeOffset; i < crcOffset; i++)
+            {
+                crc ^= payload[i];
+                for (var bit = 0; bit < 8; bit++)
+                    crc = (crc >> 1) ^ ((crc & 1u) != 0u ? 0xedb88320u : 0u);
+            }
+            crc ^= 0xffffffffu;
+
+            if (crc != ReadUInt32BigEndian(payload, crcOffset))
+                throw new InvalidOperationException("PNG " + chunkName + " chunk CRC is invalid.");
         }
 
         private static void ValidatePngTerminator(byte[] payload)
@@ -223,6 +243,11 @@ namespace QS3D.Core.BenchmarkParity
         private static int ReadInt32BigEndian(byte[] payload, int offset)
         {
             return (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+        }
+
+        private static uint ReadUInt32BigEndian(byte[] payload, int offset)
+        {
+            return ((uint)payload[offset] << 24) | ((uint)payload[offset + 1] << 16) | ((uint)payload[offset + 2] << 8) | payload[offset + 3];
         }
     }
 }
