@@ -70,9 +70,24 @@ if RUNNER.is_file():
         'QS3D_LEVEL_Z_COMPLETE_FAMILY_SOURCE_SHA', 'LOCAL_003_COMPLETE_FAMILY_RUNTIME_V1',
         'host_family_count', 'family_case_count', 'hosted_opening_count',
         'drawing_restore_verified', 'process_cleanup_verified', 'private_state_cleanup_verified',
+        '$unsavedProjectChangesDialogsDiscarded = 0',
+        'unsaved_project_changes_dialogs_discarded = $unsavedProjectChangesDialogsDiscarded',
     ):
         if token not in text:
             errors.append("complete-family runner missing contract token: " + token)
+
+    graceful_loop_start = text.find('$gracefulDeadline = (Get-Date).AddSeconds($GracefulExitTimeoutSeconds)')
+    graceful_loop_end = text.find('if (-not $gracefulExit)', graceful_loop_start)
+    if graceful_loop_start < 0 or graceful_loop_end < 0:
+        errors.append("complete-family post-marker graceful-exit loop is missing")
+    else:
+        graceful_loop = text[graceful_loop_start:graceful_loop_end]
+        discard_call = graceful_loop.find('Close-Qs3dUnsavedProjectChangesDialog -Process $process')
+        wait_call = graceful_loop.find('$process.WaitForExit(250)')
+        if discard_call < 0:
+            errors.append("complete-family graceful-exit loop must discard the runner-owned unsaved-project dialog")
+        elif wait_call < 0 or discard_call > wait_call:
+            errors.append("complete-family unsaved-project dialog handling must run before WaitForExit")
 
 if errors:
     for error in errors:

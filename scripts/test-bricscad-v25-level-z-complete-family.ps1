@@ -193,6 +193,7 @@ $drawingReadOnlyBeforeLaunchVerified = $false
 $drawingReadOnlyThroughHostExitVerified = $false
 $drawingUnwrittenVerified = $false
 $proxyInformationDialogsDismissed = 0
+$unsavedProjectChangesDialogsDiscarded = 0
 $startedAt = Get-Date
 
 try {
@@ -239,6 +240,9 @@ try {
     else {
         $gracefulDeadline = (Get-Date).AddSeconds($GracefulExitTimeoutSeconds)
         while ((Get-Date) -lt $gracefulDeadline) {
+            if ($unsavedProjectChangesDialogsDiscarded -eq 0) {
+                $unsavedProjectChangesDialogsDiscarded += Close-Qs3dUnsavedProjectChangesDialog -Process $process
+            }
             if ($process.WaitForExit(250)) { $gracefulExit = $true; break }
         }
     }
@@ -347,6 +351,7 @@ $metadata = [ordered]@{
     drawing_restore_verified = $drawingRestoreVerified
     drawing_attributes_restored = $drawingAttributesRestored
     proxy_information_dialogs_dismissed = $proxyInformationDialogsDismissed
+    unsaved_project_changes_dialogs_discarded = $unsavedProjectChangesDialogsDiscarded
     marker = if ($null -ne $marker) { $marker } else { @{} }
 }
 $metadata | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
