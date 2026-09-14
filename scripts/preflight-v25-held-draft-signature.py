@@ -37,7 +37,12 @@ def validate(validator: str, workflow: str) -> list[str]:
         "$MaxSignedPayloadTotalBytes = 536870912",
         "if ($matches.Count -ne 1)",
         "[IO.FileMode]::CreateNew",
-        "[IO.FileShare]::None",
+        "$output = [IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)",
+        "$transition = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)",
+        "$heldStream = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)",
+        "$outputDigest = Get-HeldSha256 -Held $outputHeld",
+        "$heldDigest = Get-HeldSha256 -Held $heldPayload",
+        "[string]::Equals($heldDigest, $outputDigest, [StringComparison]::OrdinalIgnoreCase)",
         "[IO.FileAttributes]::ReparsePoint",
         "verify-v25-signatures.ps1",
         "Test-HeldZipPayloadSignatures -ZipHeld $zipHeld -ExpectedThumbprint $expectedSigner",
@@ -45,6 +50,9 @@ def validate(validator: str, workflow: str) -> list[str]:
     for token in required_validator_tokens:
         if token not in validator:
             errors.append(f"V25 held draft signature validator missing token: {token}")
+    if validator.count("[IO.FileShare]::ReadWrite") != 1 or "[IO.FileShare]::Delete" in validator or "[IO.FileShare]::Write" in validator:
+        errors.append("V25 held payload handoff must keep exactly one read-only ReadWrite transition and deny write/delete sharing")
+
     for name in REQUIRED_PAYLOAD:
         if f"'{name}'" not in validator:
             errors.append(f"V25 held draft signature validator missing required payload entry: {name}")
@@ -84,6 +92,8 @@ mutations = {
     "held signature call removed": (VALIDATOR.replace("Test-HeldZipPayloadSignatures -ZipHeld $zipHeld -ExpectedThumbprint $expectedSigner", "Write-Host 'skip'", 1), WORKFLOW),
     "duplicate-entry rejection removed": (VALIDATOR.replace("if ($matches.Count -ne 1)", "if ($matches.Count -lt 1)", 1), WORKFLOW),
     "bounded entry cap removed": (VALIDATOR.replace("$MaxSignedPayloadEntryBytes = 268435456", "$MaxSignedPayloadEntryBytes = [int64]::MaxValue", 1), WORKFLOW),
+    "strict held payload share widened": (VALIDATOR.replace("$heldStream = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)", "$heldStream = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)", 1), WORKFLOW),
+    "handoff digest continuity removed": (VALIDATOR.replace("[string]::Equals($heldDigest, $outputDigest, [StringComparison]::OrdinalIgnoreCase)", "$true", 1), WORKFLOW),
     "workflow reopens draft after admission": (VALIDATOR, WORKFLOW.replace("if ($null -eq $downloadedIdentity) { throw 'Downloaded V25 draft semantic admission returned no identity.' }", "if ($null -eq $downloadedIdentity) { throw 'Downloaded V25 draft semantic admission returned no identity.' }\n              $heldRemoteZip = Join-Path $downloadRoot 'QS3D-BricsCAD-V25.zip'\n              Expand-Archive -LiteralPath $heldRemoteZip -DestinationPath (Join-Path $downloadRoot 'legacy')\n              & .\\scripts\\verify-v25-signatures.ps1 -Path $payload -ExpectedThumbprint $env:QS3D_SIGNING_CERT_THUMBPRINT", 1)),
 }
 for label, (validator, workflow) in mutations.items():
