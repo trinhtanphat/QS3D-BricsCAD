@@ -359,6 +359,12 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnHostQuiescenceAborted(object? sender, EventArgs e)
             {
+                if (_initialAttachFailed)
+                {
+                    TryCompleteFailedInitialAttachCleanup();
+                    return;
+                }
+
                 if (Volatile.Read(ref _windowClosedDuringQuiescence) != 0)
                 {
                     TryRecoverClosedWindowAfterQuitAbort();
