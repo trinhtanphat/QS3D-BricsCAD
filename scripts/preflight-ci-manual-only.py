@@ -494,11 +494,7 @@ for path, text in workflow_sources:
             errors.append(f"{path.name}: docs/claim-only changes must not trigger automatic V25 cloud CI")
 
         workflow_run_block = "\n".join(trigger_blocks.get("workflow_run", []))
-        require_tokens(
-            workflow_run_block,
-            ("workflows:", '"QS3D Cloud V25 Preview Build & Release"', "types:", "- completed"),
-            f"{path.name} workflow_run",
-        )
+        require_tokens(workflow_run_block, ("workflows:", '"QS3D Cloud V25 Preview Build & Release"', "types:", "- completed"), f"{path.name} workflow_run")
 
         require_tokens(text, (
             "contents: read", "actions: write", "cancel-in-progress: false", "queue: max",
@@ -532,11 +528,7 @@ for path, text in workflow_sources:
             errors.append(f"{path.name}: hybrid coordinator must expose exactly pull_request + push; got {sorted(trigger_names)}")
 
         pr_block = "\n".join(trigger_blocks.get("pull_request", []))
-        require_tokens(
-            pr_block,
-            ("types:", "- opened", "- reopened", "- ready_for_review", "- converted_to_draft", "- synchronize", "- labeled", "- unlabeled", "branches:", "- main"),
-            f"{path.name} pull_request",
-        )
+        require_tokens(pr_block, ("types:", "- opened", "- reopened", "- ready_for_review", "- converted_to_draft", "- synchronize", "- labeled", "- unlabeled", "branches:", "- main"), f"{path.name} pull_request")
         push_block = "\n".join(trigger_blocks.get("push", []))
         require_tokens(push_block, ("branches:", "- main"), f"{path.name} push")
         if "paths:" in pr_block or "paths-ignore:" in pr_block or "paths:" in push_block or "paths-ignore:" in push_block:
@@ -571,16 +563,8 @@ for path, text in workflow_sources:
         refresh_lines = next((block for name, block in job_blocks if name == "refresh-branches"), [])
         arm_block = "\n".join(arm_lines)
         refresh_block = "\n".join(refresh_lines)
-        require_tokens(
-            arm_block,
-            ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "clean replay/rebuild"),
-            f"{path.name}/arm-native-automerge",
-        )
-        require_tokens(
-            refresh_block,
-            ("github.event_name == 'push'", "github.ref == 'refs/heads/main'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "clean replay/rebuild"),
-            f"{path.name}/refresh-branches",
-        )
+        require_tokens(arm_block, ("github.event_name == 'pull_request'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "disablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "clean replay/rebuild"), f"{path.name}/arm-native-automerge")
+        require_tokens(refresh_block, ("github.event_name == 'push'", "github.ref == 'refs/heads/main'", "GH_TOKEN: ${{ secrets.QS3D_AUTOMERGE_TOKEN }}", "enablePullRequestAutoMerge", "/update-branch", "expected_head_sha", "update_method=rebase", "clean replay/rebuild"), f"{path.name}/refresh-branches cancellation authority")
         if "update_method=merge" in arm_block or "update_method=merge" in refresh_block:
             errors.append(f"{path.name}: coordinator jobs must never merge protected main into an active PR carrier")
         if text.count("update_method=rebase") != 2:
@@ -615,7 +599,10 @@ for path, text in workflow_sources:
     if path.name == "release-v25-cloud.yml":
         require_tokens(text, (
             "source_sha:", "SOURCE_SHA: ${{ inputs.source_sha || github.sha }}",
-            "ref: ${{ inputs.source_sha || github.sha }}", "git merge-base --is-ancestor $sourceSha origin/main",
+            "ref: ${{ inputs.source_sha || github.sha }}",
+            "$currentMain = ([string](& git rev-parse --verify origin/main)).Trim().ToLowerInvariant()",
+            "git merge-base --is-ancestor $sourceSha $currentMain",
+            ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $sourceSha -CurrentMainSha $currentMain",
             "-DispatchSha $env:SOURCE_SHA",
         ), path.name)
         if "-DispatchSha $env:GITHUB_SHA" in text:
