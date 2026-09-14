@@ -54,15 +54,44 @@ if old_sync not in source:
 source = source.replace(old_sync, new_sync, 1)
 
 old_order = 'elif not (capture < begin < regen < line_host < line_frame < line_panel < stage < commit < post < refresh):'
-new_order = 'elif not (regen < capture < begin < line_host < line_frame < line_panel < stage < commit < post < refresh):'
+new_order = 'elif not (capture < regen < begin < line_host < line_frame < line_panel < stage < commit < post < refresh):'
 if old_order not in source:
     raise SystemExit("Curtain Undo base guard ordering contract drifted")
 source = source.replace(old_order, new_order, 1)
 old_order_message = 'Curtain Undo must capture/register before mutation, stage after all builders, commit marker with CAD, then finalize the exact post-fingerprint state'
-new_order_message = 'Curtain Undo must regenerate semantic state before capturing the native-before owner checkpoint, then register before native mutation, stage after all builders, commit marker with CAD, and finalize the exact post-fingerprint state'
+new_order_message = 'Curtain Undo must capture the pre-command owner/persistence target before semantic regeneration, rebind semantic state before registration, then stage/commit/finalize with the native transaction'
 if old_order_message not in source:
     raise SystemExit("Curtain Undo base guard ordering message drifted")
 source = source.replace(old_order_message, new_order_message, 1)
+
+extra_order = r'''
+pre_capture = build.find("var undoBefore = CurtainWallUndoCoordinator.OwnerStateSnapshot.CaptureSelectedOwners(")
+regen = build.find("RegenerateDirty(project)")
+rebind = build.find("undoBefore = undoBefore.RebindPersistenceSemanticState(project);")
+begin = build.find("CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore)")
+line_host = build.find("WallSolidBuilder.BuildSelectedLineWalls")
+if min(pre_capture, regen, rebind, begin, line_host) < 0:
+    errors.append("Curtain Undo composite pre-persistence/rebound semantic boundary is incomplete")
+elif not (pre_capture < regen < rebind < begin < line_host):
+    errors.append("Curtain Undo must capture pre-command owner/persistence state, regenerate semantics, rebind only the persistence semantic signature, then register before native mutation")
+
+for token in (
+    "public ProjectPersistenceCheckpoint RebindSemanticState(ProjectState project)",
+    "public bool SemanticMatches(ProjectState project)",
+):
+    if token not in checkpoint:
+        errors.append("Core composite persistence target contract missing: " + token)
+
+for token in (
+    "public OwnerStateSnapshot RebindPersistenceSemanticState(ProjectState project)",
+    "_persistence.RebindSemanticState(project)",
+):
+    if token not in coord:
+        errors.append("Curtain Undo composite target contract missing: " + token)
+'''
+if "\nif errors:\n" not in source:
+    raise SystemExit("Curtain Undo composite guard error boundary drifted")
+source = source.replace("\nif errors:\n", "\n" + extra_order + "\nif errors:\n", 1)
 
 extra = r'''
 for token in (
