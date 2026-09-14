@@ -57,6 +57,18 @@ def main() -> int:
             errors.append("path-only drawing identity must not prove durable acknowledgement")
         if '"mutation-ack-not-durable"' not in ledger or "stable drawing identity could not be established" not in ledger:
             errors.append("missing bounded diagnostic when stable durable identity cannot be proven")
+        promote_start = ledger.find("internal static PromotionResult PromoteDurableForDocument")
+        promote_end = ledger.find("internal static bool HasAccepted", promote_start)
+        promote_body = ledger[promote_start:promote_end] if promote_start >= 0 and promote_end > promote_start else ""
+        for token in ("var candidates = new List<AckRecord>();", "if (!AppliedDocumentMatches(record, stableIdentity))", "foreach (var record in candidates)", "record.State = AckState.Durable;"):
+            if token not in promote_body:
+                errors.append(f"durable promotion generation-affinity contract missing: {token}")
+        guard_pos = promote_body.find("if (!AppliedDocumentMatches(record, stableIdentity))")
+        mutate_pos = promote_body.find("record.State = AckState.Durable;")
+        if mutate_pos >= 0 and (guard_pos < 0 or guard_pos > mutate_pos):
+            errors.append("applied-time document identity must be revalidated before any durable ACK state mutation")
+        if "private static bool AppliedDocumentMatches(AckRecord record, string stableIdentity)" not in ledger:
+            errors.append("missing applied-time versus save-time stable document identity guard")
 
     if 'case "cad_mutation_status"' not in agent:
         errors.append("cad_mutation_status must route read-only in McpCadAgentRuntime")
