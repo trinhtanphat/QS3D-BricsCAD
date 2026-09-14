@@ -16,14 +16,13 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$maxGeneratedScriptBytes = 1MB
+$maxGeneratedScriptBytes = 2MB
 $strictUtf8 = [Text.UTF8Encoding]::new($false, $true)
 
 if (-not ('Qs3d.V26.ManifestTempGenerationNative' -as [type])) {
     Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -66,13 +65,6 @@ namespace Qs3d.V26
             public uint FileIndexLow;
         }
 
-        [StructLayout(LayoutKind.Sequential)]
-        private struct FILE_DISPOSITION_INFO
-        {
-            [MarshalAs(UnmanagedType.Bool)]
-            public bool DeleteFile;
-        }
-
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern SafeFileHandle CreateFileW(
             string lpFileName,
@@ -92,7 +84,7 @@ namespace Qs3d.V26
         private static extern bool SetFileInformationByHandle(
             SafeFileHandle hFile,
             int FileInformationClass,
-            ref FILE_DISPOSITION_INFO lpFileInformation,
+            IntPtr lpFileInformation,
             uint dwBufferSize);
 
         private static string Identity(BY_HANDLE_FILE_INFORMATION info)
@@ -101,13 +93,31 @@ namespace Qs3d.V26
             return info.VolumeSerialNumber.ToString("X8") + ":" + fileIndex.ToString("X16");
         }
 
+        private static void MarkDeleteOnClose(SafeFileHandle handle, string label)
+        {
+            IntPtr buffer = Marshal.AllocHGlobal(1);
+            try
+            {
+                // FILE_DISPOSITION_INFO.DeleteFile is the Win32 BOOLEAN type: exactly one byte.
+                Marshal.WriteByte(buffer, 0, 1);
+                if (!SetFileInformationByHandle(handle, FileDispositionInfo, buffer, 1))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), label);
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+
         public static string GetIdentity(SafeFileHandle handle)
         {
             if (handle == null || handle.IsInvalid || handle.IsClosed)
-                throw new ArgumentException("A live generated-script handle is required.", "handle");
+                throw new ArgumentException("A live generated-template handle is required.", "handle");
             BY_HANDLE_FILE_INFORMATION info;
             if (!GetFileInformationByHandle(handle, out info))
                 throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not identify the generated V26 manifest generation.");
+            if ((info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
+                throw new InvalidOperationException("Generated V26 manifest generation is reparse-backed; refusing admission.");
             return Identity(info);
         }
 
@@ -126,7 +136,7 @@ namespace Qs3d.V26
                 {
                     int error = Marshal.GetLastWin32Error();
                     if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) return false;
-                    throw new Win32Exception(error, "Could not open the generated V26 manifest script for exact-generation cleanup.");
+                    throw new Win32Exception(error, "Could not open the generated V26 manifest dependency for exact-generation cleanup.");
                 }
 
                 BY_HANDLE_FILE_INFORMATION info;
@@ -137,9 +147,7 @@ namespace Qs3d.V26
                 if (!String.Equals(Identity(info), expectedIdentity, StringComparison.Ordinal))
                     throw new InvalidOperationException("Generated V26 manifest pathname now names a different generation; refusing deletion.");
 
-                FILE_DISPOSITION_INFO disposition = new FILE_DISPOSITION_INFO { DeleteFile = true };
-                if (!SetFileInformationByHandle(handle, FileDispositionInfo, ref disposition, (uint)Marshal.SizeOf(typeof(FILE_DISPOSITION_INFO))))
-                    throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not mark the exact generated V26 manifest script for deletion.");
+                MarkDeleteOnClose(handle, "Could not mark the exact generated V26 manifest dependency for deletion.");
                 return true;
             }
         }
@@ -188,9 +196,7 @@ namespace Qs3d.V26
             if ((info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0)
                 throw new InvalidOperationException("Held V26 manifest workspace became reparse-backed; refusing cleanup.");
 
-            FILE_DISPOSITION_INFO disposition = new FILE_DISPOSITION_INFO { DeleteFile = true };
-            if (!SetFileInformationByHandle(handle, FileDispositionInfo, ref disposition, (uint)Marshal.SizeOf(typeof(FILE_DISPOSITION_INFO))))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not mark the held V26 manifest workspace generation for deletion.");
+            MarkDeleteOnClose(handle, "Could not mark the held V26 manifest workspace generation for deletion.");
         }
     }
 }
@@ -215,7 +221,6 @@ function Assert-OrdinaryPathItem {
 
 function Assert-DirectoryAncestorChain {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
-
     $cursor = [IO.Path]::GetFullPath($Path)
     while ($true) {
         if (Test-Path -LiteralPath $cursor) {
@@ -233,7 +238,6 @@ function Read-HeldStrictUtf8 {
         [Parameter(Mandatory = $true)][string]$Label,
         [Parameter(Mandatory = $true)][int64]$MaxBytes
     )
-
     if (-not $Stream.CanRead) { throw "$Label held stream is not readable." }
     $length = [int64]$Stream.Length
     if ($length -lt 1 -or $length -gt $MaxBytes -or $length -gt [int]::MaxValue) {
@@ -258,26 +262,24 @@ function Read-HeldStrictUtf8 {
     }
 }
 
-function Assert-HeldGeneratedScript {
+function Assert-HeldGeneratedTemplate {
     param(
-        [Parameter(Mandatory = $true)][IO.FileStream]$Stream,
-        [Parameter(Mandatory = $true)][IO.FileInfo]$Admitted,
-        [Parameter(Mandatory = $true)][string]$ExpectedPath
+        [Parameter(Mandatory = $true)]$Admission,
+        [Parameter(Mandatory = $true)][string]$ExpectedPath,
+        [Parameter(Mandatory = $true)][string]$Label
     )
-
-    $current = Assert-OrdinaryPathItem -Path $ExpectedPath -Label 'Generated V26 update-manifest script' -Directory $false
-    if (-not [string]::Equals($current.FullName, $Admitted.FullName, [StringComparison]::OrdinalIgnoreCase) -or
-        -not [string]::Equals([IO.Path]::GetFullPath($Stream.Name), $Admitted.FullName, [StringComparison]::OrdinalIgnoreCase) -or
-        [int64]$Stream.Length -ne [int64]$Admitted.Length -or
-        [int64]$current.Length -ne [int64]$Admitted.Length -or
-        [int64]$current.LastWriteTimeUtc.Ticks -ne [int64]$Admitted.LastWriteTimeUtc.Ticks) {
-        throw 'Generated V26 update-manifest pathname or metadata no longer matches the held admitted generation.'
+    if ($null -eq $Admission.Stream -or $Admission.Stream.SafeFileHandle.IsClosed -or $Admission.Stream.SafeFileHandle.IsInvalid) {
+        throw "$Label held generation is no longer available."
     }
-}
-
-function Get-HeldGeneratedScriptIdentity {
-    param([Parameter(Mandatory = $true)][IO.FileStream]$Stream)
-    return [Qs3d.V26.ManifestTempGenerationNative]::GetIdentity($Stream.SafeFileHandle)
+    $expected = [IO.Path]::GetFullPath($ExpectedPath)
+    if (-not [string]::Equals([IO.Path]::GetFullPath([string]$Admission.Path), $expected, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals([IO.Path]::GetFullPath($Admission.Stream.Name), $expected, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Label held generation path does not match the admitted workspace path."
+    }
+    $identity = [Qs3d.V26.ManifestTempGenerationNative]::GetIdentity($Admission.Stream.SafeFileHandle)
+    if (-not [string]::Equals($identity, [string]$Admission.Identity, [StringComparison]::Ordinal)) {
+        throw "$Label held generation identity changed after transformation admission."
+    }
 }
 
 function Remove-ExactGeneratedScriptGeneration {
@@ -309,23 +311,46 @@ Assert-OrdinaryPathItem -Path $tempParent -Label 'V26 manifest temporary parent'
 
 $tempRoot = Join-Path $tempParent ('qs3d-v26-manifest-' + [Guid]::NewGuid().ToString('N'))
 $tempScript = Join-Path $tempRoot 'new-v26-update-manifest.generated.ps1'
+$tempValidation = Join-Path $tempRoot 'new-v26-update-manifest-validation-core.ps1'
+$tempNative = Join-Path $tempRoot 'Qs3dV26UpdateManifestPublicationNative.cs'
 if (Test-Path -LiteralPath $tempRoot) { throw "V26 manifest temporary workspace already exists: $tempRoot" }
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 Assert-DirectoryAncestorChain -Path $tempRoot -Label 'V26 manifest temporary ancestor'
 Assert-OrdinaryPathItem -Path $tempRoot -Label 'V26 manifest temporary workspace' -Directory $true | Out-Null
 $workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot
-$generatedStream = $null
-$generatedIdentity = $null
+$heldGenerations = [Collections.Generic.List[object]]::new()
 $primaryFailure = $null
 try {
-    & $generator -SourceScript 'new-v25-update-manifest.ps1' -OutputPath $tempScript
-    if (-not $?) { throw 'Could not generate the V26 update-manifest implementation.' }
-    $generatedItem = Assert-OrdinaryPathItem -Path $tempScript -Label 'Generated V26 update-manifest script' -Directory $false
-    $generatedStream = [IO.File]::Open($generatedItem.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
-    Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript
-    $generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream
-    $generated = Read-HeldStrictUtf8 -Stream $generatedStream -Label 'Generated V26 update-manifest script' -MaxBytes $maxGeneratedScriptBytes
-    if ($generated -match '(?i)v25') { throw 'Generated V26 update-manifest implementation contains a V25 token.' }
+    $generationPlan = @(
+        @{ Source = 'new-v25-update-manifest-validation-core.ps1'; Output = $tempValidation; Label = 'Generated V26 update-manifest validation core' },
+        @{ Source = 'Qs3dV25UpdateManifestPublicationNative.cs'; Output = $tempNative; Label = 'Generated V26 update-manifest native helper' },
+        @{ Source = 'new-v25-update-manifest.ps1'; Output = $tempScript; Label = 'Generated V26 update-manifest script' }
+    )
+
+    foreach ($entry in $generationPlan) {
+        $admission = & $generator -SourceScript $entry.Source -OutputPath $entry.Output -PassThruHeldGeneration
+        if (-not $? -or $null -eq $admission -or $admission.Count -ne $null) {
+            # A PSCustomObject has no Count property; arrays/multiple pipeline objects do.
+            if ($admission -is [array] -or $null -eq $admission) {
+                throw "Could not generate one held V26 manifest dependency from $($entry.Source)."
+            }
+        }
+        Assert-HeldGeneratedTemplate -Admission $admission -ExpectedPath $entry.Output -Label $entry.Label
+        $generatedText = Read-HeldStrictUtf8 -Stream $admission.Stream -Label $entry.Label -MaxBytes $maxGeneratedScriptBytes
+        if ($generatedText -match '(?i)v25') { throw "$($entry.Label) contains a V25 token." }
+        $heldGenerations.Add([pscustomobject]@{ Admission = $admission; Path = $entry.Output; Label = $entry.Label })
+    }
+
+    $main = $heldGenerations | Where-Object { $_.Path -eq $tempScript } | Select-Object -First 1
+    $validation = $heldGenerations | Where-Object { $_.Path -eq $tempValidation } | Select-Object -First 1
+    $native = $heldGenerations | Where-Object { $_.Path -eq $tempNative } | Select-Object -First 1
+    if ($null -eq $main -or $null -eq $validation -or $null -eq $native) {
+        throw 'V26 manifest generation graph is incomplete; wrapper, validation core and native helper are all mandatory.'
+    }
+
+    foreach ($held in $heldGenerations) {
+        Assert-HeldGeneratedTemplate -Admission $held.Admission -ExpectedPath $held.Path -Label $held.Label
+    }
 
     $forward = @{
         PackageDirectory = $PackageDirectory
@@ -337,30 +362,33 @@ try {
     if ($PSBoundParameters.ContainsKey('WhatIf')) { $forward['WhatIf'] = [bool]$PSBoundParameters['WhatIf'] }
     if ($PSBoundParameters.ContainsKey('Confirm')) { $forward['Confirm'] = [bool]$PSBoundParameters['Confirm'] }
 
-    Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript
+    # All three transformed file generations stay open without write/delete sharing
+    # across execution, so dot-source/Add-Type pathname reads cannot be redirected.
     & $tempScript @forward
     if (-not $?) { throw 'V26 update-manifest generation failed.' }
-    Assert-HeldGeneratedScript -Stream $generatedStream -Admitted $generatedItem -ExpectedPath $tempScript
+
+    foreach ($held in $heldGenerations) {
+        Assert-HeldGeneratedTemplate -Admission $held.Admission -ExpectedPath $held.Path -Label $held.Label
+    }
 }
 catch {
     $primaryFailure = $_
     throw
 }
 finally {
-    if ($null -ne $generatedStream) {
-        try { $generatedStream.Dispose() }
-        catch {
-            if ($null -eq $primaryFailure) { throw }
-            Write-Verbose "Secondary V26 manifest held-stream cleanup failed while preserving the primary failure: $($_.Exception.Message)"
+    for ($index = $heldGenerations.Count - 1; $index -ge 0; $index--) {
+        $held = $heldGenerations[$index]
+        try {
+            $identity = [string]$held.Admission.Identity
+            if ($null -ne $held.Admission.Stream) {
+                $held.Admission.Stream.Dispose()
+                $held.Admission.Stream = $null
+            }
+            [void](Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity)
         }
-        finally { $generatedStream = $null }
-    }
-
-    if ($null -ne $generatedIdentity) {
-        try { [void](Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity) }
         catch {
             if ($null -eq $primaryFailure) { throw }
-            Write-Verbose "Secondary V26 manifest exact-script cleanup failed while preserving the primary failure: $($_.Exception.Message)"
+            Write-Verbose "Secondary V26 manifest exact-generation cleanup failed while preserving the primary failure: $($_.Exception.Message)"
         }
     }
 

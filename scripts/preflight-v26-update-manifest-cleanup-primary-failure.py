@@ -1,53 +1,66 @@
 #!/usr/bin/env python3
+"""Guard primary-failure preservation across graph-wide V26 generated dependency cleanup."""
 from pathlib import Path
 
-root = Path(__file__).resolve().parents[1]
-path = root / "scripts" / "new-v26-update-manifest.ps1"
-text = path.read_text(encoding="utf-8")
+ROOT = Path(__file__).resolve().parents[1]
+TARGET = ROOT / "scripts" / "new-v26-update-manifest.ps1"
 
-exact_cleanup = "Remove-ExactGeneratedScriptGeneration -Path $tempScript -ExpectedIdentity $generatedIdentity"
-workspace_cleanup = "Remove-HeldManifestWorkspace -Handle $workspaceHandle"
-required = [
-    "$primaryFailure = $null",
-    "catch {\n    $primaryFailure = $_\n    throw\n}",
-    "$workspaceHandle = Open-HeldManifestWorkspace -Path $tempRoot",
-    "$generatedIdentity = Get-HeldGeneratedScriptIdentity -Stream $generatedStream",
-    exact_cleanup,
-    workspace_cleanup,
-    "Secondary V26 manifest held-stream cleanup failed while preserving the primary failure",
-    "Secondary V26 manifest exact-script cleanup failed while preserving the primary failure",
-    "Secondary V26 manifest held-workspace cleanup failed while preserving the primary failure",
-    "[IO.FileShare]::Read",
-    "Read-HeldStrictUtf8",
-]
-missing = [token for token in required if token not in text]
-if missing:
-    raise SystemExit("V26 update-manifest cleanup primary-failure guard missing: " + ", ".join(missing))
 
-# Each secondary cleanup stage is strict when no primary failure exists, but its
-# own cleanup exception is suppressed when the transformer/manifest operation is
-# already failing so primary evidence is never replaced.
-strict_rethrow = "if ($null -eq $primaryFailure) { throw }"
-if text.count(strict_rethrow) < 3:
-    raise SystemExit("V26 update-manifest cleanup must rethrow secondary cleanup failures on success for stream, script, and workspace stages.")
+def validate(text: str) -> list[str]:
+    errors: list[str] = []
+    required = (
+        "$primaryFailure = $null",
+        "catch {\n    $primaryFailure = $_\n    throw\n}",
+        "$heldGenerations = [Collections.Generic.List[object]]::new()",
+        "for ($index = $heldGenerations.Count - 1; $index -ge 0; $index--)",
+        "$identity = [string]$held.Admission.Identity",
+        "$held.Admission.Stream.Dispose()",
+        "$held.Admission.Stream = $null",
+        "Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity",
+        "Secondary V26 manifest exact-generation cleanup failed while preserving the primary failure",
+        "Remove-HeldManifestWorkspace -Handle $workspaceHandle",
+        "Secondary V26 manifest held-workspace cleanup failed while preserving the primary failure",
+        "if ($null -eq $primaryFailure) { throw }",
+    )
+    for token in required:
+        if token not in text:
+            errors.append(f"missing cleanup contract: {token}")
+    if text.count("if ($null -eq $primaryFailure) { throw }") < 2:
+        errors.append("dependency and workspace cleanup must both be strict when no primary failure exists")
+    for token in (
+        "Remove-Item -LiteralPath $tempScript",
+        "Remove-Item -LiteralPath $tempRoot",
+        "Remove-Item -LiteralPath $held.Path",
+    ):
+        if token in text:
+            errors.append(f"pathname cleanup fallback remains: {token}")
+    finally_index = text.find("finally {")
+    reverse_loop = text.find("for ($index = $heldGenerations.Count - 1; $index -ge 0; $index--)", finally_index)
+    dispose = text.find("$held.Admission.Stream.Dispose()", reverse_loop)
+    exact = text.find("Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity", dispose)
+    workspace = text.find("Remove-HeldManifestWorkspace -Handle $workspaceHandle", exact)
+    workspace_dispose = text.find("$workspaceHandle.Dispose()", workspace)
+    if min(finally_index, reverse_loop, dispose, exact, workspace, workspace_dispose) < 0 or not (
+        finally_index < reverse_loop < dispose < exact < workspace < workspace_dispose
+    ):
+        errors.append("cleanup ordering must be reverse graph stream disposal -> exact generation cleanup -> workspace cleanup -> handle disposal")
+    return errors
 
-finally_index = text.index("finally {")
-stream_dispose = text.index("$generatedStream.Dispose()", finally_index)
-script_cleanup = text.index(exact_cleanup, stream_dispose)
-workspace_cleanup_index = text.index(workspace_cleanup, script_cleanup)
-workspace_dispose = text.index("$workspaceHandle.Dispose()", workspace_cleanup_index)
-if not finally_index < stream_dispose < script_cleanup < workspace_cleanup_index < workspace_dispose:
-    raise SystemExit("Cleanup order must be held-stream dispose -> exact script generation cleanup -> held workspace delete -> workspace handle dispose.")
 
-for forbidden in (
-    "Remove-V26ManifestTemporaryWorkspaceStrict",
-    "Remove-V26ManifestTemporaryWorkspaceBestEffort",
-    "Remove-Item -LiteralPath $tempScript",
-    "Remove-Item -LiteralPath $tempRoot",
-    "Remove-Item -LiteralPath $RootPath",
-    "Remove-Item -LiteralPath $ScriptPath",
-):
-    if forbidden in text:
-        raise SystemExit("V26 update-manifest primary-failure cleanup must not fall back to pathname cleanup: " + forbidden)
+def main() -> None:
+    text = TARGET.read_text(encoding="utf-8")
+    errors = validate(text)
+    if errors:
+        raise SystemExit("V26 cleanup primary-failure guard: " + "; ".join(errors))
+    for label, token in {
+        "primary capture": "$primaryFailure = $_",
+        "reverse cleanup": "for ($index = $heldGenerations.Count - 1; $index -ge 0; $index--)",
+        "exact cleanup": "Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity",
+    }.items():
+        if not validate(text.replace(token, "# removed", 1)):
+            raise SystemExit(f"mutation probe was not rejected: {label}")
+    print("PASS V26 graph cleanup preserves the primary failure and stays strict on success")
 
-print("PASS V26 update-manifest preserves primary failure across held-generation cleanup and remains strict on success")
+
+if __name__ == "__main__":
+    main()

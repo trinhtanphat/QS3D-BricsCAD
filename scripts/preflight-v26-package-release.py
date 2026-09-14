@@ -67,6 +67,9 @@ v26_update_command = read("src/QS3D.BricsCAD.V26/Updates/UpdateCommands.cs")
 v26_entry = read("src/QS3D.BricsCAD.V26/PluginEntry.cs")
 build_props = read("Directory.Build.props")
 
+# Transformer must cover the entire split manifest dependency graph, not only the
+# public wrapper. -PassThruHeldGeneration makes each exact transformed generation
+# an explicit object whose FileStream stays alive through generated-wrapper execution.
 for token in (
     ".Replace('V25', 'V26').Replace('v25', 'v26')",
     "Generated V26 script still contains a V25/v25 token",
@@ -75,6 +78,11 @@ for token in (
     "update-v25.ps1",
     "finalize-v25-signed-package.ps1",
     "new-v25-update-manifest.ps1",
+    "new-v25-update-manifest-validation-core.ps1",
+    "Qs3dV25UpdateManifestPublicationNative.cs",
+    "[switch]$PassThruHeldGeneration",
+    "Generated V26 held generation bytes differ from the exact transformed bytes",
+    "Identity = Get-HandleIdentityText -Information $heldInfo",
 ):
     require(transformer, token, "V26 script transformer")
 
@@ -96,9 +104,19 @@ template_expectations = {
         "install-v26-autoload.ps1", "uninstall-v26-autoload.ps1", "update-v26.ps1"
     ],
     "scripts/new-v25-update-manifest.ps1": [
+        "QS3D-BricsCAD-V26", "QS3D-BricsCAD-V26.update.json",
+        "new-v26-update-manifest-validation-core.ps1", "Qs3dV26UpdateManifestPublicationNative.cs",
+        "V26 update-manifest publication requires Windows"
+    ],
+    "scripts/new-v25-update-manifest-validation-core.ps1": [
         "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip",
         "QS3D-BricsCAD-V26.update.json", "install-v26-autoload.ps1",
         "uninstall-v26-autoload.ps1", "update-v26.ps1"
+    ],
+    "scripts/Qs3dV25UpdateManifestPublicationNative.cs": [
+        "Qs3dV26UpdateManifestPublicationNative", "NtSetInformationFile",
+        "FileRenameInformation", "PublishOwnedGenerationInDirectory",
+        "RollbackOwnedGenerationInDirectory"
     ],
 }
 for rel, expected in template_expectations.items():
@@ -109,6 +127,51 @@ for rel, expected in template_expectations.items():
     for token in expected:
         if token not in generated:
             errors.append(f"independent V26 transform from {rel} missing: {token}")
+
+# The V26 manifest wrapper must generate all three files into one held workspace,
+# retain each returned FileStream, verify identity before and after execution, then
+# dispose and delete only each exact admitted generation before workspace cleanup.
+for token in (
+    "new-v26-script-from-v25.ps1",
+    "new-v25-update-manifest-validation-core.ps1",
+    "Qs3dV25UpdateManifestPublicationNative.cs",
+    "new-v25-update-manifest.ps1",
+    "new-v26-update-manifest-validation-core.ps1",
+    "Qs3dV26UpdateManifestPublicationNative.cs",
+    "-PassThruHeldGeneration",
+    "$heldGenerations = [Collections.Generic.List[object]]::new()",
+    "Assert-HeldGeneratedTemplate -Admission $admission",
+    "GetIdentity($Admission.Stream.SafeFileHandle)",
+    "V26 manifest generation graph is incomplete",
+    "& $tempScript @forward",
+    "Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity",
+    "Remove-HeldManifestWorkspace -Handle $workspaceHandle",
+    "Marshal.AllocHGlobal(1)",
+    "Marshal.WriteByte(buffer, 0, 1)",
+    "SetFileInformationByHandle(handle, FileDispositionInfo, buffer, 1)",
+):
+    require(manifest, token, "V26 manifest generator")
+for token in (
+    "[MarshalAs(UnmanagedType.Bool)]",
+    "Marshal.SizeOf(typeof(FILE_DISPOSITION_INFO))",
+):
+    forbid(manifest, token, "V26 manifest generator disposition ABI")
+
+# Ordering: dependencies first, public wrapper last; all remain held across execution;
+# exact-generation cleanup occurs only after execution and stream disposal.
+validation_generate = manifest.find("Source = 'new-v25-update-manifest-validation-core.ps1'")
+native_generate = manifest.find("Source = 'Qs3dV25UpdateManifestPublicationNative.cs'")
+wrapper_generate = manifest.find("Source = 'new-v25-update-manifest.ps1'")
+held_add = manifest.find("$heldGenerations.Add", wrapper_generate)
+execute = manifest.find("& $tempScript @forward", held_add)
+post_verify = manifest.find("Assert-HeldGeneratedTemplate -Admission $held.Admission", execute)
+dispose = manifest.find("$held.Admission.Stream.Dispose()", post_verify)
+exact_delete = manifest.find("Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity", dispose)
+workspace_delete = manifest.find("Remove-HeldManifestWorkspace -Handle $workspaceHandle", exact_delete)
+if min(validation_generate, native_generate, wrapper_generate, held_add, execute, post_verify, dispose, exact_delete, workspace_delete) < 0 or not (
+    validation_generate < native_generate < wrapper_generate < held_add < execute < post_verify < dispose < exact_delete < workspace_delete
+):
+    errors.append("V26 split manifest generation order must be dependencies -> wrapper -> hold all -> execute -> reverify -> dispose -> exact-generation cleanup -> held-workspace cleanup")
 
 for token in (
     "src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows",
@@ -143,7 +206,7 @@ for text, label, template_name in (
 ):
     require(text, "new-v26-script-from-v25.ps1", label)
     require(text, template_name, label)
-    require(text, "contains a V25 token", label)
+    require(text, "V25 token", label)
     require(text, "QS3D-BricsCAD-V26", label)
 
 # Release channel isolation: V25/V26 share a repository stream but only the exact
@@ -274,8 +337,6 @@ for token in (
 ):
     require(held_upload, token, "V26 held upload helper")
 
-# Host-file identity is centralized in the shared helper so workflow text cannot
-# drift from the exact ordinary/non-reparse files whose generations are captured.
 for token in (
     "@('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
     "$version.FileMajorPart -ne 26",
@@ -332,4 +393,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: V26 packaging preserves current hardened V25 transaction/security logic under guarded major transformation; .NET 8 update networking is HttpClient-only; discovery is manifest-channel isolated; split publication revalidates remote tag identity and binds upload plus remote verification to one admitted held local generation before publish while self-hosted qualification remains read-only.")
+print("PASS: V26 packaging preserves hardened V25 transaction/security logic under guarded major transformation; split manifest wrapper/core/native generations are all transformed, byte-verified, held through execution and exact-generation cleaned; release upload/tag/hash admission remains held and fail-closed.")
