@@ -24,6 +24,7 @@ namespace QS3D.Core.SmokeTests
             RemovalAndClearReleaseBudget();
             CorruptBackingCountRejectsMutationWithoutRepair();
             SharedAuditEventRevisionOverflowIsAtomicAcrossOwners();
+            SharedAuditEventCorruptOwnerIsAtomicAcrossOwners();
         }
 
         private static void DirectAddAndInsertRejectAtCapacityWithoutMutation()
@@ -180,6 +181,29 @@ namespace QS3D.Core.SmokeTests
             Equal(firstUpdatedUtc, first.UpdatedUtc, "shared overflow first-owner timestamp");
             Equal(long.MaxValue, overflowing.ChangeVersion, "shared overflow rejecting-owner revision");
             Equal(overflowingUpdatedUtc, overflowing.UpdatedUtc, "shared overflow rejecting-owner timestamp");
+        }
+
+        private static void SharedAuditEventCorruptOwnerIsAtomicAcrossOwners()
+        {
+            var shared = Event("a");
+            var first = Project("SHARED-CORRUPT-FIRST");
+            var corrupt = Project("SHARED-CORRUPT-OWNER");
+            first.AuditEvents.Add(shared);
+            corrupt.AuditEvents.Add(shared);
+            InjectWithoutAccounting(corrupt, Event("injected"));
+
+            var firstVersion = first.ChangeVersion;
+            var firstUpdatedUtc = first.UpdatedUtc;
+            var corruptVersion = corrupt.ChangeVersion;
+            var corruptUpdatedUtc = corrupt.UpdatedUtc;
+
+            Throws<InvalidOperationException>(() => shared.Action = "aa");
+
+            Equal("a", shared.Action, "shared corrupt-owner rejected value");
+            Equal(firstVersion, first.ChangeVersion, "shared corrupt-owner first-owner revision");
+            Equal(firstUpdatedUtc, first.UpdatedUtc, "shared corrupt-owner first-owner timestamp");
+            Equal(corruptVersion, corrupt.ChangeVersion, "shared corrupt-owner rejecting-owner revision");
+            Equal(corruptUpdatedUtc, corrupt.UpdatedUtc, "shared corrupt-owner rejecting-owner timestamp");
         }
 
         private static void AssertCorruptState(ProjectState project, AuditEvent admitted, AuditEvent injected, long version, DateTime updatedUtc, string label)
