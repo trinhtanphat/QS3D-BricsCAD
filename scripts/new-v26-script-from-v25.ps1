@@ -6,12 +6,16 @@ param(
         'uninstall-v25-autoload.ps1',
         'update-v25.ps1',
         'finalize-v25-signed-package.ps1',
-        'new-v25-update-manifest.ps1'
+        'new-v25-update-manifest.ps1',
+        'new-v25-update-manifest-validation-core.ps1',
+        'Qs3dV25UpdateManifestPublicationNative.cs'
     )]
     [string]$SourceScript,
 
     [Parameter(Mandatory = $true)]
-    [string]$OutputPath
+    [string]$OutputPath,
+
+    [switch]$PassThruHeldGeneration
 )
 
 Set-StrictMode -Version Latest
@@ -50,7 +54,7 @@ function Assert-DirectoryAncestorChain {
 function Assert-SafeExistingOutputLeaf {
     param([Parameter(Mandatory = $true)][string]$Path)
     if (Test-Path -LiteralPath $Path) {
-        Assert-OrdinaryPathItem -Path $Path -Label 'V26 generated script output' -Directory $false | Out-Null
+        Assert-OrdinaryPathItem -Path $Path -Label 'V26 generated template output' -Directory $false | Out-Null
     }
 }
 
@@ -118,7 +122,7 @@ function Get-AdmittedHandleInformation {
 
     $info = New-Object Qs3dV26TemplateAdmission.ByHandleFileInformation
     if (-not [Qs3dV26TemplateAdmission.NativeMethods]::GetFileInformationByHandle($Handle, [ref]$info)) {
-        throw "Unable to inspect admitted V25 template handle. Win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+        throw "Unable to inspect admitted V25/V26 template handle. Win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
     }
     return $info
 }
@@ -130,7 +134,7 @@ function Get-AdmittedHandlePath {
     $builder = New-Object Text.StringBuilder $capacity
     $length = [Qs3dV26TemplateAdmission.NativeMethods]::GetFinalPathNameByHandle($Handle, $builder, [uint32]$capacity, 0)
     if ($length -eq 0 -or $length -ge $capacity) {
-        throw "Unable to resolve admitted V25 template handle path. Win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+        throw "Unable to resolve admitted V25/V26 template handle path. Win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
     }
 
     $path = $builder.ToString()
@@ -152,6 +156,12 @@ function Test-SameHandleIdentity {
     return $Before.VolumeSerialNumber -eq $After.VolumeSerialNumber -and
         $Before.FileIndexHigh -eq $After.FileIndexHigh -and
         $Before.FileIndexLow -eq $After.FileIndexLow
+}
+
+function Get-HandleIdentityText {
+    param([Parameter(Mandatory = $true)]$Information)
+    $index = (([uint64]$Information.FileIndexHigh -shl 32) -bor [uint64]$Information.FileIndexLow)
+    return ('{0:X8}:{1:X16}' -f [uint32]$Information.VolumeSerialNumber, $index)
 }
 
 function Get-HandleLength {
@@ -223,6 +233,16 @@ function Assert-AdmittedOutputParentBinding {
     }
 }
 
+function Test-ExactBytes {
+    param([Parameter(Mandatory = $true)][byte[]]$Expected, [Parameter(Mandatory = $true)][byte[]]$Actual)
+    if ($Expected.Length -ne $Actual.Length) { return $false }
+    $difference = 0
+    for ($index = 0; $index -lt $Expected.Length; $index++) {
+        $difference = $difference -bor ($Expected[$index] -bxor $Actual[$index])
+    }
+    return $difference -eq 0
+}
+
 $sourcePath = Join-Path $PSScriptRoot $SourceScript
 if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
     throw "V25 template script was not found: $sourcePath"
@@ -236,8 +256,9 @@ $outputFull = [IO.Path]::GetFullPath($OutputPath)
 if ([string]::Equals($sourceFull, $outputFull, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'V26 generation output must not overwrite its V25 source template.'
 }
-if (-not [string]::Equals([IO.Path]::GetExtension($outputFull), '.ps1', [StringComparison]::OrdinalIgnoreCase)) {
-    throw "V26 generated script must use the .ps1 extension: $outputFull"
+$expectedExtension = if ($SourceScript.EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase)) { '.cs' } else { '.ps1' }
+if (-not [string]::Equals([IO.Path]::GetExtension($outputFull), $expectedExtension, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "V26 generated template must use the $expectedExtension extension: $outputFull"
 }
 
 $sourceBytes = $null
@@ -326,7 +347,9 @@ $requiredTokens = switch ($SourceScript) {
     'uninstall-v25-autoload.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', '^V26', 'QS3D-BricsCAD-V26-Update-'); break }
     'update-v25.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'BricsCAD-V26', 'QS3D-BricsCAD-V26.update.json', 'QS3D-BricsCAD-V26.zip', 'install-v26-autoload.ps1', 'QS3D-BricsCAD-V26-Update-'); break }
     'finalize-v25-signed-package.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1'); break }
-    'new-v25-update-manifest.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.update.json', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1'); break }
+    'new-v25-update-manifest.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.update.json', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1', 'new-v26-update-manifest-validation-core.ps1', 'Qs3dV26UpdateManifestPublicationNative.cs'); break }
+    'new-v25-update-manifest-validation-core.ps1' { @('QS3D.BricsCAD.V26.dll', 'BricsCAD V26 x64', 'QS3D-BricsCAD-V26.zip', 'QS3D-BricsCAD-V26.update.json', 'install-v26-autoload.ps1', 'uninstall-v26-autoload.ps1', 'update-v26.ps1'); break }
+    'Qs3dV25UpdateManifestPublicationNative.cs' { @('Qs3dV26UpdateManifestPublicationNative', 'NtSetInformationFile', 'FileRenameInformation', 'PublishOwnedGenerationInDirectory', 'RollbackOwnedGenerationInDirectory'); break }
     default { throw "Unsupported V25 template: $SourceScript" }
 }
 
@@ -374,6 +397,48 @@ finally {
 }
 Assert-OrdinaryPathItem -Path $outputFull -Label 'V26 generated script output' -Directory $false | Out-Null
 
-Write-Host "Generated V26 script: $outputFull"
-Write-Host "Template: $SourceScript"
-Write-Host "Template SHA256: $templateHash"
+if ($PassThruHeldGeneration) {
+    $heldStream = [IO.File]::Open($outputFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $heldInfo = Get-AdmittedHandleInformation -Handle $heldStream.SafeFileHandle
+        $heldPath = Get-AdmittedHandlePath -Handle $heldStream.SafeFileHandle
+        if (-not [string]::Equals($heldPath, $outputFull, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Generated V26 template pathname changed before held-generation admission.'
+        }
+        if (($heldInfo.FileAttributes -band [uint32][IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'Generated V26 held generation must not be reparse-backed.'
+        }
+        $generatedBytes = (New-Object Text.UTF8Encoding($false)).GetBytes($generated)
+        if ([uint64]$heldStream.Length -ne [uint64]$generatedBytes.LongLength) {
+            throw 'Generated V26 held generation length differs from the transformed bytes.'
+        }
+        $heldStream.Position = 0
+        $captured = [byte[]]::new([int]$heldStream.Length)
+        $readTotal = 0
+        while ($readTotal -lt $captured.Length) {
+            $read = $heldStream.Read($captured, $readTotal, $captured.Length - $readTotal)
+            if ($read -le 0) { throw 'Generated V26 held generation ended before its admitted length.' }
+            $readTotal += $read
+        }
+        if ($heldStream.ReadByte() -ne -1 -or -not (Test-ExactBytes -Expected $generatedBytes -Actual $captured)) {
+            throw 'Generated V26 held generation bytes differ from the exact transformed bytes.'
+        }
+        $heldStream.Position = 0
+        [pscustomobject]@{
+            Path = $outputFull
+            Stream = $heldStream
+            Identity = Get-HandleIdentityText -Information $heldInfo
+            TemplateSha256 = $templateHash
+            SourceScript = $SourceScript
+        }
+        $heldStream = $null
+    }
+    finally {
+        if ($heldStream) { $heldStream.Dispose() }
+    }
+}
+else {
+    Write-Host "Generated V26 script: $outputFull"
+    Write-Host "Template: $SourceScript"
+    Write-Host "Template SHA256: $templateHash"
+}
