@@ -127,6 +127,15 @@ namespace QS3D.BricsCAD.V25
                 throw new InvalidOperationException("actionId belongs to a durable mutation from a different drawing; cross-drawing replay is rejected.");
         }
 
+        private static bool AppliedDocumentMatches(AckRecord record, string stableIdentity)
+        {
+            var appliedFingerprint = ExtractStableFingerprint(record == null ? string.Empty : record.DocumentIdentity);
+            var savedFingerprint = ExtractStableFingerprint(stableIdentity);
+            return appliedFingerprint.Length != 0
+                   && savedFingerprint.Length != 0
+                   && string.Equals(appliedFingerprint, savedFingerprint, StringComparison.OrdinalIgnoreCase);
+        }
+
         private static string ExtractStableFingerprint(string documentIdentity)
         {
             const string prefix = "fingerprint=";
@@ -274,14 +283,20 @@ namespace QS3D.BricsCAD.V25
 
             lock (Sync)
             {
-                var staged = new List<AckRecord>();
-                var now = DateTime.UtcNow;
+                var candidates = new List<AckRecord>();
                 foreach (var record in Records.Values)
                 {
                     if (record.State != AckState.Applied || !ReferenceEquals(record.LiveDocument, document)) continue;
+                    if (!AppliedDocumentMatches(record, stableIdentity)) return new PromotionResult(0, false);
+                    candidates.Add(record);
+                }
+
+                var staged = new List<AckRecord>();
+                var now = DateTime.UtcNow;
+                foreach (var record in candidates)
+                {
                     record.State = AckState.Durable;
                     record.DurableUtc = now;
-                    record.DocumentIdentity = stableIdentity;
                     staged.Add(record);
                 }
 
