@@ -21,8 +21,10 @@ namespace QS3D.Core.Audit
             {
                 if (_utc.Ticks == value.Ticks && _utc.Kind == value.Kind) return;
                 if (PersistenceMutationRequested != null) AuditTrail.ValidateOwnedUtcMutation(value);
+                PersistenceTextMutationValidating?.Invoke(this, 0L);
                 PersistenceMutationRequested?.Invoke();
                 _utc = value;
+                PersistenceTextMutationCommitted?.Invoke(this, 0L);
             }
         }
 
@@ -32,42 +34,55 @@ namespace QS3D.Core.Audit
         public string Actor { get => _actor; set => SetXmlText(ref _actor, value, nameof(Actor), "Audit actor"); }
         public string CorrelationId { get => _correlationId; set => SetOptionalIdentity(ref _correlationId, value, nameof(CorrelationId), "Audit correlation id"); }
 
-        internal event System.Action? PersistenceMutationRequested;
+        internal event Action<AuditEvent, long>? PersistenceTextMutationValidating;
+        internal event Action? PersistenceMutationRequested;
+        internal event Action<AuditEvent, long>? PersistenceTextMutationCommitted;
 
         private void SetAction(string value)
         {
             if (string.Equals(_action, value, StringComparison.Ordinal)) return;
             if (PersistenceMutationRequested != null) AuditTrail.ValidateOwnedActionMutation(value);
+            var delta = TextLength(value) - TextLength(_action);
+            PersistenceTextMutationValidating?.Invoke(this, delta);
             PersistenceMutationRequested?.Invoke();
             _action = value;
+            PersistenceTextMutationCommitted?.Invoke(this, delta);
         }
 
         private void SetOptionalIdentity(ref string field, string value, string parameterName, string label)
         {
             if (string.Equals(field, value, StringComparison.Ordinal)) return;
             if (PersistenceMutationRequested != null) AuditTrail.ValidateOwnedOptionalIdentityMutation(value, parameterName, label);
+            var delta = TextLength(value) - TextLength(field);
+            PersistenceTextMutationValidating?.Invoke(this, delta);
             PersistenceMutationRequested?.Invoke();
             field = value;
+            PersistenceTextMutationCommitted?.Invoke(this, delta);
         }
 
         private void SetXmlText(ref string field, string value, string parameterName, string label)
         {
             if (string.Equals(field, value, StringComparison.Ordinal)) return;
             if (PersistenceMutationRequested != null) AuditTrail.ValidateOwnedXmlTextMutation(value, parameterName, label);
+            var delta = TextLength(value) - TextLength(field);
+            PersistenceTextMutationValidating?.Invoke(this, delta);
             PersistenceMutationRequested?.Invoke();
             field = value;
+            PersistenceTextMutationCommitted?.Invoke(this, delta);
         }
+
+        private static long TextLength(string? value) => value?.Length ?? 0L;
     }
 
     public sealed class AuditTrail
     {
-        private const int MaxStoredEvents = 10_000;
+        internal const int MaxStoredEvents = 10_000;
         // Keep audit text materially below the existing 64 MiB QSDB file ceiling so
         // routine audit operations fail closed before a pathological history can
         // dominate later XML materialization. This is an aggregate safety budget,
         // not a claim that every history below it is guaranteed to serialize below
         // the project-file byte ceiling.
-        private const long MaxStoredTextCharacters = 8L * 1024L * 1024L;
+        internal const long MaxStoredTextCharacters = 8L * 1024L * 1024L;
 
         private readonly IList<AuditEvent> _events;
 
@@ -286,15 +301,21 @@ namespace QS3D.Core.Audit
 
         private static void AccumulateTextCharacters(AuditEvent item, ref long total)
         {
-            var itemCharacters = CountTextCharacters(
+            var itemCharacters = CountStoredTextCharacters(item);
+            if (itemCharacters > MaxStoredTextCharacters - total)
+                throw TextBudgetExceeded();
+            total += itemCharacters;
+        }
+
+        internal static long CountStoredTextCharacters(AuditEvent item)
+        {
+            if (item == null) throw new ArgumentNullException(nameof(item));
+            return CountTextCharacters(
                 item.Action,
                 item.ElementId,
                 item.Detail,
                 item.Actor,
                 item.CorrelationId);
-            if (itemCharacters > MaxStoredTextCharacters - total)
-                throw TextBudgetExceeded();
-            total += itemCharacters;
         }
 
         private static long CountTextCharacters(
