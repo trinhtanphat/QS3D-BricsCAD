@@ -14,9 +14,29 @@ namespace QS3D.Core.SmokeTests
         [ModuleInitializer]
         internal static void Initialize()
         {
+            CorruptReferenceAccountingDuplicateAdmissionRejectsBeforeMutation();
             CorruptReferenceAccountingRemoveRejectsBeforeMutation();
             CorruptReferenceAccountingReplaceRejectsBeforeMutation();
             CorruptReferenceAccountingClearRejectsBeforeMutation();
+        }
+
+        private static void CorruptReferenceAccountingDuplicateAdmissionRejectsBeforeMutation()
+        {
+            var project = Project("DUPLICATE");
+            var item = Event("duplicate");
+            project.AuditEvents.Add(item);
+            RemoveReferenceAccounting(project, item);
+
+            var beforeVersion = project.ChangeVersion;
+            var beforeUpdatedUtc = project.UpdatedUtc;
+
+            Throws<InvalidOperationException>(() => project.AuditEvents.Add(item));
+            Throws<InvalidOperationException>(() => project.AuditEvents.Insert(0, item));
+
+            Equal(1, project.AuditEvents.Count, "duplicate count");
+            Same(item, project.AuditEvents[0], "duplicate item");
+            Equal(beforeVersion, project.ChangeVersion, "duplicate revision");
+            Equal(beforeUpdatedUtc, project.UpdatedUtc, "duplicate timestamp");
         }
 
         private static void CorruptReferenceAccountingRemoveRejectsBeforeMutation()
