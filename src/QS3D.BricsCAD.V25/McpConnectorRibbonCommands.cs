@@ -54,7 +54,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch (Exception ex)
                 {
-                    Report(document, "Đã tạo hướng dẫn MCP tại " + path + " nhưng không mở được: " + ex.Message);
+                    Report(document, "Đã tạo hướng dẫn MCP tại " + path + " nhưng không mở được: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
                 }
             });
         }
@@ -169,7 +169,7 @@ namespace QS3D.BricsCAD.V25
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
             try { action(document); }
-            catch (Exception ex) { Report(document, "MCP lỗi: " + ex.Message); }
+            catch (Exception ex) { Report(document, "MCP lỗi: " + McpPublicTextSanitizer.Sanitize(ex.ToString())); }
         }
 
         private static void Report(Document document, string message) =>
@@ -308,11 +308,11 @@ namespace QS3D.BricsCAD.V25
             {
                 var response = ex.Response as HttpWebResponse;
                 var status = response == null ? string.Empty : " HTTP " + (int)response.StatusCode + " " + response.StatusDescription + ".";
-                return new McpProtocolProbeResult(false, "MCP HTTP unavailable:" + status + " " + ex.Message);
+                return new McpProtocolProbeResult(false, "MCP HTTP unavailable:" + status + " " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
             catch (Exception ex)
             {
-                return new McpProtocolProbeResult(false, "MCP protocol error: " + ex.Message);
+                return new McpProtocolProbeResult(false, "MCP protocol error: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
             finally
             {
