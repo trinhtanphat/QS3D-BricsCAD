@@ -22,7 +22,7 @@ required = {
         "ownershipDiscoveryError",
         "EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)",
         "rollback.Restore(project)",
-        "FinalizeUi(document, createdElement!",
+        "FinalizeUi(document, nativeDatabaseIdentity, createdElement!",
         "EnsureActive(document",
         ".RegenerateDirtySubset(project, new[] { createdElement.Id })",
         "WallSolidBuilder.BuildSelectedLineWalls",
@@ -215,7 +215,7 @@ if source.is_file():
     xdata_discovery = text.find("GeneratedGeometryService.FindMatchingOwnedHandles", catch_pos)
     cleanup = text.find("EraseDirectDrawCad(document, project, createdElement, sourceId, generatedHandles)", catch_pos)
     restore = text.find("rollback.Restore(project)", catch_pos)
-    finalize = text.find("FinalizeUi(document, createdElement!", catch_pos)
+    finalize = text.find("FinalizeUi(document, nativeDatabaseIdentity, createdElement!", catch_pos)
     if min(create, capture, regenerate, build, catch_pos, metadata_discovery, xdata_discovery, cleanup, restore, finalize) < 0:
         errors.append("Direct Draw transaction/rollback ordering tokens are incomplete")
     else:

@@ -46,7 +46,7 @@ else:
             "var promptUnit = (object)CadUnitService.GetLengthUnit(document);",
             "var promptUcs = document.Editor.CurrentUserCoordinateSystem;",
             "document.Editor.GetPoint(",
-            "RequirePromptContextUnchanged(document, promptUnit, promptUcs, \"" + command + "\");",
+            "RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, \"" + command + "\");",
         ))
 
     for helper_name, next_helper in (
@@ -61,19 +61,25 @@ else:
             "var promptUnit = (object)CadUnitService.GetLengthUnit(document);",
             "var promptUcs = editor.CurrentUserCoordinateSystem;",
             "editor.GetPoint(",
-            "RequirePromptContextUnchanged(document, promptUnit, promptUcs, label);",
+            "RequirePromptContextUnchanged(document, nativeDatabaseIdentity, promptUnit, promptUcs, label);",
             "ValidatePlanView(document, points, label);",
         ))
 
-    helper = section(text, "private static void RequirePromptContextUnchanged(", "private static void RequireModelSpace(")
+    helper = section(text, "private static void RequirePromptContextUnchanged(\n            Document document,\n            IntPtr nativeDatabaseIdentity,", "private static void RequirePromptContextUnchanged(Document document, object promptUnit")
     for token in (
-        "EnsureActive(document, operation + \" / geometry prompt freshness\");",
+        "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity, operation + \" / geometry prompt freshness\");",
+        "RequirePromptGeometryContextUnchanged(document, promptUnit, promptUcs, operation);",
+    ):
+        if token not in helper:
+            errors.append("P0 generation-aware prompt freshness helper missing: " + token)
+    geometry_helper = section(text, "private static void RequirePromptGeometryContextUnchanged(", "private static void RequireModelSpace(")
+    for token in (
         "RequireModelSpace(document);",
         "Equals(CadUnitService.GetLengthUnit(document), promptUnit)",
         "document.Editor.CurrentUserCoordinateSystem.Equals(promptUcs)",
     ):
-        if token not in helper:
-            errors.append("P0 prompt freshness helper missing: " + token)
+        if token not in geometry_helper:
+            errors.append("P0 prompt geometry helper missing: " + token)
 
 if not OPENING.is_file():
     errors.append("missing DirectDrawOpeningCommands.cs")
