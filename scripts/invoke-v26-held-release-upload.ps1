@@ -85,11 +85,14 @@ function Open-HeldGeneration {
 if ([string]::IsNullOrWhiteSpace($Token)) { throw 'V26 held upload token is required.' }
 if ([string]::IsNullOrWhiteSpace($UploadBase)) { throw 'V26 held upload base URI is required.' }
 $uploadUri = $null
-if (-not [Uri]::TryCreate($UploadBase, [UriKind]::Absolute, [ref]$uploadUri) -or $uploadUri.Scheme -ne 'https') {
-    throw 'V26 held upload base must be an absolute HTTPS URI.'
-}
-if ($uploadUri.Host -ne 'uploads.github.com') {
-    throw "V26 held upload base must target uploads.github.com, not $($uploadUri.Host)."
+if (-not [Uri]::TryCreate($UploadBase, [UriKind]::Absolute, [ref]$uploadUri) -or
+    -not [string]::Equals($uploadUri.Scheme, 'https', [StringComparison]::OrdinalIgnoreCase) -or
+    -not [string]::Equals($uploadUri.Host, 'uploads.github.com', [StringComparison]::OrdinalIgnoreCase) -or
+    -not $uploadUri.IsDefaultPort -or
+    -not [string]::IsNullOrEmpty($uploadUri.UserInfo) -or
+    -not [string]::IsNullOrEmpty($uploadUri.Fragment) -or
+    -not [string]::IsNullOrEmpty($uploadUri.Query)) {
+    throw 'V26 held upload base must be an absolute HTTPS uploads.github.com endpoint with the default port and no credentials, fragment, or query.'
 }
 
 $held = Open-HeldGeneration -LiteralPath $Path
@@ -108,7 +111,9 @@ try {
     }
 
     $held.Stream.Position = 0
-    $client = [System.Net.Http.HttpClient]::new()
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $handler.AllowAutoRedirect = $false
+    $client = [System.Net.Http.HttpClient]::new($handler)
     $request = $null
     $response = $null
     try {
@@ -117,25 +122,47 @@ try {
         $client.DefaultRequestHeaders.Add('X-GitHub-Api-Version', '2022-11-28')
         $client.DefaultRequestHeaders.UserAgent.ParseAdd('QS3D-V26-Manual-Release')
 
-        $requestUri = $UploadBase + '?name=' + [Uri]::EscapeDataString($name)
+        $requestUri = $uploadUri.AbsoluteUri + '?name=' + [Uri]::EscapeDataString($name)
         $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Post, $requestUri)
         $request.Content = [System.Net.Http.StreamContent]::new($held.Stream)
         $request.Content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse($ContentType)
         $request.Content.Headers.ContentLength = [int64]$held.Length
 
         $response = $client.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
-        $responseBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-        if (-not $response.IsSuccessStatusCode) {
-            throw "V26 held asset upload failed for $name with HTTP $([int]$response.StatusCode): $responseBody"
+        if ($response.StatusCode -ne [System.Net.HttpStatusCode]::Created) {
+            throw "V26 held asset upload failed for $name with HTTP $([int]$response.StatusCode)."
         }
+
+        $responseBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
         if ([string]::IsNullOrWhiteSpace($responseBody)) { throw "V26 held asset upload returned an empty response for $name." }
-        $uploaded = $responseBody | ConvertFrom-Json
-        if ($null -eq $uploaded -or [long]$uploaded.id -le 0) { throw "V26 held asset upload returned no usable asset id for $name." }
+        try {
+            $uploaded = $responseBody | ConvertFrom-Json -ErrorAction Stop
+        }
+        catch {
+            throw "V26 held asset upload returned invalid JSON for $name."
+        }
+
+        $uploadedAssetId = 0L
+        if ($null -eq $uploaded -or -not [Int64]::TryParse(([string]$uploaded.id), [ref]$uploadedAssetId) -or $uploadedAssetId -le 0) {
+            throw "V26 held asset upload returned no usable asset id for $name."
+        }
         if (-not [string]::Equals([string]$uploaded.name, $name, [StringComparison]::Ordinal)) {
             throw "V26 held asset upload returned mismatched asset name for $name."
         }
-        if ([int64]$uploaded.size -ne [int64]$held.Length) {
-            throw "V26 held asset upload returned mismatched asset size for $name. Local=$($held.Length) Remote=$($uploaded.size)."
+        if (-not [string]::Equals([string]$uploaded.state, 'uploaded', [StringComparison]::Ordinal)) {
+            throw "V26 held asset upload did not reach uploaded state for $name."
+        }
+
+        $uploadedSize = 0L
+        if (-not [Int64]::TryParse(([string]$uploaded.size), [ref]$uploadedSize) -or $uploadedSize -ne [int64]$held.Length) {
+            throw "V26 held asset upload returned mismatched asset size for $name."
+        }
+
+        $expectedDigest = 'sha256:' + $hashHex.ToLowerInvariant()
+        $uploadedDigest = ([string]$uploaded.digest).Trim()
+        if ($uploadedDigest -notmatch '^sha256:[0-9A-Fa-f]{64}$' -or
+            -not [string]::Equals($uploadedDigest, $expectedDigest, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "V26 held asset upload returned mismatched SHA-256 digest for $name."
         }
 
         [pscustomobject]@{
@@ -144,7 +171,7 @@ try {
             Length = [int64]$held.Length
             LastWriteTimeUtcTicks = [int64]$held.LastWriteTimeUtcTicks
             Sha256 = $hashHex
-            UploadedAssetId = [long]$uploaded.id
+            UploadedAssetId = $uploadedAssetId
         }
     }
     finally {
