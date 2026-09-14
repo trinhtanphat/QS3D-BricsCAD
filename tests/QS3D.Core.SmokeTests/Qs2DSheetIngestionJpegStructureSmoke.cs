@@ -61,7 +61,11 @@ namespace QS3D.Core.SmokeTests
             };
 
             var componentBytes = Math.Max(0, frameLength - 8);
-            for (var i = 0; i < componentBytes; i++) bytes.Add((byte)(i + 1));
+            for (var i = 0; i < componentBytes; i++)
+            {
+                var descriptorField = i % 3;
+                bytes.Add(descriptorField == 0 ? (byte)((i / 3) + 1) : descriptorField == 1 ? (byte)0x11 : (byte)0);
+            }
             bytes.Add(0xFF);
             bytes.Add(0xD9);
             return bytes.ToArray();
