@@ -24,6 +24,18 @@ namespace QS3D.BricsCAD.V25
         private const string FrameLiveFingerprintKey = "GeneratedCurtainFrameLiveFingerprint";
         private const string PanelLiveFingerprintKey = "GeneratedCurtainPanelLiveFingerprint";
 
+        private const string PrepareTransitionStage = "PREPARE_TRANSITION";
+        private const string TargetOwnerRestoreStage = "TARGET_OWNER_RESTORE";
+        private const string TargetPersistenceRestoreStage = "TARGET_PERSISTENCE_RESTORE";
+        private const string TargetMatchStage = "TARGET_MATCH";
+        private const string RecoveryStage = "RECOVERY";
+
+        private sealed class SyncStageException : Exception
+        {
+            public SyncStageException(string stage, Exception inner) : base(stage, inner) { Stage = stage; }
+            public string Stage { get; }
+        }
+
         private static readonly object Gate = new object();
         private static readonly Dictionary<Document, ObserverRegistration> ObserverRegistrations =
             new Dictionary<Document, ObserverRegistration>();
@@ -205,17 +217,27 @@ namespace QS3D.BricsCAD.V25
                 if (project == null) throw new ArgumentNullException(nameof(project));
                 if (transitionGuard == null) throw new ArgumentNullException(nameof(transitionGuard));
                 var targets = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
-                foreach (var id in _owners.Keys)
+                try
                 {
-                    var element = project.FindElement(id);
-                    if (element == null || element.Category != ElementCategory.GlassWall)
-                        throw new InvalidOperationException("Curtain Undo cannot restore missing/non-GlassWall owner " + id + ".");
-                    targets.Add(id, element);
+                    foreach (var id in _owners.Keys)
+                    {
+                        var element = project.FindElement(id);
+                        if (element == null || element.Category != ElementCategory.GlassWall)
+                            throw new InvalidOperationException("Curtain Undo cannot restore missing/non-GlassWall owner " + id + ".");
+                        targets.Add(id, element);
+                    }
+                    foreach (var pair in _owners) pair.Value.Restore(targets[pair.Key]);
+                }
+                catch (Exception ownerError)
+                {
+                    throw new SyncStageException(TargetOwnerRestoreStage, ownerError);
                 }
 
-                foreach (var pair in _owners)
-                    pair.Value.Restore(targets[pair.Key]);
-                _persistence.RestoreTransition(project, transitionGuard);
+                try { _persistence.RestoreTransition(project, transitionGuard); }
+                catch (Exception persistenceError)
+                {
+                    throw new SyncStageException(TargetPersistenceRestoreStage, persistenceError);
+                }
             }
         }
 
@@ -565,9 +587,13 @@ namespace QS3D.BricsCAD.V25
         private static void TrySynchronizeAtStableBoundary(Document document, bool refreshAfterRestore)
         {
             try { SynchronizeKnownRevision(document, refreshAfterRestore); }
-            catch (Exception error)
+            catch (SyncStageException error)
             {
-                Report(document, "QS3D Curtain Undo sync warning: " + error.Message);
+                Report(document, "QS3D Curtain Undo sync warning: CURTAIN_UNDO_SYNC_" + error.Stage);
+            }
+            catch (Exception)
+            {
+                Report(document, "QS3D Curtain Undo sync warning: CURTAIN_UNDO_SYNC_" + PrepareTransitionStage);
             }
         }
 
@@ -633,18 +659,18 @@ namespace QS3D.BricsCAD.V25
             {
                 target.Restore(project, transitionGuard);
                 if (!target.Matches(project))
-                    throw new InvalidOperationException("Restored Curtain semantic owner state does not match its native revision.");
+                    throw new SyncStageException(TargetMatchStage,
+                        new InvalidOperationException("Restored Curtain semantic owner state does not match its native revision."));
             }
-            catch (Exception restoreError)
+            catch (SyncStageException restoreError)
             {
                 try { restoreRollback.Restore(project, transitionGuard); }
                 catch (Exception rollbackError)
                 {
-                    throw MarkDesynchronized(history,
-                        "Curtain semantic Undo/Redo restore and recovery both failed.",
+                    throw MarkDesynchronizedStage(history, RecoveryStage,
                         new AggregateException(restoreError, rollbackError));
                 }
-                throw MarkDesynchronized(history, "Curtain semantic Undo/Redo restore failed.", restoreError);
+                throw MarkDesynchronizedStage(history, restoreError.Stage, restoreError);
             }
 
             lock (Gate)
@@ -713,6 +739,15 @@ namespace QS3D.BricsCAD.V25
             if (string.Equals(normalized, "REDO", StringComparison.OrdinalIgnoreCase)) return "REDO";
             if (string.Equals(normalized, "MREDO", StringComparison.OrdinalIgnoreCase)) return "MREDO";
             return null;
+        }
+
+        private static SyncStageException MarkDesynchronizedStage(
+            DocumentHistory history,
+            string stage,
+            Exception inner)
+        {
+            lock (Gate) history.Desynchronized = true;
+            return new SyncStageException(stage, inner);
         }
 
         private static InvalidOperationException MarkDesynchronized(
