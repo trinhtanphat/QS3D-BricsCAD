@@ -38,6 +38,27 @@ if COMMAND.is_file():
         if forbidden in text:
             errors.append("complete-family failure taxonomy leaks forbidden detail token: " + forbidden)
 
+    build_loop = text.find("foreach (var item in matrix)")
+    door_setup = text.find("var door = AddOpening(project, ElementCategory.Door")
+    wall_opening_setup = text.find("var wallOpening = AddOpening(project, ElementCategory.WallOpening")
+    verify_call = text.find("VerifyStraightHostedOpenings(document, project, door, wallOpening)")
+    if min(build_loop, door_setup, wall_opening_setup) < 0:
+        errors.append("complete-family hosted-opening setup/build ordering tokens are missing")
+    elif not (door_setup < build_loop and wall_opening_setup < build_loop):
+        errors.append("complete-family hosted openings must be configured before host build so generated geometry is fresh")
+    if verify_call < 0:
+        errors.append("complete-family hosted-opening verification must consume preconfigured Door and WallOpening")
+
+    verify_start = text.find("private static int VerifyStraightHostedOpenings")
+    add_opening_start = text.find("private static ProjectElement AddOpening", verify_start)
+    if verify_start < 0 or add_opening_start < 0:
+        errors.append("complete-family hosted-opening verification method boundary is missing")
+    else:
+        verify_body = text[verify_start:add_opening_start]
+        for forbidden in ("CreateLineSource(", "AddOpening("):
+            if forbidden in verify_body:
+                errors.append("complete-family verify phase must not mutate hosted-opening setup: " + forbidden)
+
 if RUNNER.is_file():
     text = RUNNER.read_text(encoding="utf-8-sig")
     for token in (
