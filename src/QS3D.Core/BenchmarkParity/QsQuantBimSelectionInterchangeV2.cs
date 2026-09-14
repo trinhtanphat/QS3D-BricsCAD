@@ -12,6 +12,9 @@ namespace QS3D.Core.BenchmarkParity
     public static class QuantBimSelectionInterchangeV2Codec
     {
         private const string Header = "QS3D-QUANTBIM-SELECTION-INTERCHANGE/2";
+        public const int MaxEnvelopeCharacters = 16 * 1024 * 1024;
+        public const int MaxV1PayloadBytes = 12 * 1024 * 1024;
+        private const int MaxV1PayloadBase64Characters = ((MaxV1PayloadBytes + 2) / 3) * 4;
         private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
 
         public static string Encode(QuantBimSelectionExportBundle bundle)
@@ -29,6 +32,8 @@ namespace QS3D.Core.BenchmarkParity
         public static QuantBimSelectionInterchangePackage Decode(string encoded)
         {
             if (encoded == null) throw new ArgumentNullException("encoded");
+            if (encoded.Length > MaxEnvelopeCharacters)
+                throw new InvalidOperationException("QuantBIM interchange V2 exceeds the bounded envelope size.");
             if (encoded.IndexOf('\r') >= 0)
                 throw new InvalidOperationException("QuantBIM interchange V2 must use canonical LF line endings.");
             if (!encoded.EndsWith("\n", StringComparison.Ordinal))
@@ -42,14 +47,27 @@ namespace QS3D.Core.BenchmarkParity
 
             var expectedDigest = ReadDigest(lines[1]);
             var payloadText = ReadLiteral(lines[2], "Payload");
-            string v1Payload;
+            if (payloadText.Length > MaxV1PayloadBase64Characters)
+                throw new InvalidOperationException("QuantBIM interchange V2 wrapped payload exceeds the bounded size.");
+
+            byte[] payloadBytes;
             try
             {
-                v1Payload = StrictUtf8.GetString(Convert.FromBase64String(payloadText));
+                payloadBytes = Convert.FromBase64String(payloadText);
             }
             catch (FormatException ex)
             {
                 throw new InvalidOperationException("Invalid base64 V1 payload in QuantBIM interchange V2.", ex);
+            }
+            if (payloadBytes.Length > MaxV1PayloadBytes)
+                throw new InvalidOperationException("QuantBIM interchange V2 decoded payload exceeds the bounded size.");
+            if (!string.Equals(Convert.ToBase64String(payloadBytes), payloadText, StringComparison.Ordinal))
+                throw new InvalidOperationException("QuantBIM interchange V2 payload must use canonical base64.");
+
+            string v1Payload;
+            try
+            {
+                v1Payload = StrictUtf8.GetString(payloadBytes);
             }
             catch (DecoderFallbackException ex)
             {
@@ -69,11 +87,17 @@ namespace QS3D.Core.BenchmarkParity
 
         private static string EncodeV1Payload(string v1Payload)
         {
+            var payloadBytes = StrictUtf8.GetBytes(v1Payload);
+            if (payloadBytes.Length > MaxV1PayloadBytes)
+                throw new InvalidOperationException("QuantBIM interchange V2 payload exceeds the bounded size.");
             var digest = QuantBimSelectionInterchangeCodec.HashUtf8(v1Payload);
-            var payload = Convert.ToBase64String(StrictUtf8.GetBytes(v1Payload));
-            return Header + "\n" +
+            var payload = Convert.ToBase64String(payloadBytes);
+            var encoded = Header + "\n" +
                 "EnvelopeSha256=" + digest + "\n" +
                 "Payload=" + payload + "\n";
+            if (encoded.Length > MaxEnvelopeCharacters)
+                throw new InvalidOperationException("QuantBIM interchange V2 exceeds the bounded envelope size.");
+            return encoded;
         }
 
         private static string ReadDigest(string line)
