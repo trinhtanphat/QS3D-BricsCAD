@@ -4,19 +4,28 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT_STATE = ROOT / "src" / "QS3D.Core" / "Domain" / "ProjectState.cs"
 AUDIT_TRAIL = ROOT / "src" / "QS3D.Core" / "Audit" / "AuditTrail.cs"
 SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "AuditHistoryBudgetMutationSmoke.cs"
+ATOMICITY_SMOKE = ROOT / "tests" / "QS3D.Core.SmokeTests" / "AuditHistoryReferenceAccountingAtomicitySmoke.cs"
 
 project_text = PROJECT_STATE.read_text(encoding="utf-8")
 audit_text = AUDIT_TRAIL.read_text(encoding="utf-8")
 smoke_text = SMOKE.read_text(encoding="utf-8")
+atomicity_smoke_text = ATOMICITY_SMOKE.read_text(encoding="utf-8")
 
 required_project = [
     "ICatalogMutationObserver<T>",
     "AuditHistoryBudgetObserver",
-    "_mutationObserver?.ValidateAdd(item);",
+    "ValidateAdd(T item, int existingReferenceCount)",
+    "ValidateReplace(T previous, T replacement, int previousReferenceCount, int replacementReferenceCount)",
+    "ValidateRemove(T item, int referenceCount)",
+    "ValidateClear(IReadOnlyList<T> items)",
+    "ValidateReferenceCount(item, existingReferenceCount);",
+    "_mutationObserver?.ValidateAdd(item, existingReferenceCount);",
     "_mutationObserver?.CommitAdd(item);",
-    "_mutationObserver?.ValidateReplace(previous, value);",
+    "_mutationObserver?.ValidateReplace(previous, value, previousReferenceCount, replacementReferenceCount);",
     "_mutationObserver?.CommitReplace(previous, value);",
+    "_mutationObserver?.ValidateRemove(item, referenceCount);",
     "_mutationObserver?.CommitRemove(item);",
+    "_mutationObserver?.ValidateClear(_items);",
     "_mutationObserver?.CommitClear();",
     "AuditTrail.MaxStoredEvents",
     "AuditTrail.MaxStoredTextCharacters",
@@ -28,7 +37,7 @@ missing_project = [token for token in required_project if token not in project_t
 if missing_project:
     raise SystemExit(
         "ERROR: project audit-history budget preflight failed: ProjectState must enforce cached "
-        "count/text admission before structural and owned mutation; missing token(s): "
+        "count/text/reference admission before structural and owned mutation; missing token(s): "
         + ", ".join(repr(token) for token in missing_project)
     )
 
@@ -64,6 +73,58 @@ if missing_smoke:
         + ", ".join(repr(token) for token in missing_smoke)
     )
 
+required_atomicity_smoke = [
+    "CorruptReferenceAccountingRemoveRejectsBeforeMutation();",
+    "CorruptReferenceAccountingReplaceRejectsBeforeMutation();",
+    "CorruptReferenceAccountingClearRejectsBeforeMutation();",
+    "RemoveReferenceAccounting(project, item);",
+    "Throws<InvalidOperationException>(() => project.AuditEvents.RemoveAt(0));",
+    "Throws<InvalidOperationException>(() => project.AuditEvents[0] = replacement);",
+    "Throws<InvalidOperationException>(() => project.AuditEvents.Clear());",
+]
+missing_atomicity_smoke = [token for token in required_atomicity_smoke if token not in atomicity_smoke_text]
+if missing_atomicity_smoke:
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: corrupt reference-accounting atomicity "
+        "regression coverage is incomplete; missing token(s): "
+        + ", ".join(repr(token) for token in missing_atomicity_smoke)
+    )
+
+# Public structural mutations must prove observer accounting before ProjectState.Touch/list/ownership
+# mutation. Keep restore-only repair separate: ClearRestoredPersistenceState intentionally commits its
+# rebuilt accounting without traversing the public corruption guard.
+remove_validate = project_text.find("_mutationObserver?.ValidateRemove(item, referenceCount);")
+remove_touch = project_text.find("_beforeMutation();", remove_validate)
+remove_commit = project_text.find("_mutationObserver?.CommitRemove(item);", remove_validate)
+if not (0 <= remove_validate < remove_touch < remove_commit):
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: RemoveAt must validate reference "
+        "accounting before revision/list mutation and commit accounting afterward."
+    )
+
+clear_method = project_text.find("public void Clear()", project_text.find("internal sealed class CatalogOwnershipList<T>"))
+clear_validate = project_text.find("_mutationObserver?.ValidateClear(_items);", clear_method)
+clear_touch = project_text.find("_beforeMutation();", clear_validate)
+clear_commit = project_text.find("_mutationObserver?.CommitClear();", clear_validate)
+if not (0 <= clear_method < clear_validate < clear_touch < clear_commit):
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: public Clear must validate complete "
+        "audit accounting before revision/list mutation and commit accounting afterward."
+    )
+
+replace_method = project_text.find("public T this[int index]", project_text.find("internal sealed class CatalogOwnershipList<T>"))
+replace_validate = project_text.find(
+    "_mutationObserver?.ValidateReplace(previous, value, previousReferenceCount, replacementReferenceCount);",
+    replace_method,
+)
+replace_touch = project_text.find("_beforeMutation();", replace_validate)
+replace_commit = project_text.find("_mutationObserver?.CommitReplace(previous, value);", replace_validate)
+if not (0 <= replace_method < replace_validate < replace_touch < replace_commit):
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: replacement must validate reference "
+        "accounting before revision/list mutation and commit accounting afterward."
+    )
+
 # Prevent accidental regression to a scan-on-every-owned-property-mutation design. The project
 # observer must bind owned event changes to reference multiplicity instead of re-enumerating
 # AuditEvents to compute aggregate text after a mutation has started.
@@ -73,4 +134,4 @@ if "foreach (var auditEvent in AuditEvents)" in project_text:
         "incremental accounting rather than rescanning the full audit history."
     )
 
-print("PASS ProjectState audit-history count/text budget admission source guard")
+print("PASS ProjectState audit-history count/text/reference budget admission source guard")
