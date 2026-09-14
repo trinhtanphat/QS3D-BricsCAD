@@ -78,7 +78,7 @@ if not errors:
     detach_start = text.find("private void Detach()")
     detach = text[detach_start:] if detach_start >= 0 else ""
     for token in (
-        "if (!_attached) return;",
+        "if (!_attached && !_managedHandlerCleanupPending && _nativeLifecycleSubscription == null) return;",
         "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;",
         "DetachDocumentLifecycleHandlersIfSafe();",
         "ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted;",
@@ -89,7 +89,7 @@ if not errors:
         "_attached = false;",
     ):
         if token not in detach:
-            errors.append("modeless Detach lost best-effort H3 cleanup contract: " + token)
+            errors.append("modeless Detach lost fail-closed H3 cleanup ownership contract: " + token)
 
     helper_start = text.find("private void DetachNativeLifecycleSubscription()")
     helper_end = text.find("private void OnWindowClosed", helper_start + 1)
@@ -156,4 +156,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: same-wrapper Attach is idempotent, proven replacement wrappers rebind before publication, initial attachment rolls partial H3 ownership back through Detach, and native reactor ownership remains centralized and fail-closed.")
+print("PASS: same-wrapper Attach is idempotent, proven replacement wrappers rebind before publication, initial attachment retains cleanup ownership until native/modeless cleanup completes, and native reactor ownership remains centralized and fail-closed.")
