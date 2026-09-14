@@ -56,14 +56,14 @@ namespace QS3D.Core.SmokeTests
 
         private static AuditTrail CreateTrail(IList<AuditEvent> source)
         {
-            foreach (var constructor in typeof(AuditTrail).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic))
-            {
-                var parameters = constructor.GetParameters();
-                if (parameters.Length == 2 && parameters[0].ParameterType == typeof(IList<AuditEvent>))
-                    return (AuditTrail)constructor.Invoke(new object?[] { source, null });
-            }
-
-            throw new InvalidOperationException("AuditTrail private history constructor was not found.");
+            var constructor = typeof(AuditTrail).GetConstructor(
+                BindingFlags.Instance | BindingFlags.NonPublic,
+                binder: null,
+                types: new[] { typeof(IList<AuditEvent>) },
+                modifiers: null);
+            if (constructor == null)
+                throw new InvalidOperationException("AuditTrail private backing-list constructor was not found.");
+            return (AuditTrail)constructor.Invoke(new object?[] { source });
         }
 
         private static void ThrowsContaining(Action action, string token)

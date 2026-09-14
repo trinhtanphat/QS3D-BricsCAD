@@ -322,7 +322,7 @@ namespace QS3D.Core.SmokeTests
         private static void NullAuditEventFailsClosed()
         {
             var project = NewProject("null-audit");
-            project.AuditEvents.Add(null!);
+            LegacyAuditHistoryFixture.AppendRaw(project, null);
             RejectSave(project, "Null audit event reached serialization instead of failing validation.");
         }
 
@@ -339,7 +339,7 @@ namespace QS3D.Core.SmokeTests
                 throw new Exception("Rejected non-UTC project timestamp changed the prior canonical UTC value.");
 
             project = NewProject("audit-time");
-            project.AuditEvents.Add(new AuditEvent
+            LegacyAuditHistoryFixture.AppendRaw(project, new AuditEvent
             {
                 Utc = new DateTime(2026, 8, 10, 12, 0, 0, DateTimeKind.Local),
                 Action = "test"

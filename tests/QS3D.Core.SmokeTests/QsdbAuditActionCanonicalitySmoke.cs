@@ -30,7 +30,7 @@ namespace QS3D.Core.SmokeTests
             try
             {
                 var project = NewProject();
-                project.AuditEvents.Add(new AuditEvent
+                LegacyAuditHistoryFixture.AppendRaw(project, new AuditEvent
                 {
                     Utc = DateTime.UtcNow,
                     Action = action

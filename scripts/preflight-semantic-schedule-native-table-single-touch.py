@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / "src/QS3D.BricsCAD.V25/Cad/SemanticScheduleNativeTableBuilder.cs"
 AUDIT = ROOT / "src/QS3D.Core/Audit/AuditTrail.cs"
+PROJECT_STATE = ROOT / "src/QS3D.Core/Domain/ProjectState.cs"
 errors = []
 
 
@@ -15,8 +16,22 @@ def read(path, label):
     return path.read_text(encoding="utf-8")
 
 
+def has_revision_aware_audit_events(project_text):
+    return all(
+        token in project_text
+        for token in (
+            "AuditEvents = new CatalogOwnershipList<AuditEvent>(",
+            "AttachAuditEvent",
+            "DetachAuditEvent",
+            "auditEvent.PersistenceMutationRequested += Touch",
+            "auditEvent.PersistenceMutationRequested -= Touch",
+        )
+    )
+
+
 builder = read(BUILDER, "SemanticScheduleNativeTableBuilder.cs")
 audit = read(AUDIT, "AuditTrail.cs")
+project_state = read(PROJECT_STATE, "ProjectState.cs")
 
 if builder:
     for token in (
@@ -30,7 +45,7 @@ if builder:
             errors.append("custom schedule native Table contract missing token: " + token)
 
     if "project.Touch();" in builder:
-        errors.append("SemanticScheduleNativeTableBuilder must rely on its audit records as the single project Touch owner.")
+        errors.append("SemanticScheduleNativeTableBuilder must rely on the authoritative audit project revision owner.")
 
 if audit:
     record_start = audit.find("public void Record(")
@@ -39,8 +54,13 @@ if audit:
         errors.append("could not isolate AuditTrail.Record")
     else:
         record = audit[record_start:clear_start]
-        if "_project?.Touch();" not in record:
-            errors.append("AuditTrail.Record must remain the single project Touch owner for custom schedule Table mutations.")
+        legacy_audit_touch = "_project?.Touch();" in record
+        ownership_touch = has_revision_aware_audit_events(project_state)
+        if legacy_audit_touch == ownership_touch:
+            errors.append(
+                "custom schedule Table audit revision contract must have exactly one project revision owner: "
+                "legacy AuditTrail.Record Touch or revision-aware ProjectState.AuditEvents ownership"
+            )
         if "_events.Add(item);" not in record:
             errors.append("AuditTrail.Record must continue appending the audit event.")
 
@@ -50,4 +70,4 @@ if errors:
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
 
-print("PASS: custom Semantic Schedule native Table Build/Remove preserve audit, rollback and header-only rendering while AuditTrail.Record remains the single ChangeVersion touch.")
+print("PASS: custom Semantic Schedule native Table Build/Remove preserve audit, rollback and header-only rendering with exactly one authoritative project revision owner.")

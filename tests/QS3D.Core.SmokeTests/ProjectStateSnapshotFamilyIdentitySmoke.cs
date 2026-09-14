@@ -202,7 +202,7 @@ namespace QS3D.Core.SmokeTests
         private static void ExpectRejectedAudit(AuditEvent audit, string label)
         {
             var project = new ProjectState("snapshot-audit-invalid", "Snapshot audit invalid");
-            project.AuditEvents.Add(audit);
+            LegacyAuditHistoryFixture.AppendRaw(project, audit);
             var originalUpdatedUtc = project.UpdatedUtc;
             var originalChangeVersion = project.ChangeVersion;
 

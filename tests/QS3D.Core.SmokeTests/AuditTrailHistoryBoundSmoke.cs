@@ -200,11 +200,11 @@ namespace QS3D.Core.SmokeTests
             var constructor = typeof(AuditTrail).GetConstructor(
                 BindingFlags.Instance | BindingFlags.NonPublic,
                 binder: null,
-                types: new[] { typeof(IList<AuditEvent>), typeof(ProjectState) },
+                types: new[] { typeof(IList<AuditEvent>) },
                 modifiers: null);
             if (constructor == null)
                 throw new Exception("AuditTrailHistoryBoundSmoke could not resolve the bounded-history constructor.");
-            return (AuditTrail)constructor.Invoke(new object?[] { history, null });
+            return (AuditTrail)constructor.Invoke(new object?[] { history });
         }
 
         private static AuditEvent CanonicalEvent()

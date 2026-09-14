@@ -22,7 +22,7 @@ namespace QS3D.Core.SmokeTests
                 Detail = "before"
             };
             project.AuditEvents.Add(seed);
-            project.AuditEvents.Add(null!);
+            LegacyAuditHistoryFixture.AppendRaw(project, null);
             var trail = AuditTrail.ForProject(project);
             var beforeVersion = project.ChangeVersion;
             var beforeUpdatedUtc = project.UpdatedUtc;
@@ -37,8 +37,10 @@ namespace QS3D.Core.SmokeTests
             Require(project.AuditEvents[1] == null, "Rejected audit Record mutated the existing null corruption instead of leaving repair explicit.");
 
             project.AuditEvents.RemoveAt(1);
+            Require(project.ChangeVersion == checked(beforeVersion + 1L), "Removing the raw null audit corruption did not advance ChangeVersion exactly once.");
+            var afterRepairVersion = project.ChangeVersion;
             trail.Record("valid.action", "E2", "after-repair");
-            Require(project.ChangeVersion == checked(beforeVersion + 1L), "Valid audit Record after repair did not advance ChangeVersion exactly once.");
+            Require(project.ChangeVersion == checked(afterRepairVersion + 1L), "Valid audit Record after repair did not advance ChangeVersion exactly once.");
             Require(project.AuditEvents.Count == 2, "Valid audit Record after repair did not append exactly one event.");
             Require(project.AuditEvents[1].Action == "valid.action", "Valid audit Record after repair stored the wrong action.");
             Require(project.AuditEvents[1].Detail == "after-repair", "Valid audit Record after repair stored the wrong detail.");
