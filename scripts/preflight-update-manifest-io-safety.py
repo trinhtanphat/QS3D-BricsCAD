@@ -102,7 +102,9 @@ for token in (
     forbid(wrapper, token, "V25 publication wrapper")
 
 # Native helper must keep handle-owned parent-relative publication and the exact
-# one-byte FILE_DISPOSITION_INFO BOOLEAN ABI. No absolute-path rename fallback.
+# one-byte FILE_DISPOSITION_INFO BOOLEAN ABI. MarshalAs(UnmanagedType.Bool) is
+# valid for BOOL-returning P/Invokes; the disposition payload itself is guarded
+# by the explicit one-byte allocation/write/length contract below.
 for token in (
     "NtSetInformationFile",
     "FileRenameInformation",
@@ -114,11 +116,12 @@ for token in (
     "GetOwnedDirectoryIdentity",
     "Marshal.AllocHGlobal(1)",
     "Marshal.WriteByte",
+    "SetFileInformationByHandle(generation.Stream.SafeFileHandle, FileDispositionInfo, buffer, 1)",
 ):
     require(native, token, "V25 held-generation native helper")
 for token in (
     "Marshal.SizeOf(typeof(FILE_DISPOSITION_INFO))",
-    "[MarshalAs(UnmanagedType.Bool)]",
+    "private struct FILE_DISPOSITION_INFO",
 ):
     forbid(native, token, "V25 held-generation native helper disposition ABI")
 
