@@ -177,6 +177,8 @@ namespace QS3D.BricsCAD.V25.UI
                     .ToList();
                 if (previewIds.Count == 0) throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
 
+                EnsureBoundDrawingIsActive("assign Floor/Level selection");
+
                 var project = ExistingProjectMutationContext.Require(_document, "Gán Floor/Level cho selection");
                 if (!ReferenceEquals(project, _boundProject) || !ReferenceEquals(project, previewProject) ||
                     !string.Equals(project.ProjectId, expectedProjectId, StringComparison.OrdinalIgnoreCase))
@@ -260,6 +262,8 @@ namespace QS3D.BricsCAD.V25.UI
                     .ToList();
                 if (previewIds.Count == 0)
                     throw new InvalidOperationException("Selection hiện tại không resolve được QS3D semantic element.");
+
+                EnsureBoundDrawingIsActive(operation);
 
                 var project = ExistingProjectMutationContext.Require(_document, operation);
                 if (!ReferenceEquals(project, _boundProject) || !ReferenceEquals(project, previewProject) ||
@@ -455,10 +459,12 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void RefreshAfterCommit(Action refresh, string successMessage, string context)
         {
+            if (!EnsureBoundDocumentGeneration(context)) return;
             SetStatus(successMessage);
             try
             {
                 refresh();
+                if (!EnsureBoundDocumentGeneration(context)) return;
                 PaletteCoordinator.RefreshProject();
             }
             catch (Exception)
@@ -502,8 +508,8 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void EnsureBoundDrawingIsActive(string operation)
         {
-            if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document))
-                throw new InvalidOperationException("Hãy kích hoạt lại đúng bản vẽ đã mở Level Picker trước khi " + operation + ".");
+            if (!EnsureBoundDocumentGeneration(operation))
+                throw new InvalidOperationException("Level Picker is no longer bound to the active native document generation. Reopen QS3DLEVELS before " + operation + ".");
         }
 
         private static double ParseElevation(string raw)
@@ -540,12 +546,14 @@ namespace QS3D.BricsCAD.V25.UI
 
         private void ReportFailure(string operation)
         {
+            if (!EnsureBoundDocumentGeneration(operation)) return;
             SetStatus(
                 operation + " không hoàn tất. Không có thay đổi chưa xác nhận nào được giữ lại; hãy Refresh Level Picker và thử lại.");
         }
 
         private void ReportPostCommitWarning(string successMessage, string context)
         {
+            if (!EnsureBoundDocumentGeneration(context)) return;
             var warning = successMessage + " " + context + " đã commit; đồng bộ UI chưa hoàn tất. Hãy Refresh Level Picker.";
             try { StatusText.Text = warning; } catch { }
             try { PaletteCoordinator.SetStatus(warning); } catch { }
