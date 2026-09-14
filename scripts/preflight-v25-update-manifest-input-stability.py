@@ -3,12 +3,13 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / "scripts" / "new-v25-update-manifest.ps1"
+TARGET = ROOT / "scripts" / "new-v25-update-manifest-validation-core.ps1"
+WRAPPER = ROOT / "scripts" / "new-v25-update-manifest.ps1"
 
 
 def read_target() -> str:
     if not TARGET.is_file():
-        raise RuntimeError("missing scripts/new-v25-update-manifest.ps1")
+        raise RuntimeError("missing scripts/new-v25-update-manifest-validation-core.ps1")
     return TARGET.read_text(encoding="utf-8")
 
 
@@ -34,7 +35,7 @@ def validate(text: str) -> list[str]:
     )
     for token in required:
         if token not in text:
-            errors.append(f"V25 update-manifest input stability missing required token: {token}")
+            errors.append(f"V25 update-manifest validation input stability missing required token: {token}")
 
     first_hash = text.find("Get-StreamingSha256 -File $file")
     second_resolve = text.find("$current = Resolve-OrdinaryNonReparseFile")
@@ -84,11 +85,24 @@ def validate(text: str) -> list[str]:
 
 try:
     target = read_target()
+    wrapper = WRAPPER.read_text(encoding="utf-8")
 except Exception as exc:
     print(f"ERROR: {exc}")
     sys.exit(1)
 
 errors = validate(target)
+for token in (
+    "$validationCorePath = Join-Path $PSScriptRoot 'new-v25-update-manifest-validation-core.ps1'",
+    ". $validationCorePath",
+    "-WhatIf 6>$null",
+    "ReadOwnedGenerationBytes($priorOwned",
+    "ReadOwnedGenerationBytes($stageOwned",
+):
+    if token not in wrapper:
+        errors.append(f"V25 update-manifest wrapper missing split stability/publication token: {token}")
+if "& $validationCorePath" in wrapper:
+    errors.append("V25 update-manifest wrapper must consume validation state in-scope instead of launching a separate validation process")
+
 print("QS3D V25 update-manifest input-generation stability preflight")
 if errors:
     for error in errors:
@@ -105,10 +119,10 @@ mutations = {
 }
 for label, mutated in mutations.items():
     if mutated == target:
-        print(f"ERROR: mutation fixture did not modify target for {label}")
+        print(f"ERROR: mutation fixture did not modify validation core for {label}")
         sys.exit(1)
     if not validate(mutated):
         print(f"ERROR: mutation escaped V25 update-manifest input-stability guard: {label}")
         sys.exit(1)
 
-print("PASS: V25 update-manifest metadata, signed staging, and ZIP inputs remain bound to stable ordinary-file generations with fail-closed staging traversal across trust and identity consumption.")
+print("PASS: split V25 manifest validation keeps metadata, signed staging and ZIP inputs bound to stable ordinary-file generations before wrapper-owned held-generation publication.")

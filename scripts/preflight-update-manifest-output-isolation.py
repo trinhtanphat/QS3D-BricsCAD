@@ -3,12 +3,18 @@ import ntpath
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = ROOT / "scripts" / "new-v25-update-manifest.ps1"
+WRAPPER = ROOT / "scripts" / "new-v25-update-manifest.ps1"
+VALIDATION_CORE = ROOT / "scripts" / "new-v25-update-manifest-validation-core.ps1"
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def read(path: Path, label: str) -> str:
+    require(path.is_file(), f"missing {label}: {path.relative_to(ROOT)}")
+    return path.read_text(encoding="utf-8")
 
 
 def output_isolated(package_directory: str, package_zip: str, output_path: str) -> bool:
@@ -35,11 +41,10 @@ def managed_identity_valid(metadata_version: str, metadata_product_version: str,
 
 
 def main() -> int:
-    if not MANIFEST.is_file():
-        raise AssertionError("missing scripts/new-v25-update-manifest.ps1")
-    text = MANIFEST.read_text(encoding="utf-8")
+    wrapper = read(WRAPPER, "V25 update-manifest wrapper")
+    validation = read(VALIDATION_CORE, "V25 update-manifest validation core")
 
-    required_tokens = (
+    required_validation_tokens = (
         "$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory",
         "$packagePath = $package.FullName.TrimEnd",
         "$packageRoot = $packagePath + [IO.Path]::DirectorySeparatorChar",
@@ -65,12 +70,9 @@ def main() -> int:
         "$zip = Assert-StableFileState -Expected $zipState",
         "$zipHash = [string]$zipState.Sha256",
         "$PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')",
-        "[IO.File]::WriteAllText($stagePath",
-        "[IO.File]::Replace($stage.FullName, $outputFull, $backupPath, $true)",
-        "[IO.File]::Move($stage.FullName, $outputFull)",
     )
-    for token in required_tokens:
-        require(token in text, "update manifest guard missing token: " + token)
+    for token in required_validation_tokens:
+        require(token in validation, "update manifest validation guard missing token: " + token)
 
     for forbidden in (
         "Assert-AuthenticodeSigner -Path (Join-Path $package $name)",
@@ -79,7 +81,29 @@ def main() -> int:
         "Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256",
         "$manifest | ConvertTo-Json | Set-Content -LiteralPath $outputFull -Encoding UTF8",
     ):
-        require(forbidden not in text, "update manifest retained unsafe/legacy routing token: " + forbidden)
+        require(forbidden not in validation, "validation core retained unsafe/legacy routing token: " + forbidden)
+
+    # The validation core may contain its legacy publisher, but the public wrapper must
+    # invoke it only under -WhatIf and then publish through held-generation authority.
+    for token in (
+        "$validationCorePath = Join-Path $PSScriptRoot 'new-v25-update-manifest-validation-core.ps1'",
+        ". $validationCorePath",
+        "-WhatIf 6>$null",
+        "$wrapperCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')",
+        "OpenOwnedDirectory($preOutputParentPath)",
+        "OpenOwnedExisting($preOutputFull)",
+        "PublishOwnedGenerationInDirectory",
+        "RollbackOwnedGenerationInDirectory",
+        "ReadOwnedGenerationBytes($stageOwned",
+    ):
+        require(token in wrapper, "split wrapper missing publication/delegation token: " + token)
+    for forbidden in (
+        "[IO.File]::WriteAllText($stagePath",
+        "[IO.File]::Replace($stage.FullName, $outputFull",
+        "[IO.File]::Move($stage.FullName, $outputFull",
+        "& $validationCorePath",
+    ):
+        require(forbidden not in wrapper, "public wrapper retained pathname/unsafe delegation token: " + forbidden)
 
     package = r"C:\release\QS3D-BricsCAD-V25"
     package_zip = r"C:\release\QS3D-BricsCAD-V25.zip"
@@ -106,32 +130,39 @@ def main() -> int:
         actual = managed_identity_valid(version, product_version, plugin, core)
         require(actual is expected, f"manifest managed identity mismatch for {label}: expected {expected}, got {actual}")
 
-    package_guard = text.find("$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory")
-    zip_guard = text.find("$zip = Resolve-OrdinaryNonReparseFile -Path $PackageZip")
-    extension_guard = text.find("[IO.Path]::GetExtension($outputFull), '.json', [StringComparison]::OrdinalIgnoreCase")
-    staging_guard = text.find("$outputFull.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)")
-    zip_alias_guard = text.find("OutputPath must not alias PackageZip.")
-    metadata_state = text.find("$metadataState = Get-StableFileState")
-    zip_state = text.find("$zipState = Get-StableFileState")
-    payload_guard = text.find("$payloadFiles[$name] = Resolve-OrdinaryNonReparseFile")
-    payload_state = text.find("$payloadStates[$name] = Get-StableFileState")
-    signer_check = text.find("Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName")
-    managed_loop = text.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
-    product_compare = text.find("does not match signed $name product version")
-    zip_binding = text.find("Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package")
-    zip_recheck = text.find("$zip = Assert-StableFileState -Expected $zipState", zip_binding)
-    zip_hash = text.find("$zipHash = [string]$zipState.Sha256", zip_recheck)
-    manifest_create = text.find("$manifest = [ordered]@{")
-    should_process = text.find("$PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')")
-    stage_write = text.find("[IO.File]::WriteAllText($stagePath")
-    positions = (package_guard, zip_guard, extension_guard, staging_guard, zip_alias_guard, metadata_state, zip_state, payload_guard, payload_state, signer_check, managed_loop, product_compare, zip_binding, zip_recheck, zip_hash, manifest_create, should_process, stage_write)
-    require(min(positions) >= 0, "manifest output/identity/verification ordering token is missing")
-    require(
-        package_guard < zip_guard < extension_guard < staging_guard < zip_alias_guard < metadata_state < zip_state < payload_guard < payload_state < signer_check < managed_loop < product_compare < zip_binding < zip_recheck < zip_hash < manifest_create < should_process < stage_write,
-        "manifest path/output isolation and both managed identities must precede state-bound ZIP verification/hash derivation and atomic manifest publication",
+    # Ordering is now checked inside the validation owner; publication authority is
+    # separately checked in the public wrapper rather than by concatenating files.
+    ordered = (
+        "$package = Resolve-OrdinaryNonReparseDirectory -Path $PackageDirectory",
+        "$zip = Resolve-OrdinaryNonReparseFile -Path $PackageZip",
+        "[IO.Path]::GetExtension($outputFull), '.json', [StringComparison]::OrdinalIgnoreCase",
+        "$outputFull.StartsWith($packageRoot, [StringComparison]::OrdinalIgnoreCase)",
+        "OutputPath must not alias PackageZip.",
+        "$metadataState = Get-StableFileState",
+        "$zipState = Get-StableFileState",
+        "$payloadFiles[$name] = Resolve-OrdinaryNonReparseFile",
+        "$payloadStates[$name] = Get-StableFileState",
+        "Assert-AuthenticodeSigner -Path $payloadFiles[$name].FullName",
+        "$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')",
+        "does not match signed $name product version",
+        "Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package",
+        "$zip = Assert-StableFileState -Expected $zipState",
+        "$zipHash = [string]$zipState.Sha256",
+        "$manifest = [ordered]@{",
+        "$PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')",
     )
+    positions = [validation.find(token) for token in ordered]
+    require(min(positions) >= 0 and positions == sorted(positions), "validation core path/output isolation and both managed identities must precede state-bound ZIP verification/hash derivation and any legacy publisher")
 
-    print("PASS: update manifest generation requires ordinary non-reparse package inputs, isolated external JSON output, stable input generations and exact metadata identity across both signed managed DLLs before ZIP/staging verification and atomic publication.")
+    validation_call = wrapper.find(". $validationCorePath")
+    should_process = wrapper.find("$wrapperCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')")
+    stage_create = wrapper.find("OpenOwnedStaging($stagePath)")
+    publish = wrapper.find("PublishOwnedGenerationInDirectory")
+    verify = wrapper.find("ReadOwnedGenerationBytes($stageOwned", publish)
+    require(min(validation_call, should_process, stage_create, publish, verify) >= 0 and validation_call < should_process < stage_create < publish < verify,
+            "wrapper must complete non-publishing validation before held-generation staging, publication and same-generation verification")
+
+    print("PASS: split update-manifest validation requires isolated external JSON output and stable managed identities before wrapper-owned held-generation publication.")
     return 0
 
 
