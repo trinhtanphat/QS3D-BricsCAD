@@ -569,7 +569,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                error = "Cannot persist owned tunnel process identity: " + ex.Message;
+                error = "Cannot persist owned tunnel process identity: " + SanitizePublicError(ex);
                 return false;
             }
         }
@@ -634,7 +634,7 @@ namespace QS3D.BricsCAD.V25
             catch (Exception ex)
             {
                 // Fail closed: lack of identity/process access is not permission to kill anything.
-                message = "Cannot prove/clean QS3D-owned stale tunnel process: " + ex.Message;
+                message = "Cannot prove/clean QS3D-owned stale tunnel process: " + SanitizePublicError(ex);
                 return false;
             }
             finally { try { process?.Dispose(); } catch { } }
@@ -652,6 +652,11 @@ namespace QS3D.BricsCAD.V25
             {
                 if (_activeProvider.HasValue && _activeProvider.Value == provider) _ownedPid = null;
             }
+        }
+
+        private static string SanitizePublicError(Exception exception)
+        {
+            return McpPublicTextSanitizer.Sanitize(exception.ToString());
         }
 
         internal static TimeSpan ComputeRestartBackoff(int attempt)
