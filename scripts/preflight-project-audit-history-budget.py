@@ -74,10 +74,13 @@ if missing_smoke:
     )
 
 required_atomicity_smoke = [
+    "CorruptReferenceAccountingDuplicateAdmissionRejectsBeforeMutation();",
     "CorruptReferenceAccountingRemoveRejectsBeforeMutation();",
     "CorruptReferenceAccountingReplaceRejectsBeforeMutation();",
     "CorruptReferenceAccountingClearRejectsBeforeMutation();",
     "RemoveReferenceAccounting(project, item);",
+    "Throws<InvalidOperationException>(() => project.AuditEvents.Add(item));",
+    "Throws<InvalidOperationException>(() => project.AuditEvents.Insert(0, item));",
     "Throws<InvalidOperationException>(() => project.AuditEvents.RemoveAt(0));",
     "Throws<InvalidOperationException>(() => project.AuditEvents[0] = replacement);",
     "Throws<InvalidOperationException>(() => project.AuditEvents.Clear());",
@@ -93,6 +96,16 @@ if missing_atomicity_smoke:
 # Public structural mutations must prove observer accounting before ProjectState.Touch/list/ownership
 # mutation. Keep restore-only repair separate: ClearRestoredPersistenceState intentionally commits its
 # rebuilt accounting without traversing the public corruption guard.
+add_method = project_text.find("public void Add(T item)", project_text.find("internal sealed class CatalogOwnershipList<T>"))
+add_validate = project_text.find("_mutationObserver?.ValidateAdd(item, existingReferenceCount);", add_method)
+add_touch = project_text.find("_beforeMutation();", add_validate)
+add_commit = project_text.find("_mutationObserver?.CommitAdd(item);", add_validate)
+if not (0 <= add_method < add_validate < add_touch < add_commit):
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: Add must validate reference accounting "
+        "before revision/list mutation and commit accounting afterward."
+    )
+
 remove_validate = project_text.find("_mutationObserver?.ValidateRemove(item, referenceCount);")
 remove_touch = project_text.find("_beforeMutation();", remove_validate)
 remove_commit = project_text.find("_mutationObserver?.CommitRemove(item);", remove_validate)
