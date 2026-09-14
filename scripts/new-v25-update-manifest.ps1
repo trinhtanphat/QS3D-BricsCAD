@@ -31,25 +31,8 @@ if (-not (Test-Path -LiteralPath $nativeHelperPath -PathType Leaf)) {
     throw "V25 update-manifest owned-publication helper is missing: $nativeHelperPath"
 }
 
-# Preserve the existing package/signature/version admission logic byte-for-byte.
-# -WhatIf is mandatory here: the validation core's legacy pathname publication
-# block must never become the authority that writes the caller's OutputPath.
-. $validationCorePath `
-    -PackageDirectory $PackageDirectory `
-    -PackageZip $PackageZip `
-    -PackageUri $PackageUri `
-    -ExpectedSignerThumbprint $ExpectedSignerThumbprint `
-    -OutputPath $OutputPath `
-    -WhatIf 6>$null
-
-# The core defines the hardened filesystem resolvers used below. Validate the two
-# implementation files through the same ordinary/non-reparse policy before loading
-# native code or treating the copied validation core as admitted release logic.
-$validationCoreFile = Resolve-OrdinaryNonReparseFile -Path $validationCorePath -Label 'V25 update-manifest validation core'
-$nativeHelperFile = Resolve-OrdinaryNonReparseFile -Path $nativeHelperPath -Label 'V25 update-manifest owned-publication helper'
-
 if ($null -eq ('Qs3dV25UpdateManifestPublicationNative' -as [type])) {
-    Add-Type -Path $nativeHelperFile.FullName
+    Add-Type -Path $nativeHelperPath
 }
 
 function Get-ByteArraySha256Hex {
@@ -71,47 +54,145 @@ function Test-ExactByteArray {
     return $difference -eq 0
 }
 
-if (-not $wrapperCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
-    return
+# Acquire the destination parent and exact prior destination generation before the
+# long package/signature validation phase. The parent handle denies delete sharing,
+# so the directory itself cannot be renamed/replaced while it is publication
+# authority. The prior file handle denies delete sharing, so a byte-identical
+# delete/recreate cannot silently become a new admitted generation.
+$preOutputFull = [IO.Path]::GetFullPath($OutputPath)
+$preOutputParentPath = [IO.Path]::GetDirectoryName($preOutputFull)
+if ([string]::IsNullOrWhiteSpace($preOutputParentPath)) {
+    throw "Update manifest destination has no parent directory: $preOutputFull"
 }
-
-$utf8NoBom = [Text.UTF8Encoding]::new($false, $true)
-$manifestJson = $manifest | ConvertTo-Json
-$expectedManifestBytes = $utf8NoBom.GetBytes($manifestJson + [Environment]::NewLine)
-if ($expectedManifestBytes.Length -gt $script:MaxMetadataBytes) {
-    throw "Generated update manifest exceeds the $($script:MaxMetadataBytes)-byte safety limit."
-}
-
-$nonce = [Guid]::NewGuid().ToString('N')
-$stagePath = Join-Path $outputParent.FullName (([IO.Path]::GetFileName($outputFull)) + ".tmp-$nonce")
-$backupPath = Join-Path $outputParent.FullName (([IO.Path]::GetFileName($outputFull)) + ".bak-$nonce")
-if (Test-Path -LiteralPath $stagePath) { throw "Refusing to reuse update-manifest staging path: $stagePath" }
-if (Test-Path -LiteralPath $backupPath) { throw "Refusing to reuse update-manifest backup path: $backupPath" }
-
-$stageOwned = $null
+$destinationParentOwned = $null
 $priorOwned = $null
+$priorIdentity = $null
+$priorBytesBeforeValidation = $null
+$stageOwned = $null
 $publicationCommitted = $false
+
 try {
+    $destinationParentOwned = [Qs3dV25UpdateManifestPublicationNative]::OpenOwnedDirectory($preOutputParentPath)
+    [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedDirectoryPath($destinationParentOwned, $preOutputParentPath)
+    $destinationParentIdentity = [Qs3dV25UpdateManifestPublicationNative]::GetOwnedDirectoryIdentity($destinationParentOwned)
+
+    try {
+        $priorOwned = [Qs3dV25UpdateManifestPublicationNative]::OpenOwnedExisting($preOutputFull)
+    }
+    catch [ComponentModel.Win32Exception] {
+        if ($_.Exception.NativeErrorCode -notin @(2, 3)) { throw }
+        $priorOwned = $null
+    }
+
+    if ($priorOwned) {
+        [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($priorOwned, $preOutputFull)
+        $priorIdentity = [Qs3dV25UpdateManifestPublicationNative]::GetOwnedGenerationIdentity($priorOwned)
+        $priorBytesBeforeValidation = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($priorOwned, 65536)
+    }
+
+    # Preserve the previously-reviewed package/signature/version admission logic.
+    # -WhatIf is mandatory: the copied validation core's legacy pathname publisher
+    # must never become write authority.
+    . $validationCorePath `
+        -PackageDirectory $PackageDirectory `
+        -PackageZip $PackageZip `
+        -PackageUri $PackageUri `
+        -ExpectedSignerThumbprint $ExpectedSignerThumbprint `
+        -OutputPath $OutputPath `
+        -WhatIf 6>$null
+
+    $validationCoreFile = Resolve-OrdinaryNonReparseFile -Path $validationCorePath -Label 'V25 update-manifest validation core'
+    $nativeHelperFile = Resolve-OrdinaryNonReparseFile -Path $nativeHelperPath -Label 'V25 update-manifest owned-publication helper'
+
+    if (-not [string]::Equals([IO.Path]::GetFullPath($outputFull), $preOutputFull, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Validation resolved a different update-manifest destination than the pre-acquired publication authority.'
+    }
+    if (-not [string]::Equals(
+        $destinationParentIdentity,
+        [Qs3dV25UpdateManifestPublicationNative]::GetOwnedDirectoryIdentity($destinationParentOwned),
+        [StringComparison]::Ordinal)) {
+        throw 'Destination-parent generation identity changed during update-manifest admission.'
+    }
+    [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedDirectoryPath($destinationParentOwned, $preOutputParentPath)
+
+    $validationSawExisting = [bool]$hadExistingOutput
+    if ($validationSawExisting -ne ($null -ne $priorOwned)) {
+        throw 'Update manifest destination existence changed between generation acquisition and validation.'
+    }
+    if ($priorOwned) {
+        if (-not [string]::Equals(
+            $priorIdentity,
+            [Qs3dV25UpdateManifestPublicationNative]::GetOwnedGenerationIdentity($priorOwned),
+            [StringComparison]::Ordinal)) {
+            throw 'Existing update-manifest generation identity changed during admission.'
+        }
+        $priorBytesAfterValidation = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($priorOwned, [int]$script:MaxMetadataBytes)
+        if (-not (Test-ExactByteArray -Expected $priorBytesBeforeValidation -Actual $priorBytesAfterValidation)) {
+            throw 'Existing update-manifest bytes changed while its exact generation was held for admission.'
+        }
+        $priorHash = Get-ByteArraySha256Hex -Bytes $priorBytesAfterValidation
+        if ([long]$priorBytesAfterValidation.Length -ne [long]$existingOutputState.Length -or
+            -not [string]::Equals($priorHash, [string]$existingOutputState.Sha256, [StringComparison]::Ordinal)) {
+            throw 'Validation did not agree with the already-owned prior update-manifest generation.'
+        }
+    }
+
+    if (-not $wrapperCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')) {
+        return
+    }
+
+    $utf8NoBom = [Text.UTF8Encoding]::new($false, $true)
+    $manifestJson = $manifest | ConvertTo-Json
+    $expectedManifestBytes = $utf8NoBom.GetBytes($manifestJson + [Environment]::NewLine)
+    if ($expectedManifestBytes.Length -gt $script:MaxMetadataBytes) {
+        throw "Generated update manifest exceeds the $($script:MaxMetadataBytes)-byte safety limit."
+    }
+
+    $nonce = [Guid]::NewGuid().ToString('N')
+    $outputFileName = [IO.Path]::GetFileName($outputFull)
+    $stageFileName = $outputFileName + ".tmp-$nonce"
+    $backupFileName = $outputFileName + ".bak-$nonce"
+    $stagePath = Join-Path $preOutputParentPath $stageFileName
+    $backupPath = Join-Path $preOutputParentPath $backupFileName
+    if (Test-Path -LiteralPath $stagePath) { throw "Refusing to reuse update-manifest staging path: $stagePath" }
+    if (Test-Path -LiteralPath $backupPath) { throw "Refusing to reuse update-manifest backup path: $backupPath" }
+
+    # Reassert parent identity/path immediately before staging creation. Any ancestor
+    # path swap that redirected stage creation is also detected by the stage handle's
+    # final-path assertion before publication.
+    if (-not [string]::Equals(
+        $destinationParentIdentity,
+        [Qs3dV25UpdateManifestPublicationNative]::GetOwnedDirectoryIdentity($destinationParentOwned),
+        [StringComparison]::Ordinal)) {
+        throw 'Destination-parent identity changed before staging creation.'
+    }
+    [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedDirectoryPath($destinationParentOwned, $preOutputParentPath)
+
     $stageOwned = [Qs3dV25UpdateManifestPublicationNative]::OpenOwnedStaging($stagePath)
     [Qs3dV25UpdateManifestPublicationNative]::WriteOwnedGeneration($stageOwned, $expectedManifestBytes)
     [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($stageOwned, $stagePath)
+    [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedDirectoryPath($destinationParentOwned, $preOutputParentPath)
     $stageIdentity = [Qs3dV25UpdateManifestPublicationNative]::GetOwnedGenerationIdentity($stageOwned)
 
-    if ($hadExistingOutput) {
-        $priorOwned = [Qs3dV25UpdateManifestPublicationNative]::OpenOwnedExisting($outputFull)
-        [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($priorOwned, $outputFull)
-        $priorBytes = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($priorOwned, [int]$script:MaxMetadataBytes)
-        $priorHash = Get-ByteArraySha256Hex -Bytes $priorBytes
-        if ([long]$priorBytes.Length -ne [long]$existingOutputState.Length -or
-            -not [string]::Equals($priorHash, [string]$existingOutputState.Sha256, [StringComparison]::Ordinal)) {
-            throw 'Existing update manifest changed before its exact generation could be acquired for publication.'
+    if ($priorOwned) {
+        if (-not [string]::Equals(
+            $priorIdentity,
+            [Qs3dV25UpdateManifestPublicationNative]::GetOwnedGenerationIdentity($priorOwned),
+            [StringComparison]::Ordinal)) {
+            throw 'Prior update-manifest generation identity changed before publication.'
         }
+        [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($priorOwned, $outputFull)
     }
     elseif (Test-Path -LiteralPath $outputFull) {
         throw 'Update manifest destination appeared after admission; refusing to replace an unowned generation.'
     }
 
-    [Qs3dV25UpdateManifestPublicationNative]::PublishOwnedGeneration($stageOwned, $outputFull, $priorOwned, $backupPath)
+    [Qs3dV25UpdateManifestPublicationNative]::PublishOwnedGenerationInDirectory(
+        $stageOwned,
+        $destinationParentOwned,
+        $outputFileName,
+        $priorOwned,
+        $backupFileName)
 
     if (-not [string]::Equals(
         $stageIdentity,
@@ -119,6 +200,13 @@ try {
         [StringComparison]::Ordinal)) {
         throw 'Published update manifest generation identity changed across held-handle publication.'
     }
+    if (-not [string]::Equals(
+        $destinationParentIdentity,
+        [Qs3dV25UpdateManifestPublicationNative]::GetOwnedDirectoryIdentity($destinationParentOwned),
+        [StringComparison]::Ordinal)) {
+        throw 'Destination-parent identity changed across publication.'
+    }
+    [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedDirectoryPath($destinationParentOwned, $preOutputParentPath)
     [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($stageOwned, $outputFull)
     $publishedBytes = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($stageOwned, [int]$script:MaxMetadataBytes)
     if (-not (Test-ExactByteArray -Expected $expectedManifestBytes -Actual $publishedBytes)) {
@@ -140,20 +228,25 @@ try {
 }
 catch {
     $publishFailure = $_
-    if ($stageOwned) {
+    if ($stageOwned -and $destinationParentOwned) {
         try {
-            [Qs3dV25UpdateManifestPublicationNative]::RollbackOwnedGeneration(
+            [Qs3dV25UpdateManifestPublicationNative]::RollbackOwnedGenerationInDirectory(
                 $stageOwned,
+                $destinationParentOwned,
                 $priorOwned,
-                $outputFull,
+                [IO.Path]::GetFileName($preOutputFull),
                 $stagePath)
             if ($priorOwned) {
-                [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($priorOwned, $outputFull)
-                $restoredBytes = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($priorOwned, [int]$script:MaxMetadataBytes)
-                $restoredHash = Get-ByteArraySha256Hex -Bytes $restoredBytes
-                if ([long]$restoredBytes.Length -ne [long]$existingOutputState.Length -or
-                    -not [string]::Equals($restoredHash, [string]$existingOutputState.Sha256, [StringComparison]::Ordinal)) {
-                    throw 'Rollback restored a generation whose exact bytes do not match the admitted prior manifest.'
+                if (-not [string]::Equals(
+                    $priorIdentity,
+                    [Qs3dV25UpdateManifestPublicationNative]::GetOwnedGenerationIdentity($priorOwned),
+                    [StringComparison]::Ordinal)) {
+                    throw 'Rollback prior generation identity differs from the pre-validation authority.'
+                }
+                [Qs3dV25UpdateManifestPublicationNative]::AssertOwnedPath($priorOwned, $preOutputFull)
+                $restoredBytes = [Qs3dV25UpdateManifestPublicationNative]::ReadOwnedGenerationBytes($priorOwned, 65536)
+                if (-not (Test-ExactByteArray -Expected $priorBytesBeforeValidation -Actual $restoredBytes)) {
+                    throw 'Rollback did not restore the exact pre-validation prior generation bytes.'
                 }
             }
         }
@@ -167,6 +260,7 @@ catch {
 finally {
     if ($stageOwned) { $stageOwned.Dispose() }
     if ($priorOwned) { $priorOwned.Dispose() }
+    if ($destinationParentOwned) { $destinationParentOwned.Dispose() }
 }
 
 if (-not $publicationCommitted) {
