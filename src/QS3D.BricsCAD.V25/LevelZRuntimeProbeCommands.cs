@@ -212,7 +212,8 @@ namespace QS3D.BricsCAD.V25
                 failureCode = "LEVEL_Z_RUNTIME_REBAR_FAILED";
                 rebarStage = "longitudinal_build";
                 Select(document, sources.Beam.ObjectId);
-                var rebarCount = BeamRebarSolidBuilder.BuildSelected(document, project, new[] { sources.Beam.ObjectId });
+                var rebarOutcome = BeamRebarSolidBuilder.BuildSelected(document, project, new[] { sources.Beam.ObjectId });
+                var rebarCount = rebarOutcome.Count;
                 observedBeamRebarCount = rebarCount;
                 rebarStage = "longitudinal_count";
                 Require(rebarCount == 4, "Beam longitudinal rebar count");

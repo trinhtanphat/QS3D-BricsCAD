@@ -5,6 +5,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 builder = (ROOT / "src/QS3D.BricsCAD.V25/Cad/BeamRebarSolidBuilder.cs").read_text(encoding="utf-8")
 command = (ROOT / "src/QS3D.BricsCAD.V25/BeamRebarCommands.cs").read_text(encoding="utf-8")
+probe = (ROOT / "src/QS3D.BricsCAD.V25/LevelZRuntimeProbeCommands.cs").read_text(encoding="utf-8")
 
 required_builder = [
     "internal struct BeamRebarBuildOutcome",
@@ -26,6 +27,14 @@ required_command = [
 
 missing = [token for token in required_builder if token not in builder]
 missing += [token for token in required_command if token not in command]
+required_probe = [
+    "var rebarOutcome = BeamRebarSolidBuilder.BuildSelected(document, project, new[] { sources.Beam.ObjectId });",
+    "var rebarCount = rebarOutcome.Count;",
+    "observedBeamRebarCount = rebarCount;",
+    "Require(rebarCount == 4, \"Beam longitudinal rebar count\");",
+    "\"beam_rebar_count=\" + rebarCount.ToString(CultureInfo.InvariantCulture)",
+]
+missing += [token for token in required_probe if token not in probe]
 
 # Keep the compatibility form immutable from callers even though the struct itself is not marked readonly.
 if "public int Count { get; set; }" in builder or "public bool PostCommitCleanupWarning { get; set; }" in builder:
