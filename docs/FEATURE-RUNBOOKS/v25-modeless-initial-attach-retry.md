@@ -10,8 +10,10 @@ The defect fixed by issue #6916 is distinct from managed-wrapper drift after a s
 
 - registration lookup, initial attach and failed-registration eviction are serialized by a weak per-`Window` gate;
 - same-thread reentrant `Attach` is rejected while an attach attempt is in progress, so monitor reentrancy cannot replace the cached registration behind an outer failure path;
-- when `Registration.Attach` throws, the top-level owner removes the cached registration only when the table still maps the `Window` to that exact failed instance;
-- the original exception is rethrown after eviction;
+- the caller captures whether the selected registration was already attached before invoking `Registration.Attach`;
+- when an attach call that began with a never-attached registration throws, the top-level owner removes the cached registration only when the table still maps the `Window` to that exact failed instance;
+- when a repeated attach or wrapper rebind begins from an already-successful registration and then fails, the existing registration remains canonical so the failure cannot create a second lifecycle owner on the next retry;
+- the original exception is rethrown after any initial-registration eviction;
 - the weak gate remains keyed by the `Window`, so it does not introduce a process-lifetime strong root;
 - successful repeated attach keeps the wrapper-rebind and semantic project/drawing affinity contract established by #6872;
 - native lifecycle cleanup remains owned by `DocumentBoundNativeLifecycleCoordinator`; this change does not claim cleanup success when the host refuses native unsubscribe.
@@ -36,6 +38,7 @@ The following require a real licensed BricsCAD V25 host and remain `NO_RESULT` u
 3. Retry after an initial failure using a different project/drawing affinity and verify the normal fail-closed project/document checks still reject it.
 4. Trigger two concurrent attach requests for the same `Window`; verify only one initial registration proceeds and no duplicate managed/native handlers are installed.
 5. Trigger same-thread reentrant attach during an injected attach callback; verify the nested call fails without evicting/replacing the outer registration.
-6. Close/abort/quit after a successful retry and verify subscription disposal, quiescence and window-close behavior remain compatible with the #6872 wrapper-rebind lifecycle contract.
+6. Force a repeated attach/rebind to fail after a window was already successfully attached; verify the original registration remains the sole lifecycle owner and a later retry cannot create duplicate handlers.
+7. Close/abort/quit after a successful retry and verify subscription disposal, quiescence and window-close behavior remain compatible with the #6872 wrapper-rebind lifecycle contract.
 
 Do not label any scenario `LOCAL_PASS` without a licensed host execution artifact tied to the exact tested SHA.
