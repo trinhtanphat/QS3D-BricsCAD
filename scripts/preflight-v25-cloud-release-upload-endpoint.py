@@ -14,18 +14,16 @@ def validate_source(helper: str) -> None:
     required = (
         ("$uploadBaseUri = $null", "helper must parse UploadBase before authorization"),
         ("[Uri]::TryCreate($UploadBase, [UriKind]::Absolute, [ref]$uploadBaseUri)", "UploadBase must be one absolute URI"),
-        ("$uploadBaseUri.Scheme", "upload endpoint scheme must be admitted"),
-        ("'https'", "upload endpoint must require HTTPS"),
-        ("$uploadBaseUri.Host", "upload endpoint host must be admitted"),
-        ("'uploads.github.com'", "upload endpoint must be pinned to uploads.github.com"),
-        ("$uploadBaseUri.IsDefaultPort", "upload endpoint must reject non-default ports"),
-        ("$uploadBaseUri.UserInfo", "upload endpoint must reject embedded credentials"),
-        ("$uploadBaseUri.Fragment", "upload endpoint must reject fragments"),
-        ("$uploadBaseUri.Query", "upload endpoint must reject a preexisting query"),
+        ("-not [string]::Equals($uploadBaseUri.Scheme, 'https', [StringComparison]::OrdinalIgnoreCase)", "upload endpoint must require HTTPS"),
+        ("-not [string]::Equals($uploadBaseUri.Host, 'uploads.github.com', [StringComparison]::OrdinalIgnoreCase)", "upload endpoint must be pinned to uploads.github.com"),
+        ("-not $uploadBaseUri.IsDefaultPort", "upload endpoint must reject non-default ports"),
+        ("-not [string]::IsNullOrEmpty($uploadBaseUri.UserInfo)", "upload endpoint must reject embedded credentials"),
+        ("-not [string]::IsNullOrEmpty($uploadBaseUri.Fragment)", "upload endpoint must reject fragments"),
+        ("-not [string]::IsNullOrEmpty($uploadBaseUri.Query)", "upload endpoint must reject a preexisting query"),
         ("[System.Net.Http.HttpClientHandler]::new()", "helper must own an HTTP handler so redirect policy is explicit"),
         ("$handler.AllowAutoRedirect = $false", "release-asset upload must fail closed on redirects"),
         ("[System.Net.Http.HttpClient]::new($handler)", "HTTP client must use the redirect-disabled handler"),
-        ("[System.Net.HttpStatusCode]::Created", "release-asset upload must require HTTP 201 Created"),
+        ("$response.StatusCode -ne [System.Net.HttpStatusCode]::Created", "release-asset upload must require exact HTTP 201 Created"),
     )
     for token, message in required:
         require(token in helper, message)
@@ -38,7 +36,7 @@ def validate_source(helper: str) -> None:
     redirect_pos = helper.index("$handler.AllowAutoRedirect = $false")
     header_pos = helper.index("foreach ($key in $Headers.Keys)")
     post_pos = helper.index("$client.PostAsync($uploadUri, $content)")
-    status_pos = helper.index("[System.Net.HttpStatusCode]::Created")
+    status_pos = helper.index("$response.StatusCode -ne [System.Net.HttpStatusCode]::Created")
     response_parse_pos = helper.index("$response.Content.ReadAsStringAsync().GetAwaiter().GetResult()")
     require(
         parse_pos < host_pos < handler_pos < redirect_pos < header_pos < post_pos < status_pos < response_parse_pos,
@@ -53,7 +51,11 @@ def main() -> None:
     mutations = (
         ("$handler.AllowAutoRedirect = $false", "$handler.AllowAutoRedirect = $true", "redirect weakening"),
         ("'uploads.github.com'", "'example.invalid'", "host weakening"),
-        ("[System.Net.HttpStatusCode]::Created", "[System.Net.HttpStatusCode]::OK", "status weakening"),
+        ("-not $uploadBaseUri.IsDefaultPort", "$uploadBaseUri.IsDefaultPort", "port predicate inversion"),
+        ("-not [string]::IsNullOrEmpty($uploadBaseUri.UserInfo)", "[string]::IsNullOrEmpty($uploadBaseUri.UserInfo)", "userinfo predicate inversion"),
+        ("-not [string]::IsNullOrEmpty($uploadBaseUri.Fragment)", "[string]::IsNullOrEmpty($uploadBaseUri.Fragment)", "fragment predicate inversion"),
+        ("-not [string]::IsNullOrEmpty($uploadBaseUri.Query)", "[string]::IsNullOrEmpty($uploadBaseUri.Query)", "query predicate inversion"),
+        ("$response.StatusCode -ne [System.Net.HttpStatusCode]::Created", "$response.StatusCode -eq [System.Net.HttpStatusCode]::Created", "status predicate inversion"),
     )
     for old, new, label in mutations:
         require(old in helper, f"mutation fixture lost source token for {label}")
