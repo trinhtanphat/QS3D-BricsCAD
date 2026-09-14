@@ -38,14 +38,14 @@ if not errors:
     if min(acquire, empty, require, build) < 0 or not (acquire < empty < require < build):
         errors.append("Column Tie must enforce PICKFIRST snapshot -> empty return -> canonical project bind -> same-snapshot native build")
 
-    for token in (".SelectImplied()", "ex.Message", "exception.Message"):
+    for token in (".SelectImplied()", "ex.Message", "exception.Message", "ex.GetType().Name"):
         if token in command:
-            errors.append("ColumnTieCommands.cs must not expose/re-read native selection detail: " + token)
+            errors.append("ColumnTieCommands.cs must not expose/re-read native selection or exception detail: " + token)
 
     required_builder = [
         'BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)',
         'if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));',
-        'if (selectedIds.Length == 0) return 0;',
+        'if (selectedIds.Length == 0) return new ColumnTieBuildResult(0, postCommitCleanupWarning: false);',
         'var ids = (ObjectId[])selectedIds.Clone();',
         'ProjectStateSnapshot.Capture(project)',
         'using (document.LockDocument())',
@@ -53,10 +53,11 @@ if not errors:
         'MaxTiesPerElement',
         'MaxTiesPerBatch',
         'transaction.Commit()',
+        'return new ColumnTieBuildResult(totalTies, cleanupWarning);',
     ]
     for token in required_builder:
         if token not in builder:
-            errors.append("ColumnTieSolidBuilder.cs missing preserved safety token: " + token)
+            errors.append("ColumnTieSolidBuilder.cs missing preserved safety/outcome token: " + token)
 
     for token in ('document.Editor.SelectImplied()', 'CadSelectionGuard.ReadImpliedSelection'):
         if token in builder:
@@ -68,4 +69,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Column Tie captures PICKFIRST once before project binding, passes the exact cloned snapshot into native generation, preserves rollback/ownership/bounds, and redacts host exception detail from user-visible command/UI-sync failures.")
+print("PASS: Column Tie captures PICKFIRST once before project binding, passes the exact cloned snapshot into native generation, preserves rollback/ownership/bounds and structured committed outcome, and redacts host exception detail from user-visible command/UI-sync failures.")
