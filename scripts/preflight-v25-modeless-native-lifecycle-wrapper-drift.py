@@ -45,7 +45,10 @@ resolve = method_block(lifetime, "private bool TryResolveLiveDocument(out Docume
 for token in ("MatchesBoundDocumentAffinity(candidate)", "DocumentBoundNativeLifecycleCoordinator.Rebind(", "_lifecycleDocument = candidate;", "document = candidate;"):
     require(token in resolve, "live wrapper resolution rebind contract missing: " + token)
 if all(token in resolve for token in ("DocumentBoundNativeLifecycleCoordinator.Rebind(", "_lifecycleDocument = candidate;", "document = candidate;")):
-    require(resolve.index("DocumentBoundNativeLifecycleCoordinator.Rebind(") < resolve.index("_lifecycleDocument = candidate;") < resolve.index("document = candidate;"), "live resolution must rebind before publication/output")
+    rebind_index = resolve.index("DocumentBoundNativeLifecycleCoordinator.Rebind(")
+    publication_index = resolve.index("_lifecycleDocument = candidate;", rebind_index)
+    output_index = resolve.index("document = candidate;", publication_index + len("_lifecycleDocument = candidate;"))
+    require(rebind_index < publication_index < output_index, "live resolution must rebind before publication/output")
 
 require("private readonly List<Document> _pendingNativeDetachDocuments" in coordinator,
         "coordinator must track every wrapper whose native unsubscribe rollback remains pending")
@@ -86,7 +89,7 @@ if all(token in unregister for token in ("if (!entry.DetachNativeHandlersIfSafe(
 
 require("if (HasDifferentLiveLifecycleDocument(document, identity)) return;" in coordinator, "stale destroy fallback must preserve live replacement lifecycle")
 has_live = method_block(coordinator, "private static bool HasDifferentLiveLifecycleDocument(")
-for token in ("if (ReferenceEquals(lifecycleDocument, destroyingDocument)) return false;", "if (ReferenceEquals(candidate, lifecycleDocument))", "entry.ForgetPendingNativeDetachAfterDestroy(destroyingDocument);", "return true;"):
+for token in ("if (ReferenceEquals(lifecycleDocument, destroyingDocument)) return false;", "if (!ReferenceEquals(candidate, lifecycleDocument)) continue;", "entry.ForgetPendingNativeDetachAfterDestroy(destroyingDocument);", "return true;"):
     require(token in has_live, "stale destroy fencing/release missing: " + token)
 forget_destroyed = method_block(coordinator, "public void ForgetPendingNativeDetachAfterDestroy(Document destroyedDocument)")
 require("ForgetPendingNativeDetach(destroyedDocument);" in forget_destroyed, "destroyed stale wrapper must release pending managed ownership")
