@@ -90,7 +90,7 @@ try {
                     $uploadedAsset = $responseBody | ConvertFrom-Json -ErrorAction Stop
                 }
                 catch {
-                    throw "GitHub release asset upload returned invalid JSON for $Name. $($_.Exception.Message)"
+                    throw "GitHub release asset upload returned invalid JSON for $Name."
                 }
 
                 $uploadedAssetId = 0L
