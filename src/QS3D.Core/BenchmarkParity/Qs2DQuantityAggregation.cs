@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using QS3D.Core.Reporting;
 
 namespace QS3D.Core.BenchmarkParity
 {
@@ -154,17 +155,20 @@ namespace QS3D.Core.BenchmarkParity
 
         private static double CompensatedSum(IEnumerable<double> values)
         {
-            var sum = 0d;
-            var compensation = 0d;
+            var accumulator = new QuantityReportMath.FiniteAccumulator();
             foreach (var value in values)
             {
-                QsModelElementSnapshot.Finite(value, "quantity");
-                var next = sum + value;
-                if (Math.Abs(sum) >= Math.Abs(value)) compensation += (sum - next) + value;
-                else compensation += (value - next) + sum;
-                sum = next;
+                var finiteValue = QsModelElementSnapshot.Finite(value, "quantity");
+                try
+                {
+                    accumulator.Add(finiteValue, "quantity");
+                }
+                catch (OverflowException)
+                {
+                    throw new ArgumentOutOfRangeException("quantity", "must be finite");
+                }
             }
-            return QsModelElementSnapshot.Finite(sum + compensation, "quantity");
+            return accumulator.Value("quantity");
         }
     }
 }
