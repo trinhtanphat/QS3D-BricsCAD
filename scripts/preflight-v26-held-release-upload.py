@@ -52,6 +52,13 @@ def validate(publisher: str, helper: str) -> list[str]:
         "$handler.AllowAutoRedirect = $false",
         "[System.Net.Http.HttpClient]::new($handler)",
         "$response.StatusCode -ne [System.Net.HttpStatusCode]::Created",
+        "ConvertFrom-Json -ErrorAction Stop",
+        "throw \"V26 held asset upload returned invalid JSON for $name.\"",
+        "[string]::Equals([string]$uploaded.state, 'uploaded', [StringComparison]::Ordinal)",
+        "$expectedDigest = 'sha256:' + $hashHex.ToLowerInvariant()",
+        "$uploadedDigest = ([string]$uploaded.digest).Trim()",
+        "$uploadedDigest -notmatch '^sha256:[0-9A-Fa-f]{64}$'",
+        "[string]::Equals($uploadedDigest, $expectedDigest, [StringComparison]::OrdinalIgnoreCase)",
     ]
     for token in required_helper:
         if token not in helper:
@@ -92,6 +99,9 @@ def validate(publisher: str, helper: str) -> list[str]:
         request_pos = helper.find("[System.Net.Http.HttpRequestMessage]::new")
         status_pos = helper.find("$response.StatusCode -ne [System.Net.HttpStatusCode]::Created")
         body_pos = helper.find("ReadAsStringAsync")
+        json_pos = helper.find("ConvertFrom-Json -ErrorAction Stop")
+        state_pos = helper.find("[string]::Equals([string]$uploaded.state, 'uploaded', [StringComparison]::Ordinal)")
+        digest_pos = helper.find("$expectedDigest = 'sha256:' + $hashHex.ToLowerInvariant()")
         required_positions = [
             parse_pos,
             scheme_pos,
@@ -108,14 +118,17 @@ def validate(publisher: str, helper: str) -> list[str]:
             send_pos,
             status_pos,
             body_pos,
+            json_pos,
+            state_pos,
+            digest_pos,
         ]
         if min(required_positions) < 0:
-            errors.append("V26 held-upload helper is missing endpoint/status ordering evidence")
+            errors.append("V26 held-upload helper is missing endpoint/status/ack ordering evidence")
         else:
             if not (parse_pos < scheme_pos < host_pos < port_pos < user_pos < fragment_pos < query_pos < auth_pos):
                 errors.append("V26 upload URI authority must be fully admitted before bearer authorization")
-            if not (handler_pos < redirect_pos < client_pos < auth_pos < request_pos < send_pos < status_pos < body_pos):
-                errors.append("V26 upload must disable redirects and require exact 201 before parsing response JSON")
+            if not (handler_pos < redirect_pos < client_pos < auth_pos < request_pos < send_pos < status_pos < body_pos < json_pos < state_pos < digest_pos):
+                errors.append("V26 upload must disable redirects, require exact 201, parse bounded JSON, then bind state/digest")
 
     return errors
 
@@ -155,6 +168,9 @@ def main() -> int:
         "query admission removed": helper.replace("-or -not [string]::IsNullOrEmpty($uploadUri.Query)", "", 1),
         "generic 2xx": helper.replace("$response.StatusCode -ne [System.Net.HttpStatusCode]::Created", "-not $response.IsSuccessStatusCode", 1),
         "response leak": helper.replace("throw \"V26 held asset upload failed for $name with HTTP $([int]$response.StatusCode).\"", "throw \"V26 held asset upload failed for $name with HTTP $([int]$response.StatusCode): $responseBody\"", 1),
+        "uploaded state removed": helper.replace("if (-not [string]::Equals([string]$uploaded.state, 'uploaded', [StringComparison]::Ordinal)) {", "if ($false) {", 1),
+        "digest equality removed": helper.replace("-not [string]::Equals($uploadedDigest, $expectedDigest, [StringComparison]::OrdinalIgnoreCase)", "$false", 1),
+        "raw JSON parse": helper.replace("$uploaded = $responseBody | ConvertFrom-Json -ErrorAction Stop", "$uploaded = $responseBody | ConvertFrom-Json", 1),
     }
     for name, mutated in mutations.items():
         if mutated == helper:
@@ -162,7 +178,7 @@ def main() -> int:
             return 1
         require_mutation_rejected(name, publisher, mutated)
 
-    print("PASS V26 held release upload generation, endpoint, redirect, status, and error authority")
+    print("PASS V26 held release upload generation, endpoint, redirect, status, state, digest, and error authority")
     return 0
 
 
