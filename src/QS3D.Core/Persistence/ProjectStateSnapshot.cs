@@ -399,7 +399,7 @@ namespace QS3D.Core.Persistence
             foreach (var rule in source.QuantityRules)
                 target.QuantityRules.Add(new QuantityRule(rule.Id, rule.Category, rule.OutputName, rule.Expression, rule.Version));
 
-            target.AuditEvents.Clear();
+            target.ClearAuditEventsForRestore();
             foreach (var audit in source.AuditEvents)
             {
                 target.RestoreAuditEvent(new AuditEvent

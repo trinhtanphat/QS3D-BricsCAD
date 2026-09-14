@@ -27,5 +27,25 @@ namespace QS3D.Core.SmokeTests
                 throw new InvalidOperationException("Could not resolve unique AuditEvents backing storage for legacy fixture injection.");
             storage.Add(item!);
         }
+        internal static void RemoveRawAt(ProjectState project, int index)
+        {
+            var ownerList = project.AuditEvents;
+            FieldInfo? storageField = null;
+            var count = 0;
+            for (var type = ownerList.GetType(); type != null; type = type.BaseType)
+            {
+                foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic))
+                {
+                    if (!typeof(IList<AuditEvent>).IsAssignableFrom(field.FieldType)) continue;
+                    storageField = field;
+                    count++;
+                }
+            }
+
+            if (count != 1 || storageField?.GetValue(ownerList) is not IList<AuditEvent> storage)
+                throw new InvalidOperationException("Could not resolve unique AuditEvents backing storage for legacy fixture repair.");
+            storage.RemoveAt(index);
+        }
+
     }
 }

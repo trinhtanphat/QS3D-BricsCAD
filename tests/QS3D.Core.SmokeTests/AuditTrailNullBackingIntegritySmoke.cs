@@ -36,8 +36,9 @@ namespace QS3D.Core.SmokeTests
             Require(ReferenceEquals(project.AuditEvents[0], seed), "Rejected audit Record replaced or reordered the existing valid event.");
             Require(project.AuditEvents[1] == null, "Rejected audit Record mutated the existing null corruption instead of leaving repair explicit.");
 
-            project.AuditEvents.RemoveAt(1);
-            Require(project.ChangeVersion == checked(beforeVersion + 1L), "Removing the raw null audit corruption did not advance ChangeVersion exactly once.");
+            Throws<InvalidOperationException>(() => project.AuditEvents.RemoveAt(1));
+            Require(project.ChangeVersion == beforeVersion, "Public removal of raw null corruption changed ChangeVersion instead of failing closed.");
+            LegacyAuditHistoryFixture.RemoveRawAt(project, 1);
             var afterRepairVersion = project.ChangeVersion;
             trail.Record("valid.action", "E2", "after-repair");
             Require(project.ChangeVersion == checked(afterRepairVersion + 1L), "Valid audit Record after repair did not advance ChangeVersion exactly once.");
