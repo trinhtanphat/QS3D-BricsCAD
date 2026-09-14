@@ -17,3 +17,10 @@ The focused source guard is `scripts/preflight-v25-quantity-visible-render-lifec
 
 ## Validation boundary
 REMOTE_SAFE evidence includes the source guard, diff checks, admitted-reference compilation and protected Shared/Hybrid CI. Licensed BricsCAD validation remains LOCAL_ONLY for modeless/palette lifecycle, MDI switching, native document event behavior, theme/resource presentation and actual raster rendering.
+
+## Native database generation affinity
+Quantity Insight and QS3DBQ must not treat managed `Document` reference equality as sufficient operation authority. A BricsCAD wrapper can remain managed-reference-equal while the underlying native `Database.UnmanagedObject` generation changes.
+
+Quantity Insight captures a non-zero native database identity before reading rows, revalidates the same identity after native/geometry reads and before publishing the view-model snapshot, and binds that identity with the displayed rows. Locate/reveal paths fail closed before handle reads, selection, or zoom if the current native generation differs. Clearing the panel also clears the bound generation.
+
+QS3DBQ retains `DocumentBoundWindowLifetime` as its primary modeless lifecycle fence and additionally captures the opening native database identity. Every explicit operation that passes `EnsureActive` must prove both the same active managed `Document` and the same non-zero native database generation before project mutation, recalculation, CAD locate, command dispatch, or export work continues.

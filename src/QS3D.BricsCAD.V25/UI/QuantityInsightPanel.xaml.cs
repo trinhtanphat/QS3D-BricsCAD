@@ -24,6 +24,7 @@ namespace QS3D.BricsCAD.V25.UI
         private IReadOnlyList<EntitySnapshot> _selectionSnapshots = Array.Empty<EntitySnapshot>();
         private Dictionary<QuantityInsightItemViewModel, QuantityReportRow> _rowSnapshots = new Dictionary<QuantityInsightItemViewModel, QuantityReportRow>();
         private Document? _boundDocument;
+        private IntPtr _boundNativeDatabaseIdentity;
         private string _boundProjectId = string.Empty;
         private string _boundDrawingFingerprint = string.Empty;
         private bool _selectionGeometryFallback;
@@ -44,6 +45,13 @@ namespace QS3D.BricsCAD.V25.UI
                 return;
             }
 
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (nativeDatabaseIdentity == IntPtr.Zero)
+            {
+                ClearQuantityInsights("Bản vẽ hiện hành không còn native database hợp lệ; hãy kích hoạt lại DWG rồi làm mới bảng.");
+                return;
+            }
+
             if (!ProjectContextCoordinator.TryGetReadOnly(document, out var project))
             {
                 if (_selectionSnapshots.Count > 0)
@@ -59,6 +67,12 @@ namespace QS3D.BricsCAD.V25.UI
             try
             {
                 var rows = BuildPreviewRows(document, project, out var regenerated);
+                if (GetNativeDatabaseIdentity(document) != nativeDatabaseIdentity)
+                {
+                    ClearQuantityInsights("Native database đã thay đổi trong lúc đọc khối lượng; hãy làm mới bảng trên DWG hiện hành.");
+                    return;
+                }
+
                 var rowSnapshots = new Dictionary<QuantityInsightItemViewModel, QuantityReportRow>();
                 var floors = rows
                     .GroupBy(x => DisplayFloor(x.Floor), StringComparer.OrdinalIgnoreCase)
@@ -76,6 +90,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _viewModel.Replace(floors, totals, rows.Count);
                 _rowSnapshots = rowSnapshots;
                 _boundDocument = document;
+                _boundNativeDatabaseIdentity = nativeDatabaseIdentity;
                 _boundProjectId = project.ProjectId;
                 _boundDrawingFingerprint = project.DrawingFingerprint ?? string.Empty;
                 _selectionGeometryFallback = false;
@@ -110,10 +125,10 @@ namespace QS3D.BricsCAD.V25.UI
             }
 
             _selectionGeometryFallback = false;
-            if (_boundDocument == null || !ReferenceEquals(activeDocument, _boundDocument) || !SameProjectIdentity(project))
+            if (_boundDocument == null || activeDocument == null || !ReferenceEquals(activeDocument, _boundDocument) || !IsBoundToCurrentNativeGeneration(activeDocument) || !SameProjectIdentity(project))
             {
                 RefreshQuantityInsights();
-                if (_boundDocument == null || !ReferenceEquals(activeDocument, _boundDocument) || !SameProjectIdentity(project))
+                if (_boundDocument == null || activeDocument == null || !ReferenceEquals(activeDocument, _boundDocument) || !IsBoundToCurrentNativeGeneration(activeDocument) || !SameProjectIdentity(project))
                 {
                     ClearSelectionHighlights();
                     return;
@@ -135,6 +150,7 @@ namespace QS3D.BricsCAD.V25.UI
             _selectionSnapshots = Array.Empty<EntitySnapshot>();
             _rowSnapshots.Clear();
             _boundDocument = null;
+            _boundNativeDatabaseIdentity = IntPtr.Zero;
             _boundProjectId = string.Empty;
             _boundDrawingFingerprint = string.Empty;
             _selectionGeometryFallback = false;
@@ -238,8 +254,16 @@ namespace QS3D.BricsCAD.V25.UI
                 ? Array.Empty<QuantityInsightFloorViewModel>()
                 : new[] { new QuantityInsightFloorViewModel("Selection CAD • read-only", items) };
 
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (nativeDatabaseIdentity == IntPtr.Zero)
+            {
+                ClearQuantityInsights("Selection CAD không còn thuộc một native database hợp lệ; hãy chọn lại đối tượng trong DWG hiện hành.");
+                return;
+            }
+
             _rowSnapshots.Clear();
             _boundDocument = document;
+            _boundNativeDatabaseIdentity = nativeDatabaseIdentity;
             _boundProjectId = string.Empty;
             _boundDrawingFingerprint = string.Empty;
             _selectionGeometryFallback = true;
@@ -372,6 +396,11 @@ namespace QS3D.BricsCAD.V25.UI
                 _viewModel.Status = "Dòng khối lượng này thuộc DWG khác hoặc bảng đã cũ; hãy bấm Làm mới trước khi định vị.";
                 return;
             }
+            if (!IsBoundToCurrentNativeGeneration(document))
+            {
+                _viewModel.Status = "Bảng khối lượng thuộc native database generation cũ; hãy bấm Làm mới trước khi định vị.";
+                return;
+            }
 
             if (_selectionGeometryFallback)
             {
@@ -487,6 +516,24 @@ namespace QS3D.BricsCAD.V25.UI
                 throw new InvalidOperationException("Khối lượng hoặc provenance của dòng đã thay đổi kể từ lần làm mới. Hãy bấm Làm mới trước khi định vị.");
             return matches[0];
         }
+
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            if (document == null) return IntPtr.Zero;
+            try
+            {
+                var database = document.Database;
+                return database == null ? IntPtr.Zero : database.UnmanagedObject;
+            }
+            catch
+            {
+                return IntPtr.Zero;
+            }
+        }
+
+        private bool IsBoundToCurrentNativeGeneration(Document document) =>
+            _boundNativeDatabaseIdentity != IntPtr.Zero &&
+            GetNativeDatabaseIdentity(document) == _boundNativeDatabaseIdentity;
 
         private bool SameProjectIdentity(ProjectState project)
         {
