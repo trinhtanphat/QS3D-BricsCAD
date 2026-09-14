@@ -10,14 +10,64 @@ namespace QS3D.BricsCAD.V25.UI
 {
     internal static class DocumentBoundWindowLifetime
     {
+        private sealed class AttachGate
+        {
+            public bool IsAttaching;
+        }
+
         private static readonly ConditionalWeakTable<Window, Registration> Registrations = new ConditionalWeakTable<Window, Registration>();
+        private static readonly ConditionalWeakTable<Window, AttachGate> AttachGates = new ConditionalWeakTable<Window, AttachGate>();
 
         public static void Attach(Window window, Document document)
         {
             if (window == null) throw new ArgumentNullException(nameof(window));
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var registration = Registrations.GetValue(window, key => new Registration(key, document));
-            registration.Attach(document);
+
+            var attachGate = AttachGates.GetValue(window, _ => new AttachGate());
+            lock (attachGate)
+            {
+                if (attachGate.IsAttaching)
+                    throw new InvalidOperationException("A modeless QS3D window attach is already in progress.");
+
+                attachGate.IsAttaching = true;
+                try
+                {
+                    var registration = Registrations.GetValue(window, key => new Registration(key, document));
+                    if (registration.HasFailedInitialAttach)
+                    {
+                        registration.TryCompleteFailedInitialAttachCleanup();
+                        if (!registration.CanRestartAfterFailedInitialAttach)
+                            throw new InvalidOperationException("A previous modeless QS3D window attach failed and its native/modeless lifecycle cleanup is still pending.");
+
+                        if (!Registrations.TryGetValue(window, out var failedRegistration) ||
+                            !ReferenceEquals(failedRegistration, registration))
+                            throw new InvalidOperationException("The modeless QS3D window registration changed while failed-attach cleanup was being finalized.");
+
+                        Registrations.Remove(window);
+                        registration = Registrations.GetValue(window, key => new Registration(key, document));
+                    }
+
+                    var wasAttached = registration.IsAttached;
+                    try
+                    {
+                        registration.Attach(document);
+                    }
+                    catch
+                    {
+                        if (!wasAttached && registration.CanRestartAfterFailedInitialAttach &&
+                            Registrations.TryGetValue(window, out var currentRegistration) &&
+                            ReferenceEquals(currentRegistration, registration))
+                        {
+                            Registrations.Remove(window);
+                        }
+                        throw;
+                    }
+                }
+                finally
+                {
+                    attachGate.IsAttaching = false;
+                }
+            }
         }
 
         private sealed class Registration
@@ -29,11 +79,21 @@ namespace QS3D.BricsCAD.V25.UI
             private IDisposable? _nativeLifecycleSubscription;
             private bool _attached;
             private bool _projectAffinityBound;
+            private bool _initialAttachFailed;
+            private bool _managedHandlerCleanupPending;
             private int _invalidated;
             private int _documentCloseStarted;
             private int _windowClosedDuringQuiescence;
             private string _projectId = string.Empty;
             private string _drawingFingerprint = string.Empty;
+
+            public bool IsAttached => _attached;
+            public bool HasFailedInitialAttach => _initialAttachFailed;
+            public bool CanRestartAfterFailedInitialAttach =>
+                _initialAttachFailed &&
+                !_attached &&
+                _nativeLifecycleSubscription == null &&
+                !_managedHandlerCleanupPending;
 
             public Registration(Window window, Document document)
             {
@@ -75,15 +135,18 @@ namespace QS3D.BricsCAD.V25.UI
                         OnBeginDocumentClose,
                         OnDocumentCloseAborted,
                         OnDocumentToBeDestroyed);
+                    _managedHandlerCleanupPending = true;
                     ModelessHostQuiescenceCoordinator.QuiescenceAborted += OnHostQuiescenceAborted;
                     _window.Activated += OnWindowActivated;
                     _window.PreviewMouseDown += OnPreviewMouseDown;
                     _window.PreviewKeyDown += OnPreviewKeyDown;
                     _window.Closed += OnWindowClosed;
                     _attached = true;
+                    _initialAttachFailed = false;
                 }
                 catch
                 {
+                    _initialAttachFailed = true;
                     _attached = true;
                     Detach();
                     _projectAffinityBound = false;
@@ -94,6 +157,13 @@ namespace QS3D.BricsCAD.V25.UI
                     _drawingFingerprint = string.Empty;
                     throw;
                 }
+            }
+
+            public void TryCompleteFailedInitialAttachCleanup()
+            {
+                if (!_initialAttachFailed) return;
+                if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
+                if (_attached || _managedHandlerCleanupPending || _nativeLifecycleSubscription != null) Detach();
             }
 
             private static IntPtr GetNativeDatabaseIdentity(Document document)
@@ -292,6 +362,12 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void OnHostQuiescenceAborted(object? sender, EventArgs e)
             {
+                if (_initialAttachFailed)
+                {
+                    TryScheduleFailedInitialAttachCleanupAfterQuitAbort();
+                    return;
+                }
+
                 if (Volatile.Read(ref _windowClosedDuringQuiescence) != 0)
                 {
                     TryRecoverClosedWindowAfterQuitAbort();
@@ -300,6 +376,19 @@ namespace QS3D.BricsCAD.V25.UI
 
                 if (Volatile.Read(ref _documentCloseStarted) == 0 || Volatile.Read(ref _invalidated) == 0) return;
                 TryRecoverAfterQuitAbort();
+            }
+
+            private void TryScheduleFailedInitialAttachCleanupAfterQuitAbort()
+            {
+                try
+                {
+                    _window.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
+                        TryCompleteFailedInitialAttachCleanup();
+                    }));
+                }
+                catch { }
             }
 
             private void TryRecoverClosedWindowAfterQuitAbort()
@@ -427,15 +516,23 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void Detach()
             {
-                if (!_attached) return;
+                if (!_attached && !_managedHandlerCleanupPending && _nativeLifecycleSubscription == null) return;
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
 
                 DetachDocumentLifecycleHandlersIfSafe();
-                try { ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted; } catch { }
-                try { _window.Activated -= OnWindowActivated; } catch { }
-                try { _window.PreviewMouseDown -= OnPreviewMouseDown; } catch { }
-                try { _window.PreviewKeyDown -= OnPreviewKeyDown; } catch { }
-                try { _window.Closed -= OnWindowClosed; } catch { }
+
+                var managedCleanupSucceeded = true;
+                try { ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted; }
+                catch { managedCleanupSucceeded = false; }
+                try { _window.Activated -= OnWindowActivated; }
+                catch { managedCleanupSucceeded = false; }
+                try { _window.PreviewMouseDown -= OnPreviewMouseDown; }
+                catch { managedCleanupSucceeded = false; }
+                try { _window.PreviewKeyDown -= OnPreviewKeyDown; }
+                catch { managedCleanupSucceeded = false; }
+                try { _window.Closed -= OnWindowClosed; }
+                catch { managedCleanupSucceeded = false; }
+                if (managedCleanupSucceeded) _managedHandlerCleanupPending = false;
                 _attached = false;
             }
         }
