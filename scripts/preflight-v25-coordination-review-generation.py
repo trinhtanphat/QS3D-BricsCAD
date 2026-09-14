@@ -24,8 +24,10 @@ for token, message in (
     ("_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);", "review session constructor must capture native database identity"),
     ("public bool IsOwnerNativeGenerationCurrent", "review session needs a native-generation predicate independent of MDI activity"),
     ("public bool IsOwnerGenerationActive", "review session needs a separate active-owner predicate"),
-    ("document.Database.UnmanagedObject == _nativeDatabaseIdentity", "generation predicate must compare exact native database identity"),
+    ("_document.Database.UnmanagedObject == _nativeDatabaseIdentity", "generation predicate must compare exact native database identity"),
     ("private void AbandonStaleGenerationState()", "stale generation state needs an abandon-without-native-write path"),
+    ("private ObjectId[]? _impliedSelectionBeforeIsolation;", "failed isolation must retain implied-selection compensation debt"),
+    ("HasIsolation => _isolationActive || _objectIsolationModeBefore != null || _impliedSelectionBeforeIsolation != null", "pending implied selection must keep isolation cleanup ownership alive"),
 ):
     require(token, message)
 
@@ -49,13 +51,30 @@ for signature, next_signature, action in (
     if "RequireOwnerGeneration(" not in body and "EnsureOwnerGenerationOrAbandon(" not in body:
         errors.append(f"{action} must generation-fence before native state access")
 
+isolate = method("public void Isolate(IReadOnlyList<ObjectId> ids)", "public void RestoreIsolation")
+for token in (
+    "if (!TryRestoreImpliedSelectionBestEffort(impliedSelectionBefore))",
+    "_impliedSelectionBeforeIsolation = impliedSelectionBefore;",
+):
+    if token not in isolate:
+        errors.append("isolation failure must retain selection compensation debt: " + token)
+restore_isolation = method("public void RestoreIsolation()", "public void ApplySectionFocus")
+for token in ("RestorePendingImpliedSelectionBestEffort();", "RestoreObjectIsolationModeBestEffort();"):
+    if token not in restore_isolation:
+        errors.append("isolation cleanup must retry all retained compensation debt: " + token)
+
 reset = method("private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)", "public void AbandonDestroyedDocumentState()")
 if "if (!IsOwnerNativeGenerationCurrent)" not in reset or "AbandonStaleGenerationState();" not in reset:
     errors.append("cleanup retry must abandon generation-A ownership only for actual native-generation drift")
 
-restore_selection = method("private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)", "private void RestoreObjectIsolationModeBestEffort()")
-if "IsOwnerGenerationActive" not in restore_selection:
-    errors.append("implied selection compensation requires both current generation and active owner")
+restore_selection = method("private bool TryRestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)", "private void RestorePendingImpliedSelectionBestEffort()")
+for token in ("IsOwnerNativeGenerationCurrent", "IsOwnerGenerationActive"):
+    if token not in restore_selection:
+        errors.append("implied selection compensation must be generation/active-owner bound: " + token)
+pending_selection = method("private void RestorePendingImpliedSelectionBestEffort()", "private void RestoreObjectIsolationModeBestEffort()")
+for token in ("_impliedSelectionBeforeIsolation", "TryRestoreImpliedSelectionBestEffort"):
+    if token not in pending_selection:
+        errors.append("pending implied selection must remain retryable: " + token)
 restore_mode = method("private bool TryRestoreObjectIsolationModeBestEffort(object? modeBefore)", "public void Dispose()")
 if "IsOwnerGenerationActive" not in restore_mode:
     errors.append("OBJECTISOLATIONMODE restore requires both current generation and active owner")
