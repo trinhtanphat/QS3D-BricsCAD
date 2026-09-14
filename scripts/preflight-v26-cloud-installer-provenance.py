@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v26-cloud.yml"
@@ -36,33 +37,24 @@ def assert_validator_contract(text: str) -> None:
     if missing:
         raise SystemExit(f"validator missing V26 installer provenance contract token(s): {missing}")
 
-    loop_token = "foreach ($propertyName in @("
-    loop_at = text.find(loop_token)
-    if loop_at < 0:
-        raise SystemExit("V26 installer provenance admission no longer has the common duplicate-property loop")
-    header_end = text.find(")) {", loop_at)
-    if header_end < 0:
-        raise SystemExit("V26 installer provenance duplicate-property loop header is malformed")
-    loop_header = text[loop_at:header_end]
-    if "'installerSha256'" not in loop_header:
-        raise SystemExit("installerSha256 must remain a member of the common provenance uniqueness set")
+    set_match = re.search(r"\$provenanceExpectedPropertyCounts\s*=\s*@\{([^}]*)\}", text)
+    if set_match is None:
+        raise SystemExit("V26 installer provenance admission no longer has the path-scoped provenance property-count set")
+    set_keys = tuple(re.findall(r"([A-Za-z][A-Za-z0-9]*)\s*=\s*1\b", set_match.group(1)))
+    if "installerSha256" not in set_keys:
+        raise SystemExit("installerSha256 must remain a member of the provenance property-count set")
 
     parse_token = "$provenance = $provenanceText | ConvertFrom-Json -ErrorAction Stop"
-    parse_at = text.find(parse_token, loop_at)
-    if parse_at < 0:
-        raise SystemExit("V26 installer provenance admission no longer parses provenance after uniqueness admission")
-    loop_body = text[loop_at:parse_at]
-    for token in (
-        "Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName $propertyName",
-        'throw "V26 candidate provenance must contain exactly one $propertyName property."',
-    ):
-        if token not in loop_body:
-            raise SystemExit(f"V26 installer provenance common uniqueness loop is missing fail-closed behavior: {token}")
+    parse_at = text.find(parse_token, set_match.start())
+    assert_token = "Assert-JsonPropertyCounts -JsonText $provenanceText -ExpectedPropertyCounts $provenanceExpectedPropertyCounts"
+    assert_at = text.find(assert_token, set_match.start(), parse_at if parse_at >= 0 else len(text))
+    if parse_at < 0 or assert_at < 0 or not set_match.start() < assert_at < parse_at:
+        raise SystemExit("V26 installer provenance property-count admission must run before provenance JSON parsing")
 
     installer_check = text.find("$installerSha256 = [string]$provenance.installerSha256", parse_at)
     script_parse = text.find("$admittedScriptBlock = $null", installer_check)
     script_exec = text.find("& $admittedScriptBlock", script_parse)
-    if min(installer_check, script_parse, script_exec) < 0 or not loop_at < parse_at < installer_check < script_parse < script_exec:
+    if min(installer_check, script_parse, script_exec) < 0 or not set_match.start() < assert_at < parse_at < installer_check < script_parse < script_exec:
         raise SystemExit("V26 installer provenance uniqueness admission must precede extraction and publisher parsing/execution")
 
 
@@ -98,29 +90,28 @@ if workflow.count("needs.installer-cache.outputs.msi_sha256") < 2:
     raise SystemExit("V26 cloud workflow no longer carries the admitted installer digest across jobs")
 
 # Adversarial self-tests prove this guard is semantic rather than satisfiable by decoy tokens.
-loop_start = validator.index("foreach ($propertyName in @(")
-loop_header_end = validator.index(")) {", loop_start)
-loop_header = validator[loop_start:loop_header_end]
-without_installer = loop_header.replace("'installerSha256', ", "", 1)
-if without_installer == loop_header:
-    without_installer = loop_header.replace(", 'installerSha256'", "", 1)
-if without_installer == loop_header:
-    raise SystemExit("mutation control unavailable: installerSha256 uniqueness-set membership")
+set_match = re.search(r"\$provenanceExpectedPropertyCounts\s*=\s*@\{([^}]*)\}", validator)
+if set_match is None:
+    raise SystemExit("mutation control unavailable: provenance property-count set")
+set_text = set_match.group(0)
+without_installer = re.sub(r"installerSha256\s*=\s*1\s*;?", "", set_text, count=1)
+if without_installer == set_text:
+    raise SystemExit("mutation control unavailable: installerSha256 property-count membership")
 try:
-    assert_validator_contract(validator[:loop_start] + without_installer + validator[loop_header_end:])
+    assert_validator_contract(validator[:set_match.start()] + without_installer + validator[set_match.end():])
 except SystemExit:
     pass
 else:
-    raise SystemExit("V26 installer provenance guard accepted uniqueness set without installerSha256")
+    raise SystemExit("V26 installer provenance guard accepted property-count set without installerSha256")
 
-occurrence_token = "Get-JsonPropertyOccurrenceCount -JsonText $provenanceText -PropertyName $propertyName"
-mutated_occurrence = validator.replace(occurrence_token, "# removed duplicate-property enforcement", 1)
+assert_token = "Assert-JsonPropertyCounts -JsonText $provenanceText -ExpectedPropertyCounts $provenanceExpectedPropertyCounts"
+mutated_assert = validator.replace(assert_token, "# removed provenance property-count enforcement", 1)
 try:
-    assert_validator_contract(mutated_occurrence)
+    assert_validator_contract(mutated_assert)
 except SystemExit:
     pass
 else:
-    raise SystemExit("V26 installer provenance guard accepted a uniqueness loop without occurrence enforcement")
+    raise SystemExit("V26 installer provenance guard accepted provenance parsing without property-count enforcement")
 
 mutations = {
     "generator environment binding": (generator, "[string]$InstallerSha256 = $env:BRICSCAD_V26_PINNED_MSI_SHA256"),
