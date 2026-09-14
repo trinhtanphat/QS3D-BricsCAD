@@ -18,6 +18,7 @@ namespace QS3D.Core.SmokeTests
             RejectsTruncatedIhdr();
             RejectsCorruptedIhdrData();
             RejectsCorruptedIhdrCrc();
+            RejectsCorruptedIendCrc();
         }
 
         private static void AcceptsCanonicalIhdr()
@@ -58,6 +59,13 @@ namespace QS3D.Core.SmokeTests
             ThrowsInvalidOperation(() => Ingest(payload), "corrupted IHDR CRC");
         }
 
+        private static void RejectsCorruptedIendCrc()
+        {
+            var payload = Png(13, 'I', 'H', 'D', 'R', true);
+            payload[payload.Length - 1] ^= 1;
+            ThrowsInvalidOperation(() => Ingest(payload), "corrupted IEND CRC");
+        }
+
         private static IngestedDrawingSheet2D Ingest(byte[] payload)
         {
             return new Qs2DSheetIngestor().IngestRaster(
@@ -75,7 +83,7 @@ namespace QS3D.Core.SmokeTests
             if (ihdrLength == 13 && c0 == 'I' && c1 == 'H' && c2 == 'D' && c3 == 'R')
                 WriteCrc(bytes, 12, 13, 29);
             if (includeIend)
-                bytes.AddRange(new byte[] { 0, 0, 0, 0, 73, 69, 78, 68, 0, 0, 0, 0 });
+                bytes.AddRange(new byte[] { 0, 0, 0, 0, 73, 69, 78, 68, 0xAE, 0x42, 0x60, 0x82 });
             return bytes.ToArray();
         }
 
