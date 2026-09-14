@@ -147,4 +147,21 @@ if "foreach (var auditEvent in AuditEvents)" in project_text:
         "incremental accounting rather than rescanning the full audit history."
     )
 
+# Normal structural mutation must also remain incremental. A full `_items` scan to rediscover the
+# same object's multiplicity on every Add/Insert/Remove/Replace turns a supported 10,000-event
+# append sequence into O(N^2). Keep an independent structural reference-count cache so observer
+# accounting can still be cross-checked for corruption without scanning the whole catalog.
+catalog_start = project_text.find("internal sealed class CatalogOwnershipList<T>")
+catalog_end = project_text.find("internal sealed class StructuralRevisionList<T>", catalog_start)
+count_method = project_text.find("private int CountReferences(T item)", catalog_start, catalog_end)
+if count_method >= 0:
+    count_end = project_text.find("\n        }", count_method, catalog_end)
+    count_body = project_text[count_method:count_end]
+    if "_items.Count" in count_body:
+        raise SystemExit(
+            "ERROR: project audit-history budget preflight failed: normal catalog reference "
+            "multiplicity admission still scans the full collection; use independent cached structural "
+            "reference counts so 10,000-event append/remove/replace paths remain O(1) per mutation."
+        )
+
 print("PASS ProjectState audit-history count/text/reference budget admission source guard")
