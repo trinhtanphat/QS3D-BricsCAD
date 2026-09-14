@@ -57,7 +57,7 @@ def validate(validator: str, workflow: str) -> list[str]:
         "$metadataGitCommitRaw = [string]$metadata.gitCommit",
         "[string]::Equals($metadataProductVersionRaw, $metadataProductVersionRaw.Trim(), [StringComparison]::Ordinal)",
         "[string]::Equals($metadataGitCommitRaw, $metadataGitCommitRaw.Trim(), [StringComparison]::Ordinal)",
-        "([string]$metadata.gitCommit).Trim()",
+        "-not [string]::Equals($metadataGitCommitRaw, $expectedSource, [StringComparison]::OrdinalIgnoreCase)",
         "[string]$provenance.packageSha256",
         "[string]$provenance.updateManifestSha256",
         "[string]$provenance.sourceCommit",
@@ -69,8 +69,11 @@ def validate(validator: str, workflow: str) -> list[str]:
             errors.append(f"downloaded V25 draft validator missing token: {token}")
     if "Get-Content -LiteralPath" in validator:
         errors.append("downloaded V25 draft validator must not admit semantic inputs through ordinary pathname Get-Content")
-    if "[IO.FileShare]::ReadWrite" in validator or "[IO.FileShare]::Write" in validator:
-        errors.append("downloaded V25 draft semantic generations must not share write access")
+    transition_token = "$transition = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)"
+    if validator.count("[IO.FileShare]::ReadWrite") != 1 or transition_token not in validator:
+        errors.append("downloaded V25 draft ReadWrite sharing must be limited to the read-only no-delete transition handle")
+    if "[IO.FileShare]::Write" in validator or "[IO.FileShare]::Delete" in validator:
+        errors.append("downloaded V25 draft held generations must not share write/delete access")
 
     window = publish_window(workflow)
     if not window:
@@ -124,7 +127,8 @@ mutations = {
     "validator loses metadata source canonicality": (VALIDATOR.replace("[string]::Equals($metadataGitCommitRaw, $metadataGitCommitRaw.Trim(), [StringComparison]::Ordinal)", "$true", 1), WORKFLOW),
     "validator loses package digest": (VALIDATOR.replace("[string]$provenance.packageSha256", "[string]$zipHash", 1), WORKFLOW),
     "validator loses update digest": (VALIDATOR.replace("[string]$provenance.updateManifestSha256", "[string]$updateHash", 1), WORKFLOW),
-    "validator loses ZIP metadata source comparison": (VALIDATOR.replace("([string]$metadata.gitCommit).Trim()", "([string]$ExpectedSourceCommit).Trim()", 1), WORKFLOW),
+    "validator loses ZIP metadata source comparison": (VALIDATOR.replace("-not [string]::Equals($metadataGitCommitRaw, $expectedSource, [StringComparison]::OrdinalIgnoreCase)", "$false", 1), WORKFLOW),
+    "validator widens strict held payload sharing": (VALIDATOR.replace("$heldStream = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)", "$heldStream = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)", 1), WORKFLOW),
 }
 for label, (validator, workflow) in mutations.items():
     if not validate(validator, workflow):
