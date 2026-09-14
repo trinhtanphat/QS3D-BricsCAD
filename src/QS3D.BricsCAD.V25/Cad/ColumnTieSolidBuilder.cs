@@ -12,6 +12,18 @@ using Teigha.Geometry;
 
 namespace QS3D.BricsCAD.V25.Cad
 {
+    internal sealed class ColumnTieBuildResult
+    {
+        public int Count { get; }
+        public bool PostCommitCleanupWarning { get; }
+
+        public ColumnTieBuildResult(int count, bool postCommitCleanupWarning)
+        {
+            Count = count;
+            PostCommitCleanupWarning = postCommitCleanupWarning;
+        }
+    }
+
     internal static class ColumnTieSolidBuilder
     {
         private const string HandlesKey = "GeneratedTieRebarHandles";
@@ -28,12 +40,12 @@ namespace QS3D.BricsCAD.V25.Cad
             public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
         }
 
-        public static int BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
+        public static ColumnTieBuildResult BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
-            if (selectedIds.Length == 0) return 0;
+            if (selectedIds.Length == 0) return new ColumnTieBuildResult(0, postCommitCleanupWarning: false);
             var ids = (ObjectId[])selectedIds.Clone();
 
             var ownership = GeneratedTieRebarOwnershipGuard.Build(project);
@@ -42,6 +54,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var totalTies = 0;
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
+            var cleanupWarning = false;
 
             try
             {
@@ -122,6 +135,24 @@ namespace QS3D.BricsCAD.V25.Cad
                     cadCommitted = true;
                 }
             }
+            catch (ObjectDisposedException operationError)
+            {
+                if (cadCommitted)
+                {
+                    cleanupWarning = true;
+                }
+                else
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Column tie replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                    throw;
+                }
+            }
             catch (Exception operationError)
             {
                 if (!cadCommitted)
@@ -137,7 +168,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 throw;
             }
 
-            return totalTies;
+            return new ColumnTieBuildResult(totalTies, cleanupWarning);
         }
 
         private static void CommitSemanticUpdate(ProjectState project, PendingUpdate update)
