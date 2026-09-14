@@ -20,3 +20,5 @@ The returned `TakeoffPackageBuildResult.Sources` restores each drawing's origina
 ## Safety invariants
 
 Evidence is admitted only when its revision matches the referenced drawing sheet revision. An evidence row that merely matches the package revision but not the drawing revision is still rejected as `PKG.STALE_EVIDENCE_REVISION`. Duplicate sheet identities remain blocked by the canonical coordinator, and no estimate is published for blocked packages.
+
+Coordination for this compatibility slice is tracked by issue #6910 and its canonical carrier; this note has no runtime effect.
