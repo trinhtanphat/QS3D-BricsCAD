@@ -11,6 +11,9 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             PreservesPositiveHighDynamicResidual();
+            WorkflowPreservesPositiveHighDynamicResidual();
+            LiveWorkbookPreservesPositiveHighDynamicResidual();
+            CubicostInventoryPreservesPositiveHighDynamicResidual();
         }
 
         private static void PreservesPositiveHighDynamicResidual()
@@ -24,6 +27,70 @@ namespace QS3D.Core.SmokeTests
             }).Single();
 
             Equal(10000000000000004d, aggregate.Quantity, "canonical positive residual");
+        }
+
+
+        private static void WorkflowPreservesPositiveHighDynamicResidual()
+        {
+            var values = new[] { 1e16, 3d, 2d, 1e-16 };
+            var evidence = values.Select((quantity, index) =>
+                new TakeoffQuantityEvidence2D("W-" + index, "S-W", "R1", "workflow.pdf", "h-w-" + index,
+                    "PRECISION", "ZONE-P", "QTO", quantity, "m")).ToArray();
+            var line = new AutodeskTakeoffWorkflow().BuildInventoryAndEstimate(
+                evidence,
+                Array.Empty<IfcQtoItem>(),
+                (classification, quantity) => quantity,
+                (classification, unit) => 1d).Single();
+
+            Equal(10000000000000004d, line.MeasuredQuantity, "workflow canonical positive residual");
+            Equal(10000000000000004d, line.FormulaQuantity, "workflow formula receives canonical quantity");
+            Equal(10000000000000004d, line.EstimatedCost, "workflow commercial total uses canonical quantity");
+            if (line.EvidenceCount != 4) throw new InvalidOperationException("Workflow precision evidence cardinality drifted.");
+        }
+
+        private static void LiveWorkbookPreservesPositiveHighDynamicResidual()
+        {
+            var bindings = new[]
+            {
+                Binding("D1", "S1", Array.Empty<string>()),
+                Binding("D2", "S2", Array.Empty<string>()),
+                Binding("D3", "S3", Array.Empty<string>()),
+                Binding("TARGET", "S0", new[] { "D1", "D2", "D3" })
+            };
+            var sources = new[]
+            {
+                Source("S0", 1e16), Source("S1", 3d), Source("S2", 2d), Source("S3", 1e-16)
+            };
+            var result = new LiveWorkbookRefreshEngine2().Refresh(bindings, sources, "R1")
+                .Results.Single(x => x.Binding.BindingId == "TARGET");
+
+            Equal(10000000000000004d, result.Value, "live workbook canonical positive residual");
+            if (!result.IsUsable) throw new InvalidOperationException("Live workbook precision result became unusable.");
+            if (result.Trace.Count != 4) throw new InvalidOperationException("Live workbook evidence trace cardinality drifted.");
+        }
+
+        private static LiveWorkbookBinding Binding(string id, string sourceId, string[] dependencies)
+        {
+            return new LiveWorkbookBinding(id, "WB", "Sheet1", "A" + id, "BOQ-" + id,
+                LiveWorkbookSourceKind.BimElement, sourceId, "R1", dependencies, 1d, 0d, 0d);
+        }
+
+        private static LiveWorkbookSourceSnapshot Source(string id, double quantity)
+        {
+            return new LiveWorkbookSourceSnapshot(LiveWorkbookSourceKind.BimElement, id, "R1", quantity, "evidence:" + id);
+        }
+
+        private static void CubicostInventoryPreservesPositiveHighDynamicResidual()
+        {
+            var evidence = new QuantityEvidence("SRC", "model.ifc", "R1", "QTO", 1d);
+            var values = new[] { 1e16, 3d, 2d, 1e-16 };
+            var lines = values.Select((quantity, index) => new CubicostDownstreamLine(
+                "C-" + index, "WALL", "WALL.CONCRETE", "F-CONCRETE", "m3", quantity,
+                ComponentRecognitionStatus.Accepted, evidence)).ToArray();
+            var inventory = new CubicostReviewedQuantityDownstreamBridge().BuildInventory(lines).Single();
+
+            Equal(10000000000000004d, inventory.Quantity, "Cubicost canonical positive residual");
+            if (inventory.ComponentCount != 4) throw new InvalidOperationException("Cubicost precision component cardinality drifted.");
         }
 
         private static TakeoffQuantityEvidence2D Evidence(string markupId, double quantity)
