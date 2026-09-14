@@ -20,7 +20,7 @@ clear = method_body(
 )
 if "var pending = _highlighted.ToArray();" not in clear:
     raise SystemExit("ClearHighlight must snapshot current highlight ownership")
-for token in ("EnsureOwnerGenerationOrAbandon", "transaction.Commit();", "released.Add(id);", "_highlighted.Remove(id);"):
+for token in ("RequireOwnerGeneration", "transaction.Commit();", "released.Add(id);", "_highlighted.Remove(id);"):
     if token not in clear:
         raise SystemExit("ClearHighlight generation-safe cleanup missing: " + token)
 commit = clear.find("transaction.Commit();")
@@ -55,7 +55,7 @@ try_reset = method_body(
     "public Exception? TryResetTransientStateBestEffort()",
     "private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)",
 )
-if "return ResetTransientStateBestEffort(false);" not in try_reset:
+if "ResetTransientStateBestEffort(false)" not in try_reset:
     raise SystemExit("TryResetTransientStateBestEffort must surface aggregate cleanup result")
 
 reset = method_body(
@@ -107,7 +107,6 @@ for token in (
     "if (_disposed || _disposeInProgress) return;",
     "_disposeInProgress = true;",
     "ResetTransientStateBestEffort(true);",
-    "if (HasTransientState)",
     "_disposed = true;",
     "finally",
     "_disposeInProgress = false;",
@@ -118,6 +117,8 @@ cleanup = dispose.find("ResetTransientStateBestEffort(true);")
 publish = dispose.find("_disposed = true;")
 release_guard = dispose.rfind("_disposeInProgress = false;")
 if not (0 <= cleanup < publish < release_guard):
-    raise SystemExit("session may publish terminal disposal only after cleanup, before releasing re-entry guard")
+    raise SystemExit("session may publish terminal disposal only after cleanup succeeds, before releasing re-entry guard")
+if "if (HasTransientState && cleanupFailure == null)" not in reset:
+    raise SystemExit("Dispose relies on reset core to synthesize failure while transient debt remains")
 
 print("PASS coordination review transient cleanup retry ownership is native-generation safe")
