@@ -20,7 +20,6 @@ capture = "var impliedSelectionBefore = CadSelectionGuard.ReadImpliedSelection(_
 set_mode = 'Application.SetSystemVariable("OBJECTISOLATIONMODE", 0);'
 set_pickfirst = "_document.Editor.SetImpliedSelection(ids.ToArray());"
 send = '_document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);'
-
 for token in [capture, set_mode, set_pickfirst, send]:
     if token not in body:
         raise SystemExit(f"FAIL coordination isolate PICKFIRST rollback: missing required behavior: {token}")
@@ -33,40 +32,40 @@ catch = re.search(r"catch\s*\{(?P<catch>.*?)\n\s*\}", body, re.S)
 if not catch:
     raise SystemExit("FAIL coordination isolate PICKFIRST rollback: synchronous launch catch missing")
 catch_body = catch.group("catch")
-restore_pickfirst = "RestoreImpliedSelectionBestEffort(impliedSelectionBefore);"
+restore_pickfirst = "TryRestoreImpliedSelectionBestEffort(impliedSelectionBefore)"
 restore_mode_call = "TryRestoreObjectIsolationModeBestEffort(modeBefore)"
-for token in [restore_pickfirst, restore_mode_call, "throw;"]:
+for token in [restore_pickfirst, "_impliedSelectionBeforeIsolation = impliedSelectionBefore;", restore_mode_call, "throw;"]:
     if token not in catch_body:
         raise SystemExit(f"FAIL coordination isolate PICKFIRST rollback: catch missing {token}")
-
 if catch_body.find(restore_pickfirst) > catch_body.find(restore_mode_call):
     raise SystemExit("FAIL coordination isolate PICKFIRST rollback: PICKFIRST compensation must run before mode compensation")
 if catch_body.find(restore_mode_call) > catch_body.find("throw;"):
     raise SystemExit("FAIL coordination isolate PICKFIRST rollback: mode compensation must run before original failure rethrow")
 
-if body.count(restore_pickfirst) != 1:
-    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: PICKFIRST restore must occur only in the synchronous failure path")
-
 helper = re.search(
-    r"private void RestoreImpliedSelectionBestEffort\(ObjectId\[\] impliedSelectionBefore\)\s*\{(?P<body>.*?)\n\s*\}",
+    r"private bool TryRestoreImpliedSelectionBestEffort\(ObjectId\[\] impliedSelectionBefore\)\s*\{(?P<body>.*?)\n\s*\}",
     text,
     re.S,
 )
 if not helper:
-    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: compensation helper missing")
+    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: result-bearing compensation helper missing")
 helper_body = helper.group("body")
-if "_destroyed" not in helper_body:
-    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: destroyed-document compensation must fail closed")
-if "_document.Editor.SetImpliedSelection(impliedSelectionBefore);" not in helper_body:
-    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: helper does not restore exact prior implied selection")
-if "try" not in helper_body or "catch" not in helper_body:
-    raise SystemExit("FAIL coordination isolate PICKFIRST rollback: compensation must be best-effort and preserve the original launch failure")
+for token in ("_destroyed", "IsOwnerNativeGenerationCurrent", "IsOwnerGenerationActive", "_document.Editor.SetImpliedSelection(impliedSelectionBefore);", "return true;", "return false;"):
+    if token not in helper_body:
+        raise SystemExit("FAIL coordination isolate PICKFIRST rollback: compensation helper missing " + token)
+
+pending_start = text.find("private void RestorePendingImpliedSelectionBestEffort()")
+pending_end = text.find("private void RestoreObjectIsolationModeBestEffort()", pending_start)
+pending = text[pending_start:pending_end]
+for token in ("_impliedSelectionBeforeIsolation", "TryRestoreImpliedSelectionBestEffort", "_impliedSelectionBeforeIsolation = null;"):
+    if token not in pending:
+        raise SystemExit("FAIL coordination isolate PICKFIRST rollback: pending compensation ownership missing " + token)
 
 send_index = body.find(send)
-mode_publish = body.find("_objectIsolationModeBefore = modeBefore;")
-active_publish = body.find("_isolationActive = true;")
+mode_publish = body.rfind("_objectIsolationModeBefore = modeBefore;")
+active_publish = body.find("_isolationActive = true;", send_index)
 if send_index < 0 or mode_publish < send_index or active_publish < send_index:
     raise SystemExit("FAIL coordination isolate PICKFIRST rollback: persistent isolation ownership must publish only after native queue acceptance")
 
-print("PASS coordination review isolate PICKFIRST synchronous rollback atomicity")
+print("PASS coordination review isolate PICKFIRST synchronous rollback retains retry debt within exact generation")
 sys.exit(0)
