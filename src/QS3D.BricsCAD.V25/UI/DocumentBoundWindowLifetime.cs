@@ -37,7 +37,7 @@ namespace QS3D.BricsCAD.V25.UI
                     {
                         registration.TryCompleteFailedInitialAttachCleanup();
                         if (!registration.CanRestartAfterFailedInitialAttach)
-                            throw new InvalidOperationException("A previous modeless QS3D window attach failed and its native lifecycle cleanup is still pending.");
+                            throw new InvalidOperationException("A previous modeless QS3D window attach failed and its native/modeless lifecycle cleanup is still pending.");
 
                         if (!Registrations.TryGetValue(window, out var failedRegistration) ||
                             !ReferenceEquals(failedRegistration, registration))
@@ -80,6 +80,7 @@ namespace QS3D.BricsCAD.V25.UI
             private bool _attached;
             private bool _projectAffinityBound;
             private bool _initialAttachFailed;
+            private bool _managedHandlerCleanupPending;
             private int _invalidated;
             private int _documentCloseStarted;
             private int _windowClosedDuringQuiescence;
@@ -91,7 +92,8 @@ namespace QS3D.BricsCAD.V25.UI
             public bool CanRestartAfterFailedInitialAttach =>
                 _initialAttachFailed &&
                 !_attached &&
-                _nativeLifecycleSubscription == null;
+                _nativeLifecycleSubscription == null &&
+                !_managedHandlerCleanupPending;
 
             public Registration(Window window, Document document)
             {
@@ -133,6 +135,7 @@ namespace QS3D.BricsCAD.V25.UI
                         OnBeginDocumentClose,
                         OnDocumentCloseAborted,
                         OnDocumentToBeDestroyed);
+                    _managedHandlerCleanupPending = true;
                     ModelessHostQuiescenceCoordinator.QuiescenceAborted += OnHostQuiescenceAborted;
                     _window.Activated += OnWindowActivated;
                     _window.PreviewMouseDown += OnPreviewMouseDown;
@@ -160,7 +163,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (!_initialAttachFailed) return;
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
-                if (_attached) Detach();
+                if (_attached || _managedHandlerCleanupPending || _nativeLifecycleSubscription != null) Detach();
             }
 
             private static IntPtr GetNativeDatabaseIdentity(Document document)
@@ -513,15 +516,23 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void Detach()
             {
-                if (!_attached) return;
+                if (!_attached && !_managedHandlerCleanupPending && _nativeLifecycleSubscription == null) return;
                 if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;
 
                 DetachDocumentLifecycleHandlersIfSafe();
-                try { ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted; } catch { }
-                try { _window.Activated -= OnWindowActivated; } catch { }
-                try { _window.PreviewMouseDown -= OnPreviewMouseDown; } catch { }
-                try { _window.PreviewKeyDown -= OnPreviewKeyDown; } catch { }
-                try { _window.Closed -= OnWindowClosed; } catch { }
+
+                var managedCleanupSucceeded = true;
+                try { ModelessHostQuiescenceCoordinator.QuiescenceAborted -= OnHostQuiescenceAborted; }
+                catch { managedCleanupSucceeded = false; }
+                try { _window.Activated -= OnWindowActivated; }
+                catch { managedCleanupSucceeded = false; }
+                try { _window.PreviewMouseDown -= OnPreviewMouseDown; }
+                catch { managedCleanupSucceeded = false; }
+                try { _window.PreviewKeyDown -= OnPreviewKeyDown; }
+                catch { managedCleanupSucceeded = false; }
+                try { _window.Closed -= OnWindowClosed; }
+                catch { managedCleanupSucceeded = false; }
+                if (managedCleanupSucceeded) _managedHandlerCleanupPending = false;
                 _attached = false;
             }
         }
