@@ -31,7 +31,7 @@ namespace QS3D.Core.BenchmarkParity
 
         public IfcSelectionSet ApplyGuid(
             IfcSelectionSet current,
-            string pickedGuid,
+            string? pickedGuid,
             QuantBimSelectionInteractionMode mode,
             bool clearOnMiss)
         {
