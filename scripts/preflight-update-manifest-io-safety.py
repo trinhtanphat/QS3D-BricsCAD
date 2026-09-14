@@ -103,8 +103,7 @@ for token in (
 
 # Native helper must keep handle-owned parent-relative publication and the exact
 # one-byte FILE_DISPOSITION_INFO BOOLEAN ABI. MarshalAs(UnmanagedType.Bool) is
-# valid for BOOL-returning P/Invokes; the disposition payload itself is guarded
-# by the explicit one-byte allocation/write/length contract below.
+# valid for BOOL-returning P/Invokes; inspect only DeleteOwnedGeneration's payload.
 for token in (
     "NtSetInformationFile",
     "FileRenameInformation",
@@ -114,9 +113,6 @@ for token in (
     "AssertOwnedDirectoryPath",
     "GetOwnedGenerationIdentity",
     "GetOwnedDirectoryIdentity",
-    "Marshal.AllocHGlobal(1)",
-    "Marshal.WriteByte",
-    "SetFileInformationByHandle(generation.Stream.SafeFileHandle, FileDispositionInfo, buffer, 1)",
 ):
     require(native, token, "V25 held-generation native helper")
 for token in (
@@ -124,6 +120,22 @@ for token in (
     "private struct FILE_DISPOSITION_INFO",
 ):
     forbid(native, token, "V25 held-generation native helper disposition ABI")
+
+delete_start = native.find("public static void DeleteOwnedGeneration")
+delete_end = native.find("private static void RenameOwnedInDirectory", delete_start)
+if delete_start < 0 or delete_end < 0:
+    errors.append("V25 held-generation native helper must define DeleteOwnedGeneration before rename helpers")
+else:
+    disposition = native[delete_start:delete_end]
+    for token in (
+        "Marshal.AllocHGlobal(1)",
+        "Marshal.WriteByte(buffer, 0, 1)",
+        "generation.Stream.SafeFileHandle",
+        "FileDispositionInfo",
+        "buffer,",
+        "1))",
+    ):
+        require(disposition, token, "V25 DeleteOwnedGeneration one-byte disposition ABI")
 
 ordered = (
     "$package = Resolve-OrdinaryNonReparseDirectory",
