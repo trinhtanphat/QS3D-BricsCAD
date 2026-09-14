@@ -30,6 +30,7 @@ namespace QS3D.Core.SmokeTests
             QsCubicostQuantBimSmoke.Run();
             QsQuantBimWorkbenchStateSmoke.Run();
             ConstructionLifecycle();
+            ConstructionLifecycleRejectsNonFiniteProgress();
             QsTrimbleConstructionLifecycleSmoke.Run();
         }
 
@@ -252,6 +253,50 @@ namespace QS3D.Core.SmokeTests
             Equal(120m, summary.Paid, "paid cost");
             Equal(450m, summary.ForecastAtCompletion, "forecast at completion");
             Near(0.3125d, summary.WeightedProgress, 1e-12, "weighted progress");
+        }
+
+
+        private static void ConstructionLifecycleRejectsNonFiniteProgress()
+        {
+            Throws<ArgumentOutOfRangeException>(() => new ConstructionCommitment("PO-NAN", "Supplier", 1m, 0m, 0m, double.NaN), "construction NaN progress");
+            Throws<ArgumentOutOfRangeException>(() => new ConstructionCommitment("PO-INF", "Supplier", 1m, 0m, 0m, double.PositiveInfinity), "construction infinite progress");
+            Throws<ArgumentOutOfRangeException>(() => new ConstructionCostControlSummary(1m, 0m, 0m, 1m, double.NaN), "summary NaN weighted progress");
+            Throws<ArgumentOutOfRangeException>(() => new ConstructionCostControlSummary(1m, 0m, 0m, 1m, double.PositiveInfinity), "summary infinite weighted progress");
+            var zero = new ConstructionLifecycleEngine().Summarize(Array.Empty<ConstructionCommitment>(), 0m);
+            Equal(0m, zero.Committed, "zero committed cost");
+            Near(0d, zero.WeightedProgress, 0d, "zero weighted progress");
+            Throws<OverflowException>(() => new ConstructionLifecycleEngine().Summarize(new[]
+            {
+                new ConstructionCommitment("PO-MAX", "Supplier A", decimal.MaxValue, 0m, 0m, 0.5d),
+                new ConstructionCommitment("PO-ONE", "Supplier B", 1m, 0m, 0m, 0.5d)
+            }, 0m), "construction committed overflow");
+
+            var highDynamic = new[]
+            {
+                new ConstructionCommitment("PO-HUGE", "Supplier H", 10000000000000000m, 0m, 0m, 1d),
+                new ConstructionCommitment("PO-S1", "Supplier 1", 1m, 0m, 0m, 1d),
+                new ConstructionCommitment("PO-S2", "Supplier 2", 1m, 0m, 0m, 1d),
+                new ConstructionCommitment("PO-S3", "Supplier 3", 1m, 0m, 0m, 1d),
+                new ConstructionCommitment("PO-S4", "Supplier 4", 1m, 0m, 0m, 1d)
+            };
+            var forward = new ConstructionLifecycleEngine().Summarize(highDynamic, 0m);
+            var reverse = new ConstructionLifecycleEngine().Summarize(highDynamic.AsEnumerable().Reverse(), 0m);
+            Near(1d, forward.WeightedProgress, 0d, "high-dynamic forward weighted progress");
+            Near(1d, reverse.WeightedProgress, 0d, "high-dynamic reverse weighted progress");
+            Near(forward.WeightedProgress, reverse.WeightedProgress, 0d, "weighted progress order invariance");
+        }
+
+        private static void Throws<TException>(Action action, string label) where TException : Exception
+        {
+            try
+            {
+                action();
+            }
+            catch (TException)
+            {
+                return;
+            }
+            throw new InvalidOperationException(label + ": expected " + typeof(TException).Name + ".");
         }
 
         private static void Equal<T>(T expected, T actual, string label)

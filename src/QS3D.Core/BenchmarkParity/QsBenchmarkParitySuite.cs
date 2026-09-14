@@ -307,7 +307,14 @@ namespace QS3D.Core.BenchmarkParity
     {
         public ConstructionCommitment(string id, string supplier, decimal committed, decimal invoiced, decimal paid, double progress)
         {
-            Id = QsModelElementSnapshot.Require(id, "id"); Supplier = QsModelElementSnapshot.Require(supplier, "supplier"); if (committed < 0m || invoiced < 0m || paid < 0m) throw new ArgumentOutOfRangeException("financial values"); if (progress < 0d || progress > 1d) throw new ArgumentOutOfRangeException("progress"); Committed = committed; Invoiced = invoiced; Paid = paid; Progress = progress;
+            Id = QsModelElementSnapshot.Require(id, "id");
+            Supplier = QsModelElementSnapshot.Require(supplier, "supplier");
+            if (committed < 0m || invoiced < 0m || paid < 0m) throw new ArgumentOutOfRangeException("financial values");
+            if (double.IsNaN(progress) || double.IsInfinity(progress) || progress < 0d || progress > 1d) throw new ArgumentOutOfRangeException("progress");
+            Committed = committed;
+            Invoiced = invoiced;
+            Paid = paid;
+            Progress = progress;
         }
         public string Id { get; private set; } public string Supplier { get; private set; } public decimal Committed { get; private set; } public decimal Invoiced { get; private set; } public decimal Paid { get; private set; } public double Progress { get; private set; }
         public decimal OutstandingCommitment { get { return Committed - Invoiced; } }
@@ -316,7 +323,16 @@ namespace QS3D.Core.BenchmarkParity
 
     public sealed class ConstructionCostControlSummary
     {
-        public ConstructionCostControlSummary(decimal committed, decimal invoiced, decimal paid, decimal forecastAtCompletion, double weightedProgress) { Committed = committed; Invoiced = invoiced; Paid = paid; ForecastAtCompletion = forecastAtCompletion; WeightedProgress = weightedProgress; }
+        public ConstructionCostControlSummary(decimal committed, decimal invoiced, decimal paid, decimal forecastAtCompletion, double weightedProgress)
+        {
+            if (double.IsNaN(weightedProgress) || double.IsInfinity(weightedProgress) || weightedProgress < 0d || weightedProgress > 1d)
+                throw new ArgumentOutOfRangeException("weightedProgress");
+            Committed = committed;
+            Invoiced = invoiced;
+            Paid = paid;
+            ForecastAtCompletion = forecastAtCompletion;
+            WeightedProgress = weightedProgress;
+        }
         public decimal Committed { get; private set; } public decimal Invoiced { get; private set; } public decimal Paid { get; private set; } public decimal ForecastAtCompletion { get; private set; } public double WeightedProgress { get; private set; }
     }
 
@@ -324,9 +340,32 @@ namespace QS3D.Core.BenchmarkParity
     {
         public ConstructionCostControlSummary Summarize(IEnumerable<ConstructionCommitment> commitments, decimal approvedVariations)
         {
-            if (commitments == null) throw new ArgumentNullException("commitments"); if (approvedVariations < 0m) throw new ArgumentOutOfRangeException("approvedVariations"); var list = commitments.ToList();
-            var total = list.Sum(x => x.Committed); var invoiced = list.Sum(x => x.Invoiced); var paid = list.Sum(x => x.Paid); var progress = total == 0m ? 0d : list.Sum(x => (double)x.Committed * x.Progress) / (double)total;
-            return new ConstructionCostControlSummary(total, invoiced, paid, total + approvedVariations, progress);
+            if (commitments == null) throw new ArgumentNullException("commitments");
+            if (approvedVariations < 0m) throw new ArgumentOutOfRangeException("approvedVariations");
+
+            decimal total = 0m;
+            decimal invoiced = 0m;
+            decimal paid = 0m;
+            decimal weightedCommitted = 0m;
+            foreach (var commitment in commitments)
+            {
+                if (commitment == null) throw new InvalidOperationException("Construction commitment collection contains a null item.");
+                checked
+                {
+                    total += commitment.Committed;
+                    invoiced += commitment.Invoiced;
+                    paid += commitment.Paid;
+                    weightedCommitted += commitment.Committed * (decimal)commitment.Progress;
+                }
+            }
+
+            var progress = total == 0m ? 0d : (double)(weightedCommitted / total);
+            decimal forecast;
+            checked
+            {
+                forecast = total + approvedVariations;
+            }
+            return new ConstructionCostControlSummary(total, invoiced, paid, forecast, progress);
         }
     }
 }
