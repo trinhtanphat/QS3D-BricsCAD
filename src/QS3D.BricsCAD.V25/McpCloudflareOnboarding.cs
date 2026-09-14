@@ -28,7 +28,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                document.Editor.WriteMessage("\nQS3D MCP fallback setup lỗi: " + ex.Message);
+                document.Editor.WriteMessage("\nQS3D MCP fallback setup lỗi: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
         }
     }
@@ -143,7 +143,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                error = "Không lưu được tunnel settings: " + ex.Message;
+                error = "Không lưu được tunnel settings: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 return false;
             }
         }
@@ -166,7 +166,7 @@ namespace QS3D.BricsCAD.V25
             }
             string token;
             try { token = ReadProtectedTunnelToken(); }
-            catch (Exception ex) { error = "Không đọc được tunnel token: " + ex.Message; return false; }
+            catch (Exception ex) { error = "Không đọc được tunnel token: " + McpPublicTextSanitizer.Sanitize(ex.ToString()); return false; }
             if (string.IsNullOrWhiteSpace(token)) { error = "Chưa lưu tunnel token."; return false; }
 
             McpCloudflareAccountTunnelManager.StopForHostShutdown();
@@ -265,7 +265,7 @@ namespace QS3D.BricsCAD.V25
                 lock (Sync)
                 {
                     if (ReferenceEquals(_process, process)) _process = null;
-                    _lastError = ex.Message;
+                    _lastError = McpPublicTextSanitizer.Sanitize(ex.ToString());
                     if (discoverQuickUrl)
                     {
                         _quickBaseUrl = string.Empty;
@@ -273,7 +273,7 @@ namespace QS3D.BricsCAD.V25
                     }
                 }
                 try { process?.Dispose(); } catch { }
-                error = ex.Message;
+                error = McpPublicTextSanitizer.Sanitize(ex.ToString());
                 return false;
             }
         }

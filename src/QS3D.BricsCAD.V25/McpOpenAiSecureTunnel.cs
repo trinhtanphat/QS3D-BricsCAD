@@ -287,7 +287,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                message = "Không lưu/xác minh được đường dẫn tunnel-client: " + ex.Message;
+                message = "Không lưu/xác minh được đường dẫn tunnel-client: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 SetLastError(message);
                 return false;
             }
@@ -327,7 +327,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch (Exception ex)
                 {
-                    message = "Không lưu/xác minh được OpenAI Runtime API key an toàn trước khi khởi động tunnel: " + ex.Message;
+                    message = "Không lưu/xác minh được OpenAI Runtime API key an toàn trước khi khởi động tunnel: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                     SetLastError(message);
                     return false;
                 }
@@ -441,7 +441,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                SetLastError("OpenAI Secure MCP Tunnel: " + ex.Message);
+                SetLastError("OpenAI Secure MCP Tunnel: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
                 message = LastError;
                 return false;
             }
@@ -479,7 +479,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex)
                 {
                     persistenceError = ex;
-                    SetLastError("Không lưu/xác minh được trạng thái autostart=OFF: " + ex.Message);
+                    SetLastError("Không lưu/xác minh được trạng thái autostart=OFF: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
                 }
                 StopProcessOnly();
             }
@@ -517,7 +517,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                error = ex.Message;
+                error = McpPublicTextSanitizer.Sanitize(ex.ToString());
                 return false;
             }
         }
@@ -668,7 +668,7 @@ namespace QS3D.BricsCAD.V25
                     _restartAttempt = Math.Min(_restartAttempt + 1, 30);
                     _nextRestartUtc = DateTime.UtcNow + ComputeRestartBackoff(_restartAttempt);
                 }
-                SetLastError("OpenAI MCP tunnel watchdog error: " + ex.Message);
+                SetLastError("OpenAI MCP tunnel watchdog error: " + McpPublicTextSanitizer.Sanitize(ex.ToString()));
             }
             finally
             {
@@ -706,7 +706,7 @@ namespace QS3D.BricsCAD.V25
                 catch (Exception ex)
                 {
                     restarted = false;
-                    message = ex.Message;
+                    message = McpPublicTextSanitizer.Sanitize(ex.ToString());
                 }
 
                 TimeSpan backoff;
@@ -854,7 +854,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 catch (Exception ex)
                 {
-                    error = "không đọc được signer certificate: " + ex.Message;
+                    error = "không đọc được signer certificate: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                     return false;
                 }
             }
@@ -872,7 +872,7 @@ namespace QS3D.BricsCAD.V25
             try { actual = ComputeSha256(path); }
             catch (Exception ex)
             {
-                error = "không tính được SHA-256: " + ex.Message;
+                error = "không tính được SHA-256: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 return false;
             }
             if (!string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
