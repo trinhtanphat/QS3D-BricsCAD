@@ -96,6 +96,13 @@ namespace QS3D.Core.Export
                 target.Add(source[index] ?? string.Empty);
             if (source.Count != count)
                 throw new InvalidOperationException("Quantity XLSX provenance count changed during snapshot.");
+            for (var index = 0; index < count; index++)
+            {
+                if (!string.Equals(source[index] ?? string.Empty, target[index] ?? string.Empty, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Quantity XLSX provenance values changed during snapshot.");
+            }
+            if (source.Count != count)
+                throw new InvalidOperationException("Quantity XLSX provenance count changed during snapshot.");
         }
 
         public static void ExportEd2(string path, IReadOnlyList<QuantityReportRow> detailRows, IReadOnlyList<QuantityReportRow> summaryRows)
