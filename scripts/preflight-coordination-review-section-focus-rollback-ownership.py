@@ -32,12 +32,12 @@ if apply_at < 0 or first_publish_at < apply_at:
     raise SystemExit("FAIL section focus ownership: ownership published before native apply attempt")
 
 if not re.search(
-    r"catch\s*\{\s*if\s*\(\s*!TryRestoreSectionViewBestEffort\(viewBeforeSection\)\s*\)\s*"
+    r"catch\s*\{\s*if\s*\(\s*!TryRestoreSectionViewBestEffort\(viewBeforeSection\)\s*&&\s*!_generationAbandoned\s*\)\s*"
     r"_viewBeforeSection\s*=\s*viewBeforeSection\s*;\s*throw\s*;\s*\}",
     body,
     re.S,
 ):
-    raise SystemExit("FAIL section focus ownership: failed compensation must retain snapshot then rethrow")
+    raise SystemExit("FAIL section focus ownership: failed compensation must retain snapshot unless the native generation was abandoned, then rethrow")
 
 helper_start = text.find("private bool TryRestoreSectionViewBestEffort(ViewSnapshot snapshot)")
 helper_end = text.find("private Extents3d ReadBounds", helper_start)
@@ -59,7 +59,7 @@ if restore_apply_at < 0 or restore_clear_at < restore_apply_at:
     raise SystemExit("FAIL section focus ownership: ownership must clear after successful native restore")
 
 abandon_start = text.find("public void AbandonDestroyedDocumentState()")
-abandon_end = text.find("private void RestoreImpliedSelectionBestEffort", abandon_start)
+abandon_end = text.find("private bool TryRestoreImpliedSelectionBestEffort", abandon_start)
 if abandon_start < 0 or abandon_end < 0 or "_viewBeforeSection = null;" not in text[abandon_start:abandon_end]:
     raise SystemExit("FAIL section focus ownership: destroyed-document abandon boundary missing")
 
