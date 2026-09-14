@@ -147,21 +147,39 @@ if "foreach (var auditEvent in AuditEvents)" in project_text:
         "incremental accounting rather than rescanning the full audit history."
     )
 
-# Normal structural mutation must also remain incremental. A full `_items` scan to rediscover the
-# same object's multiplicity on every Add/Insert/Remove/Replace turns a supported 10,000-event
-# append sequence into O(N^2). Keep an independent structural reference-count cache so observer
-# accounting can still be cross-checked for corruption without scanning the whole catalog.
+# Normal structural mutation must also remain incremental. The structural index is deliberately
+# independent from AuditHistoryBudgetObserver._referenceCounts so corruption of persisted-budget
+# accounting is still detectable rather than being compared with itself.
 catalog_start = project_text.find("internal sealed class CatalogOwnershipList<T>")
 catalog_end = project_text.find("internal sealed class StructuralRevisionList<T>", catalog_start)
-count_method = project_text.find("private int CountReferences(T item)", catalog_start, catalog_end)
-if count_method >= 0:
-    count_end = project_text.find("\n        }", count_method, catalog_end)
-    count_body = project_text[count_method:count_end]
-    if "_items.Count" in count_body:
-        raise SystemExit(
-            "ERROR: project audit-history budget preflight failed: normal catalog reference "
-            "multiplicity admission still scans the full collection; use independent cached structural "
-            "reference counts so 10,000-event append/remove/replace paths remain O(1) per mutation."
-        )
+catalog_text = project_text[catalog_start:catalog_end]
+required_catalog_index = [
+    "private readonly Dictionary<T, int> _referenceCounts = new Dictionary<T, int>(ReferenceComparer.Instance);",
+    "private int GetReferenceCount(T item)",
+    "return _referenceCounts.TryGetValue(item, out var count) ? count : 0;",
+    "IncrementReference(item);",
+    "DecrementReference(item);",
+    "ValidateReferenceIndex();",
+]
+missing_catalog_index = [token for token in required_catalog_index if token not in catalog_text]
+if missing_catalog_index:
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: CatalogOwnershipList must maintain an "
+        "independent O(1) reference-identity multiplicity index; missing token(s): "
+        + ", ".join(repr(token) for token in missing_catalog_index)
+    )
+if "private int CountReferences(T item)" in catalog_text:
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: normal catalog reference multiplicity "
+        "must not be rediscovered by full collection scans."
+    )
+get_count_start = catalog_text.find("private int GetReferenceCount(T item)")
+get_count_end = catalog_text.find("\n        }", get_count_start)
+get_count_body = catalog_text[get_count_start:get_count_end]
+if "_items" in get_count_body:
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: normal catalog reference multiplicity "
+        "lookup must use the independent index rather than scanning the collection."
+    )
 
 print("PASS ProjectState audit-history count/text/reference budget admission source guard")
