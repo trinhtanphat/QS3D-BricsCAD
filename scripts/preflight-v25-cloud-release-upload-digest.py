@@ -20,10 +20,18 @@ for token in required_helper:
     if token not in helper:
         raise SystemExit(f"missing V25 cloud upload response identity guard token: {token}")
 
-if helper.index("$response.Content.ReadAsStringAsync().GetAwaiter().GetResult()") > helper.index("$response.Dispose()"):
-    raise SystemExit("V25 cloud upload response must be read before the HTTP response is disposed")
-if helper.index("$uploadedAsset.digest") > helper.index("$response.Dispose()"):
-    raise SystemExit("V25 cloud upload digest admission must complete before the HTTP response is disposed")
+ordered_tokens = [
+    "$actualHash = ([BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '')",
+    "$response = $client.PostAsync($uploadUri, $content).GetAwaiter().GetResult()",
+    "$response.Content.ReadAsStringAsync().GetAwaiter().GetResult()",
+    "$uploadedAsset.digest",
+    "$response.Dispose()",
+]
+positions = [helper.index(token) for token in ordered_tokens]
+if positions != sorted(positions) or len(set(positions)) != len(positions):
+    raise SystemExit(
+        "V25 cloud upload identity ordering must remain held-hash -> POST -> response parse -> digest admission -> response dispose"
+    )
 
 required_workflow = [
     ".\\scripts\\upload-v25-held-release-asset.ps1",
