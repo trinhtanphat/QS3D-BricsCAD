@@ -495,6 +495,10 @@ jobs:
           }
           Write-Host "V25 release remains pinned to admitted SOURCE_SHA $env:SOURCE_SHA while protected main is $preMutationPublishMain."
 
+          $releaseCreatedByThisRun = $false
+          $createdReleaseId = 0L
+          $releaseUri = $null
+          try {
           $body = @{
             tag_name = $env:RELEASE_TAG
             target_commitish = $env:RELEASE_COMMIT_SHA
@@ -505,8 +509,17 @@ jobs:
             generate_release_notes = $true
           } | ConvertTo-Json
           $release = Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases" -Headers $headers -ContentType 'application/json' -Body $body
-          if (-not [string]::Equals(([string]$release.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Draft prerelease target commit mismatch. Expected $env:RELEASE_COMMIT_SHA, got $($release.target_commitish)."
+          if (-not [Int64]::TryParse(([string]$release.id), [ref]$createdReleaseId) -or $createdReleaseId -le 0) {
+            throw 'Draft prerelease returned an invalid release id.'
+          }
+          $releaseUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$createdReleaseId"
+          $releaseCreatedByThisRun = $true
+          if ($release.draft -ne $true -or $release.prerelease -ne $true) {
+            throw 'Created release must be a draft prerelease before asset upload.'
+          }
+          if (-not [string]::Equals(([string]$release.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+              -not [string]::Equals(([string]$release.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Created draft prerelease tag or target commit mismatch.'
           }
           $uploadBase = $release.upload_url -replace '\{\?name,label\}$', ''
           foreach ($spec in $assetSpecs) {
@@ -753,7 +766,35 @@ jobs:
             }
             catch {
               $compensationError = $_
-              throw "V25 release publication safety validation failed after publish PATCH and compensation could not prove the exact release non-public. publication=$($publicationError.Exception.Message) compensation=$($compensationError.Exception.Message)"
+              throw 'V25 release publication safety validation failed after publish PATCH and compensation could not prove the exact release non-public.'
             }
-            throw "V25 release publication safety validation failed after publish PATCH; exact release was proven before mutation, returned to draft when required, and authoritatively reconciled. publication=$($publicationError.Exception.Message)"
+            throw 'V25 release publication safety validation failed after publish PATCH; exact release was proven before mutation, returned to draft when required, and authoritatively reconciled.'
+          }
+          }
+          catch {
+            $releaseFailure = $_
+            if ($releaseCreatedByThisRun) {
+              try {
+                $authoritativeDraftBeforeDelete = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers
+                if ([Int64]$authoritativeDraftBeforeDelete.id -ne $createdReleaseId -or
+                    $authoritativeDraftBeforeDelete.draft -ne $true -or
+                    $authoritativeDraftBeforeDelete.prerelease -ne $true) {
+                  throw 'Run-created V25 release is not the exact draft prerelease owned by this run.'
+                }
+                if (-not [string]::Equals(([string]$authoritativeDraftBeforeDelete.tag_name).Trim(), $env:RELEASE_TAG, [StringComparison]::Ordinal) -or
+                    -not [string]::Equals(([string]$authoritativeDraftBeforeDelete.target_commitish).Trim(), $env:RELEASE_COMMIT_SHA, [StringComparison]::OrdinalIgnoreCase)) {
+                  throw 'Run-created V25 draft tag or target identity changed; refusing cleanup.'
+                }
+                $deleteResponse = Invoke-WebRequest -Method Delete -Uri $releaseUri -Headers $headers -UseBasicParsing
+                if ([int]$deleteResponse.StatusCode -ne 204) {
+                  throw "Run-created V25 draft delete returned HTTP $([int]$deleteResponse.StatusCode)."
+                }
+                $releaseCreatedByThisRun = $false
+              }
+              catch {
+                $cleanupError = $_
+                throw 'V25 run-created draft cleanup failed; exact draft ownership could not be safely reconciled.'
+              }
+            }
+            throw 'V25 cloud release failed after authoritative draft cleanup handling.'
           }

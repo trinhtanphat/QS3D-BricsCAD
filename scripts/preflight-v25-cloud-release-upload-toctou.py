@@ -45,9 +45,33 @@ def main() -> None:
         "single-stream helper must retain expected hash and size admission",
     )
     require(
-        "ReadAsStringAsync" not in helper and "$responseBody" not in helper,
-        "upload failures must not copy an untrusted GitHub response body into exception/log output",
+        "ReadAsStringAsync" in helper and "$responseBody" in helper and "ConvertFrom-Json -ErrorAction Stop" in helper,
+        "helper must parse the authoritative upload response in memory for exact asset identity admission",
     )
+    for forbidden in (
+        "$($_.Exception.Message)",
+        "throw $responseBody",
+        "Write-Host $responseBody",
+        "Write-Output $responseBody",
+    ):
+        require(
+            forbidden not in helper,
+            "upload response parsing must not copy untrusted response content or parser detail into logs/errors",
+        )
+
+    for forbidden in (
+        "$publicationError.Exception.Message",
+        "$compensationError.Exception.Message",
+        "$releaseFailure.Exception.Message",
+        "$cleanupError.Exception.Message",
+        "throw $releaseFailure",
+    ):
+        require(forbidden not in workflow, "release failure publication must not expose raw exception-derived detail")
+    for required in (
+        "V25 run-created draft cleanup failed; exact draft ownership could not be safely reconciled.",
+        "V25 cloud release failed after authoritative draft cleanup handling.",
+    ):
+        require(required in workflow, "release failure publication must retain bounded fail-closed status text")
 
     print("PASS: cloud preview held assets are verified/uploaded from one writer-blocking stream and failures redact response bodies")
 
