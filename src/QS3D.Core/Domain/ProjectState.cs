@@ -454,6 +454,7 @@ namespace QS3D.Core.Domain
             {
                 if (value == null) throw new ArgumentNullException(nameof(value));
                 var previous = _items[index];
+                if (previous == null) throw new InvalidOperationException("Catalog contains a null entry.");
                 if (ReferenceEquals(previous, value)) return;
                 _validateCandidate?.Invoke(value);
                 _mutationObserver?.ValidateReplace(previous, value);
@@ -461,7 +462,7 @@ namespace QS3D.Core.Domain
                 var valueAlreadyOwned = ContainsReference(value);
                 _beforeMutation();
                 _items[index] = value;
-                if (previousWasLastReference && previous != null) _detach(previous);
+                if (previousWasLastReference) _detach(previous);
                 if (!valueAlreadyOwned) _attach(value);
                 _mutationObserver?.CommitReplace(previous, value);
             }
@@ -549,10 +550,11 @@ namespace QS3D.Core.Domain
         public void RemoveAt(int index)
         {
             var item = _items[index];
+            if (item == null) throw new InvalidOperationException("Catalog contains a null entry.");
             var detach = CountReferences(item) == 1;
             _beforeMutation();
             _items.RemoveAt(index);
-            if (detach && item != null) _detach(item);
+            if (detach) _detach(item);
             _mutationObserver?.CommitRemove(item);
         }
 
