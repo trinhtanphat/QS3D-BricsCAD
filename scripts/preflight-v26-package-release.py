@@ -103,10 +103,10 @@ template_expectations = {
         "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip",
         "install-v26-autoload.ps1", "uninstall-v26-autoload.ps1", "update-v26.ps1"
     ],
+    # The public V25 wrapper is intentionally thin after the validation-core split.
+    # Package/version/update tokens live in the validation core; the wrapper transform
+    # must preserve only its transformed dependency edges.
     "scripts/new-v25-update-manifest.ps1": [
-        "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip",
-        "QS3D-BricsCAD-V26.update.json", "install-v26-autoload.ps1",
-        "uninstall-v26-autoload.ps1", "update-v26.ps1",
         "new-v26-update-manifest-validation-core.ps1", "Qs3dV26UpdateManifestPublicationNative.cs"
     ],
     "scripts/new-v25-update-manifest-validation-core.ps1": [

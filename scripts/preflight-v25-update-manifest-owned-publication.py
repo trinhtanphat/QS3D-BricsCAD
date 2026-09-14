@@ -72,10 +72,15 @@ require(
 )
 require(
     v26_manifest,
-    "Generated = 'new-v26-update-manifest-validation-core.ps1'",
-    "V26 manifest orchestrator no longer binds the transformed validation-core output",
+    "$tempValidation = Join-Path $tempRoot 'new-v26-update-manifest-validation-core.ps1'",
+    "V26 manifest orchestrator no longer binds the transformed validation-core output path",
 )
-require(v26_manifest, "& $transformer -TemplateScript", "V26 manifest orchestrator does not route generation through the transformer")
+require(
+    v26_manifest,
+    "Source = 'new-v25-update-manifest-validation-core.ps1'; Output = $tempValidation",
+    "V26 manifest generation plan no longer binds the validation-core source to its transformed output",
+)
+require(v26_manifest, "& $generator -SourceScript $entry.Source -OutputPath $entry.Output -PassThruHeldGeneration", "V26 manifest orchestrator does not route generation-plan entries through the transformer")
 for label, text in (
     ("V26 transformer", transformer),
     ("V26 manifest orchestrator", v26_manifest),
