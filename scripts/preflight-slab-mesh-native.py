@@ -85,7 +85,7 @@ if command.is_file():
         "IsActiveDocumentGeneration(document, nativeDatabaseIdentity)",
         "FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);",
         "var uiSyncFailed = false;", "PaletteCoordinator.RefreshProject()", "document.Editor.Regen()",
-        "Native update đã hoàn tất; một phần UI không thể đồng bộ", "TryWriteMessage(document, nativeDatabaseIdentity",
+        "native update đã hoàn tất; một phần UI không thể đồng bộ", "TryWriteMessage(document, nativeDatabaseIdentity",
     ):
         if needle not in text: errors.append("native slab-mesh command missing lifecycle/redaction token: " + needle)
     for forbidden in ("ex.Message", "Exception.Message", "GetBaseException()", "StackTrace", "UI sync warning:"):
