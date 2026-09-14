@@ -474,7 +474,7 @@ namespace QS3D.BricsCAD.V25.UI
             public void Add(Callbacks callbacks)
             {
                 PruneDeadCallbacks();
-                _callbacks.Add(new WeakReference<Callbacks>>(callbacks));
+                _callbacks.Add(new WeakReference<Callbacks>(callbacks));
             }
             public void Remove(Callbacks callbacks)
             {
