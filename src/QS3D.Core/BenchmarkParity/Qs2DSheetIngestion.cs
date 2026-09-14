@@ -56,7 +56,7 @@ namespace QS3D.Core.BenchmarkParity
             int height;
             if (TryPng(payload, out width, out height))
             {
-                ValidatePngTerminator(payload);
+                ValidatePngChunkStream(payload);
                 format = RasterSheetFormat.Png;
             }
             else if (TryJpeg(payload, out width, out height))
@@ -228,16 +228,68 @@ namespace QS3D.Core.BenchmarkParity
                 throw new InvalidOperationException("PNG " + chunkName + " chunk CRC is invalid.");
         }
 
-        private static void ValidatePngTerminator(byte[] payload)
+        private static void ValidatePngChunkStream(byte[] payload)
         {
-            const int chunkLength = 12;
-            if (payload.Length < chunkLength) throw new InvalidOperationException("PNG payload is truncated or missing the terminal IEND chunk.");
-            var offset = payload.Length - chunkLength;
-            if (payload[offset] != 0 || payload[offset + 1] != 0 || payload[offset + 2] != 0 || payload[offset + 3] != 0 ||
-                payload[offset + 4] != (byte)'I' || payload[offset + 5] != (byte)'E' || payload[offset + 6] != (byte)'N' || payload[offset + 7] != (byte)'D')
-                throw new InvalidOperationException("PNG payload is truncated or missing the terminal IEND chunk.");
+            var offset = 8;
+            var sawIhdr = false;
+            var sawIdat = false;
+            var sawIend = false;
 
-            ValidatePngChunkCrc(payload, offset + 4, 0, "IEND");
+            while (offset < payload.Length)
+            {
+                if (payload.Length - offset < 12)
+                    throw new InvalidOperationException("PNG chunk stream is truncated before a complete chunk header and CRC.");
+
+                var lengthValue = ReadUInt32BigEndian(payload, offset);
+                if (lengthValue > int.MaxValue)
+                    throw new InvalidOperationException("PNG chunk length exceeds supported bounds.");
+                var dataLength = (int)lengthValue;
+                var typeOffset = offset + 4;
+                var dataOffset = typeOffset + 4;
+                var crcOffset = dataOffset + dataLength;
+                if (crcOffset < dataOffset || crcOffset > payload.Length - 4)
+                    throw new InvalidOperationException("PNG chunk length exceeds the remaining payload.");
+
+                var c0 = payload[typeOffset];
+                var c1 = payload[typeOffset + 1];
+                var c2 = payload[typeOffset + 2];
+                var c3 = payload[typeOffset + 3];
+                var isIhdr = c0 == (byte)'I' && c1 == (byte)'H' && c2 == (byte)'D' && c3 == (byte)'R';
+                var isIdat = c0 == (byte)'I' && c1 == (byte)'D' && c2 == (byte)'A' && c3 == (byte)'T';
+                var isIend = c0 == (byte)'I' && c1 == (byte)'E' && c2 == (byte)'N' && c3 == (byte)'D';
+                var chunkName = new string(new[] { (char)c0, (char)c1, (char)c2, (char)c3 });
+
+                if (!sawIhdr)
+                {
+                    if (!isIhdr || dataLength != 13)
+                        throw new InvalidOperationException("PNG first chunk must be a single IHDR chunk with length 13.");
+                    sawIhdr = true;
+                }
+                else if (isIhdr)
+                    throw new InvalidOperationException("PNG chunk stream contains a duplicate IHDR chunk.");
+
+                if (isIdat) sawIdat = true;
+                if (isIend)
+                {
+                    if (dataLength != 0)
+                        throw new InvalidOperationException("PNG IEND chunk length must be zero.");
+                    if (!sawIdat)
+                        throw new InvalidOperationException("PNG chunk stream must contain IDAT image data before IEND.");
+                    sawIend = true;
+                }
+
+                ValidatePngChunkCrc(payload, typeOffset, dataLength, chunkName);
+                offset = crcOffset + 4;
+
+                if (sawIend)
+                {
+                    if (offset != payload.Length)
+                        throw new InvalidOperationException("PNG payload contains data after the terminal IEND chunk.");
+                    return;
+                }
+            }
+
+            throw new InvalidOperationException("PNG payload is truncated or missing the terminal IEND chunk.");
         }
 
         private static bool TryJpeg(byte[] payload, out int width, out int height)
