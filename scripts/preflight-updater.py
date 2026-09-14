@@ -8,6 +8,8 @@ errors = []
 required = [
     "scripts/update-v25.ps1",
     "scripts/new-v25-update-manifest.ps1",
+    "scripts/new-v25-update-manifest-validation-core.ps1",
+    "scripts/Qs3dV25UpdateManifestPublicationNative.cs",
     "scripts/finalize-v25-signed-package.ps1",
     "scripts/install-v25-autoload.ps1",
     "scripts/uninstall-v25-autoload.ps1",
@@ -38,7 +40,9 @@ def require(text, token, label):
 
 
 updater = read("scripts/update-v25.ps1")
-manifest = read("scripts/new-v25-update-manifest.ps1")
+manifest_wrapper = read("scripts/new-v25-update-manifest.ps1")
+manifest = read("scripts/new-v25-update-manifest-validation-core.ps1")
+manifest_native = read("scripts/Qs3dV25UpdateManifestPublicationNative.cs")
 finalizer = read("scripts/finalize-v25-signed-package.ps1")
 installer = read("scripts/install-v25-autoload.ps1")
 uninstaller = read("scripts/uninstall-v25-autoload.ps1")
@@ -47,7 +51,7 @@ signer = read("scripts/sign-v25.ps1")
 
 for label, text in (
     ("scripts/update-v25.ps1", updater),
-    ("scripts/new-v25-update-manifest.ps1", manifest),
+    ("scripts/new-v25-update-manifest-validation-core.ps1", manifest),
     ("scripts/finalize-v25-signed-package.ps1", finalizer),
     ("scripts/install-v25-autoload.ps1", installer),
 ):
@@ -94,6 +98,9 @@ for token in (
 ):
     require(updater, token, "scripts/update-v25.ps1")
 
+# Validation and publication deliberately live in different files. Keep all old
+# admission checks on the validation core and assert the public wrapper consumes
+# them in-scope under -WhatIf before generation-owned mutation.
 for token in (
     "PackageUri",
     "ExpectedSignerThumbprint",
@@ -120,14 +127,45 @@ for token in (
     "schemaVersion = 2",
     "productVersion = $signedPluginProductVersion",
     "signerThumbprint = $expectedSigner",
-    "[IO.File]::WriteAllText($stagePath",
-    "[IO.File]::Replace($stage.FullName, $outputFull, $backupPath, $true)",
 ):
-    require(manifest, token, "scripts/new-v25-update-manifest.ps1")
+    require(manifest, token, "scripts/new-v25-update-manifest-validation-core.ps1")
 if "schemaVersion = 1" in manifest:
-    errors.append("new-v25-update-manifest.ps1 must not regress to legacy schemaVersion 1")
+    errors.append("V25 validation core must not regress to legacy schemaVersion 1")
 if "Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256" in manifest:
-    errors.append("new-v25-update-manifest.ps1 must derive the published ZIP hash from its admitted stable state, not reopen the ZIP through Get-FileHash")
+    errors.append("V25 validation core must derive the published ZIP hash from its admitted stable state, not reopen the ZIP through Get-FileHash")
+
+for token in (
+    "$validationCorePath = Join-Path $PSScriptRoot 'new-v25-update-manifest-validation-core.ps1'",
+    "$nativeHelperPath = Join-Path $PSScriptRoot 'Qs3dV25UpdateManifestPublicationNative.cs'",
+    ". $validationCorePath",
+    "-WhatIf 6>$null",
+    "OpenOwnedDirectory($preOutputParentPath)",
+    "OpenOwnedExisting($preOutputFull)",
+    "$wrapperCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')",
+    "OpenOwnedStaging($stagePath)",
+    "WriteOwnedGeneration($stageOwned, $expectedManifestBytes)",
+    "PublishOwnedGenerationInDirectory",
+    "ReadOwnedGenerationBytes($stageOwned",
+    "RollbackOwnedGenerationInDirectory",
+):
+    require(manifest_wrapper, token, "scripts/new-v25-update-manifest.ps1")
+for forbidden in (
+    "[IO.File]::WriteAllText($stagePath",
+    "[IO.File]::Replace($stage.FullName, $outputFull",
+    "[IO.File]::Move($stage.FullName, $outputFull",
+    "& $validationCorePath",
+):
+    if forbidden in manifest_wrapper:
+        errors.append("public V25 manifest wrapper retained unsafe/legacy publication token: " + forbidden)
+for token in (
+    "NtSetInformationFile",
+    "FileRenameInformation",
+    "PublishOwnedGenerationInDirectory",
+    "RollbackOwnedGenerationInDirectory",
+    "Marshal.AllocHGlobal(1)",
+    "Marshal.WriteByte",
+):
+    require(manifest_native, token, "scripts/Qs3dV25UpdateManifestPublicationNative.cs")
 
 for token in (
     "ExpectedSignerThumbprint",
@@ -241,42 +279,31 @@ manifest_identity = manifest.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.
 manifest_zip_verify = manifest.find("Assert-ZipPayloadMatchesSignedStaging -ZipFile $zip -PackageRoot $package")
 manifest_zip_recheck = manifest.find("$zip = Assert-StableFileState -Expected $zipState", manifest_zip_verify)
 manifest_hash = manifest.find("$zipHash = [string]$zipState.Sha256", manifest_zip_recheck)
-manifest_publish = manifest.find("[IO.File]::WriteAllText($stagePath")
+manifest_boundary = manifest.find("$PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')", manifest_hash)
 manifest_positions = (
-    manifest_package_guard,
-    manifest_zip_guard,
-    manifest_metadata_guard,
-    manifest_metadata_state,
-    manifest_zip_state,
-    manifest_payload_guard,
-    manifest_payload_state,
-    manifest_metadata_read,
-    manifest_metadata_recheck,
-    manifest_signer,
-    manifest_identity,
-    manifest_zip_verify,
-    manifest_zip_recheck,
-    manifest_hash,
-    manifest_publish,
+    manifest_package_guard, manifest_zip_guard, manifest_metadata_guard, manifest_metadata_state,
+    manifest_zip_state, manifest_payload_guard, manifest_payload_state, manifest_metadata_read,
+    manifest_metadata_recheck, manifest_signer, manifest_identity, manifest_zip_verify,
+    manifest_zip_recheck, manifest_hash, manifest_boundary,
 )
 if min(manifest_positions) < 0 or not (
-    manifest_package_guard
-    < manifest_zip_guard
-    < manifest_metadata_guard
-    < manifest_metadata_state
-    < manifest_zip_state
-    < manifest_payload_guard
-    < manifest_payload_state
-    < manifest_metadata_read
-    < manifest_metadata_recheck
-    < manifest_signer
-    < manifest_identity
-    < manifest_zip_verify
-    < manifest_zip_recheck
-    < manifest_hash
-    < manifest_publish
+    manifest_package_guard < manifest_zip_guard < manifest_metadata_guard < manifest_metadata_state < manifest_zip_state
+    < manifest_payload_guard < manifest_payload_state < manifest_metadata_read < manifest_metadata_recheck
+    < manifest_signer < manifest_identity < manifest_zip_verify < manifest_zip_recheck < manifest_hash < manifest_boundary
 ):
-    errors.append("manifest generation must ordinary-file bind and stable-state capture package/ZIP/metadata/payload before bounded metadata materialization, then revalidate identities and ZIP generation before publishing the admitted ZIP hash atomically")
+    errors.append("manifest validation must ordinary-file bind/stable-state capture package/ZIP/metadata/payload, revalidate identities and ZIP generation, then reach only a WhatIf mutation boundary")
+
+wrapper_parent = manifest_wrapper.find("OpenOwnedDirectory($preOutputParentPath)")
+wrapper_prior = manifest_wrapper.find("OpenOwnedExisting($preOutputFull)")
+wrapper_validation = manifest_wrapper.find(". $validationCorePath", wrapper_prior)
+wrapper_should = manifest_wrapper.find("$wrapperCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')", wrapper_validation)
+wrapper_stage = manifest_wrapper.find("OpenOwnedStaging($stagePath)", wrapper_should)
+wrapper_publish = manifest_wrapper.find("PublishOwnedGenerationInDirectory", wrapper_stage)
+wrapper_verify = manifest_wrapper.find("ReadOwnedGenerationBytes($stageOwned", wrapper_publish)
+if min(wrapper_parent, wrapper_prior, wrapper_validation, wrapper_should, wrapper_stage, wrapper_publish, wrapper_verify) < 0 or not (
+    wrapper_parent < wrapper_prior < wrapper_validation < wrapper_should < wrapper_stage < wrapper_publish < wrapper_verify
+):
+    errors.append("manifest wrapper must acquire parent/prior generations before validation, then stage/publish/verify the exact held generation")
 
 finalizer_signer = finalizer.find("Assert-AuthenticodeSigner -Path $path")
 finalizer_identity = finalizer.find("$managedIdentityNames = @('QS3D.BricsCAD.V25.dll', 'QS3D.Core.dll')")
@@ -304,7 +331,7 @@ uninstall_registry = uninstaller.find("Remove-Item -LiteralPath $entry.Target.Ap
 uninstall_restore_files = uninstaller.find("Move-Item -LiteralPath $quarantine -Destination $installFull -ErrorAction Stop")
 uninstall_restore_registry = uninstaller.find("Restore-RegistryTreeSnapshot -Snapshot $removedSnapshots[$index]")
 if min(uninstall_identity, uninstall_plan, uninstall_revalidate, uninstall_quarantine, uninstall_registry, uninstall_restore_files, uninstall_restore_registry) < 0:
-    errors.append("uninstaller must validate identity, build and revalidate the registry plan, quarantine files and provide file/registry rollback")
+    errors.append("uninstaller must validate identity, build/revalidate registry plan, quarantine files and provide file/registry rollback")
 elif not (uninstall_identity < uninstall_plan < uninstall_revalidate < uninstall_quarantine < uninstall_registry < uninstall_restore_files < uninstall_restore_registry):
     errors.append("uninstaller transaction ordering must validate/snapshot before mutation and restore files before registry on failure")
 
@@ -314,4 +341,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: secure V25 update uses bounded HTTPS, held-generation in-memory installer execution, bounded/reparse-safe generation-stable manifest inputs with atomic publication, schema-2 dual managed identity binding, signed/hash-verified packages, shared update serialization, transactional install rollback and quarantine-safe uninstall rollback.")
+print("PASS: secure V25 update retains bounded HTTPS, held installer execution, split fail-closed validation + generation-owned manifest publication, schema-2 identity binding, signed/hash-verified packages and transactional install/uninstall rollback.")

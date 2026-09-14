@@ -3,7 +3,8 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = ROOT / "scripts" / "new-v25-update-manifest.ps1"
+VALIDATION_CORE = ROOT / "scripts" / "new-v25-update-manifest-validation-core.ps1"
+WRAPPER = ROOT / "scripts" / "new-v25-update-manifest.ps1"
 errors = []
 
 
@@ -28,11 +29,14 @@ require(not parity([("a.dll", "AA"), ("README.txt", "BB")], [("a.dll", "AA")]), 
 require(not parity([("a.dll", "AA")], [("a.dll", "AB")]), "ZIP/staging parity must reject changed ZIP file content")
 require(not parity([("a.dll", "AA")], [("a.dll", "AA"), ("A.DLL", "AA")]), "ZIP/staging parity must reject case-colliding ZIP paths")
 
-if not MANIFEST.is_file():
-    errors.append("missing scripts/new-v25-update-manifest.ps1")
+if not VALIDATION_CORE.is_file():
+    errors.append("missing scripts/new-v25-update-manifest-validation-core.ps1")
     source = ""
 else:
-    source = MANIFEST.read_text(encoding="utf-8")
+    source = VALIDATION_CORE.read_text(encoding="utf-8")
+wrapper = WRAPPER.read_text(encoding="utf-8") if WRAPPER.is_file() else ""
+if not wrapper:
+    errors.append("missing scripts/new-v25-update-manifest.ps1")
 
 required_tokens = (
     "function Get-ZipEntrySha256",
@@ -61,14 +65,25 @@ required_tokens = (
     "$zipHash = [string]$zipState.Sha256",
 )
 for token in required_tokens:
-    require(token in source, f"update-manifest ZIP parity guard missing token: {token}")
+    require(token in source, f"update-manifest validation ZIP parity guard missing token: {token}")
 
 for forbidden in (
     "Get-ChildItem -LiteralPath $PackageRoot.FullName -File -Recurse -Force",
     "Get-FileHash -LiteralPath $stagedByName[$name]",
     "Get-FileHash -LiteralPath $zip.FullName -Algorithm SHA256",
 ):
-    require(forbidden not in source, f"update-manifest ZIP parity retained unsafe/legacy token: {forbidden}")
+    require(forbidden not in source, f"update-manifest validation ZIP parity retained unsafe/legacy token: {forbidden}")
+
+# The wrapper must delegate validation without granting the validation core write authority,
+# then publish only through the held-generation helper.
+for token in (
+    ". $validationCorePath",
+    "-WhatIf 6>$null",
+    "PublishOwnedGenerationInDirectory",
+    "ReadOwnedGenerationBytes($stageOwned",
+):
+    require(token in wrapper, f"split wrapper missing ZIP/publication boundary token: {token}")
+require("& $validationCorePath" not in wrapper, "wrapper must dot-source the validation core so admitted state is consumed in the same scope")
 
 if source:
     zip_capture = source.find("$zipState = Get-StableFileState")
@@ -76,11 +91,11 @@ if source:
     zip_recheck = source.find("$zip = Assert-StableFileState -Expected $zipState", parity_call)
     archive_hash = source.find("$zipHash = [string]$zipState.Sha256", zip_recheck)
     manifest_write = source.find("$manifest = [ordered]@{")
-    stage_write = source.find("[IO.File]::WriteAllText($stagePath")
+    should_process = source.find("$PSCmdlet.ShouldProcess($outputFull, 'Write QS3D update manifest')", manifest_write)
     require(
-        zip_capture >= 0 and parity_call >= 0 and zip_recheck >= 0 and archive_hash >= 0 and manifest_write >= 0 and stage_write >= 0
-        and zip_capture < parity_call < zip_recheck < archive_hash < manifest_write < stage_write,
-        "full reparse-safe staging parity must succeed against a state-bound ZIP before the admitted ZIP hash is published into the atomically staged update manifest",
+        zip_capture >= 0 and parity_call >= 0 and zip_recheck >= 0 and archive_hash >= 0 and manifest_write >= 0 and should_process >= 0
+        and zip_capture < parity_call < zip_recheck < archive_hash < manifest_write < should_process,
+        "full reparse-safe staging parity must succeed against a state-bound ZIP before the admitted ZIP hash is materialized and validation reaches its non-publishing WhatIf boundary",
     )
 
 if errors:
@@ -89,4 +104,4 @@ if errors:
         print("ERROR:", error)
     sys.exit(1)
 
-print("Update ZIP staging parity preflight passed with ordinary-file/reparse-safe traversal and stable staging/ZIP generation binding.")
+print("Update ZIP staging parity preflight passed with split validation ownership, ordinary-file/reparse-safe traversal and stable staging/ZIP generation binding before held-generation publication.")
