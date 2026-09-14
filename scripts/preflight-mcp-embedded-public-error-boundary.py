@@ -34,4 +34,8 @@ for name, needles in raw_extra.items():
             raise SystemExit(f'FAIL {name}: raw public exception sink: {needle}')
     if 'McpPublicTextSanitizer.Sanitize(' not in extra[name]:
         raise SystemExit(f'FAIL {name}: canonical public sanitizer missing')
+if '_lastUiDetail = ex.ToString();' in extra['cloudflare']:
+    raise SystemExit('FAIL cloudflare: raw exception retained in user-visible technical UI detail')
+if '"\\nCloudflare detail: " + McpCloudflareAccountTunnelManager.LastError' in extra['cloudflare']:
+    raise SystemExit('FAIL cloudflare: raw tunnel LastError reaches technical details dialog')
 print('PASS: adjacent recovery/persistent/cloudflare exception sinks are sanitized')
