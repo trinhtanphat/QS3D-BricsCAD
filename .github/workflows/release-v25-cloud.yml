@@ -257,7 +257,7 @@ jobs:
           if ($smokeExitCode -ne 0) {
             $diagnostic = (($smokeOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_.Length -gt 0 }) -join ' | ')
             if ([string]::IsNullOrWhiteSpace($diagnostic)) { $diagnostic = "Core smoke process exited with code $smokeExitCode without captured output." }
-            if ($diagnostic.Length -gt 3500) { $diagnostic = $diagnostic.Substring(0, 3500) + '…' }
+            if ($diagnostic.Length -gt 3500) { $diagnostic = $diagnostic.Substring(0, 3500) + 'â€¦' }
             $diagnostic = $diagnostic.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Host "::error title=Deterministic Core smoke failure::$diagnostic"
             exit $smokeExitCode
@@ -766,9 +766,9 @@ jobs:
             }
             catch {
               $compensationError = $_
-              throw "V25 release publication safety validation failed after publish PATCH and compensation could not prove the exact release non-public. publication=$($publicationError.Exception.Message) compensation=$($compensationError.Exception.Message)"
+              throw 'V25 release publication safety validation failed after publish PATCH and compensation could not prove the exact release non-public.'
             }
-            throw "V25 release publication safety validation failed after publish PATCH; exact release was proven before mutation, returned to draft when required, and authoritatively reconciled. publication=$($publicationError.Exception.Message)"
+            throw 'V25 release publication safety validation failed after publish PATCH; exact release was proven before mutation, returned to draft when required, and authoritatively reconciled.'
           }
           }
           catch {
@@ -793,8 +793,8 @@ jobs:
               }
               catch {
                 $cleanupError = $_
-                throw "V25 run-created draft cleanup failed. original=$($releaseFailure.Exception.Message) cleanup=$($cleanupError.Exception.Message)"
+                throw 'V25 run-created draft cleanup failed; exact draft ownership could not be safely reconciled.'
               }
             }
-            throw $releaseFailure
+            throw 'V25 cloud release failed after authoritative draft cleanup handling.'
           }
