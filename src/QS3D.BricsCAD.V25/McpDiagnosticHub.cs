@@ -274,7 +274,7 @@ namespace QS3D.BricsCAD.V25
                 var safeSource = NormalizeToken(source, "qs3d", 32);
                 var safeSeverity = NormalizeSeverity(severity);
                 var safeEvent = NormalizeToken(eventName, "event", 80);
-                var safeMessage = Redact(message);
+                var safeMessage = McpPublicTextSanitizer.Sanitize(Redact(message));
                 var documentName = SafeDocumentName(document);
                 var sequence = Interlocked.Increment(ref _sequence);
                 var line = new StringBuilder(512)
