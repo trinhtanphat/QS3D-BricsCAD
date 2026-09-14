@@ -1739,7 +1739,7 @@ namespace QS3D.BricsCAD.V25
             return token.ToString();
         }
 
-        private static void SetLastError(string message) { lock (Sync) _lastError = message ?? string.Empty; }
+        private static void SetLastError(string message) { lock (Sync) _lastError = SanitizePublicError(message); }
 
         private sealed class SessionState
         {
