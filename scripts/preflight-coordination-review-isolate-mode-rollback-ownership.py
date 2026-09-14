@@ -48,8 +48,8 @@ for token in ("RestorePendingImpliedSelectionBestEffort();", "RestoreObjectIsola
         raise SystemExit("FAIL isolate rollback ownership: retained cleanup debt must be retryable: " + token)
 
 for fence in (
-    'RequireOwnerGeneration("Isolation / PICKFIRST capture")',
-    'RequireOwnerGeneration("Isolation / mode capture")',
+    'RequireOwnerGeneration("Isolation / capture")',
+    'RequireOwnerGeneration("Isolation / system variable read")',
     'RequireOwnerGeneration("Isolation / command dispatch")',
     'RequireOwnerGeneration("Isolation / publication")',
 ):
