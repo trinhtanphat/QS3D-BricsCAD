@@ -20,8 +20,8 @@ session_start = text.find("private sealed class TransientReviewSession : IDispos
 if session_start < 0:
     raise SystemExit("FAIL coordination isolate pending mode barrier: session not found")
 session = text[session_start:]
-if "public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;" not in session:
-    raise SystemExit("FAIL coordination isolate pending mode barrier: HasIsolation must include pending mode restore ownership")
+if "public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null || _impliedSelectionBeforeIsolation != null;" not in session:
+    raise SystemExit("FAIL coordination isolate pending mode barrier: HasIsolation must include command, mode and PICKFIRST restore ownership")
 
 if "if (_isolationActive) RestoreIsolation();" in body:
     raise SystemExit("FAIL coordination isolate pending mode barrier: new isolate may not gate cleanup on command ownership alone")
@@ -49,11 +49,20 @@ first_mutation = min(mutation_indices)
 if not (0 <= first_gate < restore < second_gate < reject < first_mutation):
     raise SystemExit("FAIL coordination isolate pending mode barrier: prior isolation ownership must be drained and rechecked before any host-state observation/mutation")
 
+for fence in (
+    'RequireOwnerGeneration("Isolation / capture")',
+    'RequireOwnerGeneration("Isolation / system variable read")',
+    'RequireOwnerGeneration("Isolation / command dispatch")',
+    'RequireOwnerGeneration("Isolation / publication")',
+):
+    if fence not in body:
+        raise SystemExit("FAIL coordination isolate pending mode barrier: missing native-generation fence: " + fence)
+
 queue = body.find('_document.SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);')
-publish_mode = body.find("_objectIsolationModeBefore = modeBefore;")
-publish_active = body.find("_isolationActive = true;")
+publish_mode = body.rfind("_objectIsolationModeBefore = modeBefore;")
+publish_active = body.find("_isolationActive = true;", queue)
 if queue < 0 or publish_mode < queue or publish_active < queue:
     raise SystemExit("FAIL coordination isolate pending mode barrier: new isolation ownership must publish only after queue acceptance")
 
-print("PASS coordination review isolate pending mode restore barrier")
+print("PASS coordination review isolate pending cleanup-debt and native-generation barrier")
 sys.exit(0)

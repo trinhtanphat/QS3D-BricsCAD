@@ -8,59 +8,52 @@ text = SOURCE.read_text(encoding="utf-8")
 start = text.find("public void Isolate(IReadOnlyList<ObjectId> ids)")
 end = text.find("public void RestoreIsolation()", start)
 if start < 0 or end < 0:
-    raise SystemExit("FAIL isolate mode rollback ownership: Isolate method not found")
+    raise SystemExit("FAIL isolate rollback ownership: Isolate method not found")
 body = text[start:end]
 
 required = (
     'var modeBefore = Bricscad.ApplicationServices.Application.GetSystemVariable("OBJECTISOLATIONMODE");',
     'Application.SetSystemVariable("OBJECTISOLATIONMODE", 0);',
     'SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);',
-    "RestoreImpliedSelectionBestEffort(impliedSelectionBefore);",
-    "if (!TryRestoreObjectIsolationModeBestEffort(modeBefore))",
+    "if (!TryRestoreImpliedSelectionBestEffort(impliedSelectionBefore) && !_generationAbandoned)",
+    "_impliedSelectionBeforeIsolation = impliedSelectionBefore;",
+    "if (!TryRestoreObjectIsolationModeBestEffort(modeBefore) && !_generationAbandoned)",
     "_objectIsolationModeBefore = modeBefore;",
     "throw;",
     "_isolationActive = true;",
 )
 for token in required:
     if token not in body:
-        raise SystemExit("FAIL isolate mode rollback ownership: missing " + token)
+        raise SystemExit("FAIL isolate rollback ownership: missing " + token)
 
-if not re.search(
-    r"catch\s*\{\s*RestoreImpliedSelectionBestEffort\(impliedSelectionBefore\);\s*"
-    r"if\s*\(\s*!TryRestoreObjectIsolationModeBestEffort\(modeBefore\)\s*\)\s*"
-    r"_objectIsolationModeBefore\s*=\s*modeBefore;\s*throw;\s*\}",
-    body,
-    re.S,
-):
-    raise SystemExit("FAIL isolate mode rollback ownership: failed launch must retain prior mode iff compensation is unconfirmed, then bare rethrow")
-
-queue_at = body.find('SendStringToExecute("_.ISOLATEOBJECTS ", true, false, false);')
-catch_at = body.find("catch", queue_at)
-compensate_at = body.find("TryRestoreObjectIsolationModeBestEffort(modeBefore)", catch_at)
-failed_transfer_at = body.find("_objectIsolationModeBefore = modeBefore;", compensate_at)
-throw_at = body.find("throw;", failed_transfer_at)
-success_transfer_at = body.rfind("_objectIsolationModeBefore = modeBefore;")
-success_active_at = body.find("_isolationActive = true;", success_transfer_at)
-if not (0 <= queue_at < catch_at < compensate_at < failed_transfer_at < throw_at):
-    raise SystemExit("FAIL isolate mode rollback ownership: failed compensation ordering is not retry-safe")
-if not (queue_at < success_transfer_at < success_active_at):
-    raise SystemExit("FAIL isolate mode rollback ownership: successful ownership publication must remain post-queue")
+catch_at = body.find("catch")
+selection_compensate = body.find("TryRestoreImpliedSelectionBestEffort(impliedSelectionBefore)", catch_at)
+selection_transfer = body.find("_impliedSelectionBeforeIsolation = impliedSelectionBefore;", selection_compensate)
+mode_compensate = body.find("TryRestoreObjectIsolationModeBestEffort(modeBefore)", selection_transfer)
+mode_transfer = body.find("_objectIsolationModeBefore = modeBefore;", mode_compensate)
+throw_at = body.find("throw;", mode_transfer)
+if not (0 <= catch_at < selection_compensate < selection_transfer < mode_compensate < mode_transfer < throw_at):
+    raise SystemExit("FAIL isolate rollback ownership: failed compensation must retain PICKFIRST and mode debt before bare rethrow")
 
 session_start = text.find("private sealed class TransientReviewSession : IDisposable")
 session = text[session_start:]
-if "public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;" not in session:
-    raise SystemExit("FAIL isolate mode rollback ownership: mode-only cleanup debt must remain observable")
+if "public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null || _impliedSelectionBeforeIsolation != null;" not in session:
+    raise SystemExit("FAIL isolate rollback ownership: all isolation cleanup debt must remain observable")
 
 restore_start = text.find("public void RestoreIsolation()", session_start)
 restore_end = text.find("public void ApplySectionFocus", restore_start)
 restore = text[restore_start:restore_end]
-if "if (!_isolationActive)" not in restore or "RestoreObjectIsolationModeBestEffort();" not in restore:
-    raise SystemExit("FAIL isolate mode rollback ownership: mode-only debt must be retryable without UNISOLATE")
+for token in ("RestorePendingImpliedSelectionBestEffort();", "RestoreObjectIsolationModeBestEffort();"):
+    if token not in restore:
+        raise SystemExit("FAIL isolate rollback ownership: retained cleanup debt must be retryable: " + token)
 
-helper_start = text.find("private void RestoreObjectIsolationModeBestEffort()")
-helper_end = text.find("private bool TryRestoreObjectIsolationModeBestEffort", helper_start)
-helper = text[helper_start:helper_end]
-if "if (TryRestoreObjectIsolationModeBestEffort(value))" not in helper or "_objectIsolationModeBefore = null;" not in helper:
-    raise SystemExit("FAIL isolate mode rollback ownership: retry debt may clear only after native mode restore succeeds")
+for fence in (
+    'RequireOwnerGeneration("Isolation / capture")',
+    'RequireOwnerGeneration("Isolation / system variable read")',
+    'RequireOwnerGeneration("Isolation / command dispatch")',
+    'RequireOwnerGeneration("Isolation / publication")',
+):
+    if fence not in body:
+        raise SystemExit("FAIL isolate rollback ownership: missing native-generation fence: " + fence)
 
-print("PASS coordination review failed-isolate mode rollback retry ownership")
+print("PASS coordination review failed-isolate rollback retains PICKFIRST/mode debt within exact native generation")

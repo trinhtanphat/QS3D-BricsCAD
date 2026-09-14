@@ -37,12 +37,12 @@ if apply_index < 0 or catch_index < 0 or publish_index < apply_index:
 
 catch_body = body[catch_index:]
 if not re.search(
-    r"if\s*\(\s*!TryRestoreSectionViewBestEffort\(viewBeforeSection\)\s*\)\s*"
+    r"if\s*\(\s*!TryRestoreSectionViewBestEffort\(viewBeforeSection\)\s*&&\s*!_generationAbandoned\s*\)\s*"
     r"_viewBeforeSection\s*=\s*viewBeforeSection\s*;",
     catch_body,
     re.S,
 ):
-    raise SystemExit("FAIL coordination section focus rollback: unconfirmed rollback must transfer prior snapshot into retry ownership")
+    raise SystemExit("FAIL coordination section focus rollback: unconfirmed same-generation rollback must transfer prior snapshot into retry ownership")
 if "throw;" not in catch_body:
     raise SystemExit("FAIL coordination section focus rollback: original native apply failure must remain primary")
 

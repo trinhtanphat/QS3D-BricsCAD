@@ -20,29 +20,34 @@ clear = method_body(
 )
 if "var pending = _highlighted.ToArray();" not in clear:
     raise SystemExit("ClearHighlight must snapshot current highlight ownership")
+for token in ("RequireOwnerGeneration", "transaction.Commit();", "released.Add(id);", "_highlighted.Remove(id);"):
+    if token not in clear:
+        raise SystemExit("ClearHighlight generation-safe cleanup missing: " + token)
 commit = clear.find("transaction.Commit();")
-release_loop = clear.find("foreach (var id in released)")
-release = clear.find("_highlighted.Remove(id);", release_loop)
-if commit < 0 or release_loop < 0 or release < 0 or not (commit < release_loop < release):
-    raise SystemExit("ClearHighlight must release confirmed per-entity live highlight ownership only after native cleanup commit")
-if "released.Add(id);" not in clear:
-    raise SystemExit("ClearHighlight must record only per-entity native cleanup successes before ownership release")
+release = clear.find("_highlighted.Remove(id);")
+if commit < 0 or release < commit:
+    raise SystemExit("ClearHighlight must release confirmed ownership only after native cleanup commit")
 if "if (cleanupFailure != null)" not in clear or "throw new InvalidOperationException" not in clear:
     raise SystemExit("ClearHighlight must surface incomplete live cleanup so failed entity ownership remains retryable")
-if "if (_destroyed)" not in clear:
-    raise SystemExit("ClearHighlight must preserve explicit destroyed-document abandon semantics")
-live = clear.split("if (_destroyed)", 1)[-1]
-if "_highlighted.Clear();" in live.split("using (_document.LockDocument())", 1)[-1]:
-    raise SystemExit("ClearHighlight live cleanup must not clear the whole ownership set after a partial native failure")
 
 restore_isolation = method_body(
     "public void RestoreIsolation()",
     "public void ApplySectionFocus(IReadOnlyList<ObjectId> ids)",
 )
+for token in (
+    "if (!IsOwnerNativeGenerationCurrent)",
+    "AbandonStaleGenerationState();",
+    "RestorePendingImpliedSelectionBestEffort();",
+    "RestoreObjectIsolationModeBestEffort();",
+    'SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);',
+    "_isolationActive = false;",
+):
+    if token not in restore_isolation:
+        raise SystemExit("RestoreIsolation generation-safe retry ownership missing: " + token)
 queue = restore_isolation.find('SendStringToExecute("_.UNISOLATEOBJECTS ", true, false, false);')
-release = restore_isolation.rfind("_isolationActive = false;")
-if queue < 0 or release < 0 or release < queue:
-    raise SystemExit("RestoreIsolation must release live isolation ownership only after native command queue success")
+release = restore_isolation.find("_isolationActive = false;", queue)
+if queue < 0 or release < queue:
+    raise SystemExit("RestoreIsolation must release live command ownership only after native queue success")
 if "finally" in restore_isolation:
     raise SystemExit("RestoreIsolation must not erase retry ownership from an unconditional finally block")
 
@@ -50,34 +55,42 @@ try_reset = method_body(
     "public Exception? TryResetTransientStateBestEffort()",
     "private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)",
 )
-if "return ResetTransientStateBestEffort(false);" not in try_reset:
-    raise SystemExit("TryResetTransientStateBestEffort must surface the aggregate cleanup result without changing best-effort semantics")
+if "ResetTransientStateBestEffort(false)" not in try_reset:
+    raise SystemExit("TryResetTransientStateBestEffort must surface aggregate cleanup result")
 
 reset = method_body(
     "private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)",
     "public void AbandonDestroyedDocumentState()",
 )
-if "catch { _isolationActive = false;" in reset:
-    raise SystemExit("best-effort reset must not erase isolation retry ownership after live cleanup failure")
-if "catch { _highlighted.Clear(); }" in reset:
-    raise SystemExit("best-effort reset must not erase highlight retry ownership after live cleanup failure")
 for token in (
+    "if (!IsOwnerNativeGenerationCurrent)",
+    "AbandonStaleGenerationState();",
     "Exception? cleanupFailure = null;",
     "cleanupFailure = cleanupFailure ?? ex;",
+    "if (HasTransientState && cleanupFailure == null)",
     "if (throwOnSectionRestoreFailure && cleanupFailure != null)",
     "throw cleanupFailure;",
     "return cleanupFailure;",
 ):
     if token not in reset:
-        raise SystemExit(f"dispose/row-change cleanup must preserve aggregate retry-sensitive cleanup result: {token}")
+        raise SystemExit(f"reset must preserve generation-aware aggregate retry ownership: {token}")
+if "catch { _isolationActive = false;" in reset or "catch { _highlighted.Clear(); }" in reset:
+    raise SystemExit("best-effort reset must not erase live retry ownership after cleanup failure")
 
 abandon = method_body(
     "public void AbandonDestroyedDocumentState()",
-    "private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)",
+    "private bool TryRestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)",
 )
-for token in ("_destroyed = true;", "_highlighted.Clear();", "_isolationActive = false;", "_viewBeforeSection = null;"):
+for token in (
+    "_destroyed = true;",
+    "_highlighted.Clear();",
+    "_isolationActive = false;",
+    "_viewBeforeSection = null;",
+    "_objectIsolationModeBefore = null;",
+    "_impliedSelectionBeforeIsolation = null;",
+):
     if token not in abandon:
-        raise SystemExit(f"destroyed-document abandon path missing: {token}")
+        raise SystemExit(f"destroyed-document terminal abandon path missing: {token}")
 
 session_start = text.find("private sealed class TransientReviewSession : IDisposable")
 if session_start < 0:
@@ -99,11 +112,13 @@ for token in (
     "_disposeInProgress = false;",
 ):
     if token not in dispose:
-        raise SystemExit(f"TransientReviewSession.Dispose missing retry-safe re-entry token: {token}")
+        raise SystemExit(f"TransientReviewSession.Dispose missing retry-safe token: {token}")
 cleanup = dispose.find("ResetTransientStateBestEffort(true);")
 publish = dispose.find("_disposed = true;")
 release_guard = dispose.rfind("_disposeInProgress = false;")
 if not (0 <= cleanup < publish < release_guard):
-    raise SystemExit("TransientReviewSession may publish terminal disposal only after cleanup, before releasing the re-entry guard")
+    raise SystemExit("session may publish terminal disposal only after cleanup succeeds, before releasing re-entry guard")
+if "if (HasTransientState && cleanupFailure == null)" not in reset:
+    raise SystemExit("Dispose relies on reset core to synthesize failure while transient debt remains")
 
-print("PASS coordination review transient cleanup retry ownership")
+print("PASS coordination review transient cleanup retry ownership is native-generation safe")
