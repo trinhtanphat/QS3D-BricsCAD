@@ -116,8 +116,17 @@ if floor_path.is_file():
             errors.append("Floor mutation guard must validate the bound read project before canonical mutation binding")
 
         active_body = floor_text[active_start:]
-        if "MdiActiveDocument" not in active_body or "ReferenceEquals" not in active_body:
-            errors.append("Floor active-DWG guard must compare its bound document to MdiActiveDocument")
+        safety_path = ROOT / "src/QS3D.BricsCAD.V25/UI/FloorLevelWindow.WrapperDriftSafety.cs"
+        safety_text = safety_path.read_text(encoding="utf-8") if safety_path.is_file() else ""
+        direct_active_guard = "MdiActiveDocument" in active_body and "ReferenceEquals" in active_body
+        delegated_generation_guard = (
+            "EnsureBoundDocumentGeneration(operation)" in active_body
+            and "MdiActiveDocument" in safety_text
+            and "ReferenceEquals(activeDocument, _document)" in safety_text
+            and "database.UnmanagedObject" in safety_text
+        )
+        if not (direct_active_guard or delegated_generation_guard):
+            errors.append("Floor active-DWG guard must prove its bound document/native generation before operation")
 
 curtain_hub = ROOT / "src/QS3D.BricsCAD.V25/CurtainWallHubCommands.cs"
 if not curtain_hub.is_file():
