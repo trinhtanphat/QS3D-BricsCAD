@@ -64,8 +64,14 @@ for token in ("RestorePendingImpliedSelectionBestEffort();", "RestoreObjectIsola
         errors.append("isolation cleanup must retry all retained compensation debt: " + token)
 
 reset = method("private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)", "public void AbandonDestroyedDocumentState()")
-if "if (!IsOwnerNativeGenerationCurrent)" not in reset or "AbandonStaleGenerationState();" not in reset:
-    errors.append("cleanup retry must abandon generation-A ownership only for actual native-generation drift")
+for token in (
+    "if (!IsOwnerNativeGenerationCurrent)",
+    "AbandonStaleGenerationState();",
+    "if (HasTransientState && cleanupFailure == null)",
+    "cleanup remains pending",
+):
+    if token not in reset:
+        errors.append("cleanup/reset ownership contract missing: " + token)
 
 restore_selection = method("private bool TryRestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)", "private void RestorePendingImpliedSelectionBestEffort()")
 for token in ("IsOwnerNativeGenerationCurrent", "IsOwnerGenerationActive"):
