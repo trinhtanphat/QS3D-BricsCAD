@@ -113,9 +113,9 @@ namespace QS3D.Core.BenchmarkParity
         {
             if (payload.Length < 9 ||
                 payload[0] != (byte)'%' || payload[1] != (byte)'P' || payload[2] != (byte)'D' || payload[3] != (byte)'F' || payload[4] != (byte)'-' ||
-                !IsAsciiDigit(payload[5]) || payload[6] != (byte)'.' || !IsAsciiDigit(payload[7]) ||
+                !IsSupportedPdfVersion(payload[5], payload[7]) || payload[6] != (byte)'.' ||
                 !IsPdfLineTerminator(payload[8]))
-                throw new InvalidOperationException("PDF payload header is invalid or not terminated by an end-of-line marker.");
+                throw new InvalidOperationException("PDF payload header is invalid, unsupported, or not terminated by an end-of-line marker.");
 
             var end = payload.Length - 1;
             while (end >= 0 && IsPdfWhitespace(payload[end])) end--;
@@ -130,9 +130,10 @@ namespace QS3D.Core.BenchmarkParity
             }
         }
 
-        private static bool IsAsciiDigit(byte value)
+        private static bool IsSupportedPdfVersion(byte major, byte minor)
         {
-            return value >= (byte)'0' && value <= (byte)'9';
+            return (major == (byte)'1' && minor >= (byte)'0' && minor <= (byte)'7') ||
+                (major == (byte)'2' && minor == (byte)'0');
         }
 
         private static bool IsPdfLineTerminator(byte value)
