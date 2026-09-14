@@ -73,12 +73,29 @@ persistence_end = state_start
 if persistence_start < 0 or persistence_end <= persistence_start:
     fail("element persistence checkpoint state boundary was not found")
 persistence_state = source[persistence_start:persistence_end]
-if "_semanticState = ElementSemanticState.Capture(owner);" not in persistence_state:
+semantic_capture_tokens = (
+    ": this(owner, dirty, updatedUtc, ElementSemanticState.Capture(owner))",
+    "_semanticState = ElementSemanticState.Capture(owner);",
+)
+if not any(token in persistence_state for token in semantic_capture_tokens):
     fail("element checkpoint does not capture semantic generation alongside persistence state")
 if "element.Dirty == Dirty" not in persistence_state or "element.UpdatedUtc == UpdatedUtc" not in persistence_state:
     fail("existing element persistence-state matching contract was lost")
 if "SemanticMatches(element)" not in persistence_state:
     fail("checkpoint Matches no longer includes captured semantic generation")
+
+rebind_start = persistence_state.find("public ElementPersistenceState RebindSemanticState(ProjectElement element)")
+rebind_end = persistence_state.find("public ProjectElement Owner", rebind_start)
+if rebind_start < 0 or rebind_end <= rebind_start:
+    fail("element semantic-state rebind boundary was not found")
+rebind = persistence_state[rebind_start:rebind_end]
+required_rebind_tokens = (
+    "ReferenceEquals(element, Owner)",
+    "new ElementPersistenceState(Owner, Dirty, UpdatedUtc, ElementSemanticState.Capture(element))",
+)
+for token in required_rebind_tokens:
+    if token not in rebind:
+        fail("element semantic-state rebind no longer preserves owner/persistence state: missing " + token)
 
 required_smoke_tokens = (
     'SetProperty("WidthM", "1.25")',
