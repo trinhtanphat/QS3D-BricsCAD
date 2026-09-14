@@ -198,6 +198,8 @@ namespace QS3D.Core.BenchmarkParity
             if (payload[offset] != 0 || payload[offset + 1] != 0 || payload[offset + 2] != 0 || payload[offset + 3] != 0 ||
                 payload[offset + 4] != (byte)'I' || payload[offset + 5] != (byte)'E' || payload[offset + 6] != (byte)'N' || payload[offset + 7] != (byte)'D')
                 throw new InvalidOperationException("PNG payload is truncated or missing the terminal IEND chunk.");
+
+            ValidatePngChunkCrc(payload, offset + 4, 0, "IEND");
         }
 
         private static bool TryJpeg(byte[] payload, out int width, out int height)
