@@ -1,3 +1,5 @@
+import os
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -123,4 +125,80 @@ post_open = parts[1]
 if "Get-Content -LiteralPath $UpdateManifestPath" in post_open or "[IO.File]::Open($UpdateManifestPath" in post_open:
     raise SystemExit("ERROR: update manifest is reopened by pathname after held-generation admission")
 
-print("V25 commercial draft update-manifest semantic identity preflight passed")
+# Signed payload generations must remain held from extraction through Authenticode
+# verification. Merely retaining their path lets a same-name generation replace the
+# admitted bytes between extraction/length validation and verifier reopen.
+for token, message in (
+    ("$heldPayloads = New-Object System.Collections.Generic.List[object]", "signed payload generations are not retained"),
+    ("[IO.FileAccess]::ReadWrite, [IO.FileShare]::Read", "extracted payload handle does not deny writers/delete while permitting verification readers"),
+    ("$output.Flush($true)", "extracted payload generation is not durably flushed before verification"),
+    ("$heldPayloads.Add([pscustomobject]@{ Stream = $output; Path = $destinationFull; Length = [int64]$entry.Length })", "extracted payload handle ownership is not transferred to the held set"),
+    ("$extracted.Add($destinationFull)", "held payload path is not passed to Authenticode verification"),
+    ("foreach ($heldPayload in $heldPayloads)", "held payload generations are not deterministically disposed"),
+    ("$heldPayload.Stream.Dispose()", "held payload stream disposal is missing"),
+):
+    require(source, token, message)
+
+require_order(
+    source,
+    "$heldPayloads = New-Object System.Collections.Generic.List[object]",
+    "& $verifyScriptBlock -Path $extracted.ToArray() -ExpectedThumbprint $ExpectedThumbprint",
+    "payload handles must be acquired before Authenticode verification",
+)
+require_order(
+    source,
+    "& $verifyScriptBlock -Path $extracted.ToArray() -ExpectedThumbprint $ExpectedThumbprint",
+    "foreach ($heldPayload in $heldPayloads)",
+    "payload handles must remain alive until Authenticode verification completes",
+)
+
+# Hosted Windows behavioral proof for the sharing contract used by the production
+# extraction handles: a cooperative read reopen is allowed, while delete and write
+# replacement are denied for the exact held generation.
+if os.name == "nt":
+    smoke = r'''
+$ErrorActionPreference = 'Stop'
+$root = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v25-payload-hold-' + [Guid]::NewGuid().ToString('N'))
+[IO.Directory]::CreateDirectory($root) | Out-Null
+$path = Join-Path $root 'payload.bin'
+[IO.File]::WriteAllBytes($path, [byte[]](1,2,3,4))
+$held = $null
+$reader = $null
+try {
+    $held = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)
+
+    $deleteBlocked = $false
+    try { [IO.File]::Delete($path) } catch { $deleteBlocked = $true }
+    if (-not $deleteBlocked) { throw 'held payload generation allowed delete/recreate' }
+
+    $writeBlocked = $false
+    try {
+        $writer = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+        $writer.Dispose()
+    }
+    catch { $writeBlocked = $true }
+    if (-not $writeBlocked) { throw 'held payload generation allowed a second writer' }
+
+    $reader = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    if ($reader.Length -ne 4) { throw 'cooperative verification reader did not observe held payload bytes' }
+}
+finally {
+    if ($reader) { $reader.Dispose() }
+    if ($held) { $held.Dispose() }
+    if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+}
+'''
+    completed = subprocess.run(
+        ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", smoke],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="strict",
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip()
+        raise SystemExit(f"ERROR: V25 held signed-payload behavioral probe failed: {detail}")
+
+print("V25 commercial draft update-manifest semantic identity and held signed-payload preflight passed")
