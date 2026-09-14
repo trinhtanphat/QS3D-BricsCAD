@@ -192,9 +192,18 @@ namespace QS3D.BricsCAD.V25
             public bool Matches(ProjectState project) =>
                 CoreMatches(project) && _persistence.Matches(project);
 
-            public void Restore(ProjectState project)
+            public ProjectPersistenceCheckpoint.TransitionRestoreGuard PrepareTransitionRestore(ProjectState project)
             {
                 if (project == null) throw new ArgumentNullException(nameof(project));
+                if (!Matches(project))
+                    throw new InvalidOperationException("Curtain Undo transition source no longer matches the canonical project.");
+                return _persistence.PrepareTransitionRestore(project);
+            }
+
+            public void Restore(ProjectState project, ProjectPersistenceCheckpoint.TransitionRestoreGuard transitionGuard)
+            {
+                if (project == null) throw new ArgumentNullException(nameof(project));
+                if (transitionGuard == null) throw new ArgumentNullException(nameof(transitionGuard));
                 var targets = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
                 foreach (var id in _owners.Keys)
                 {
@@ -206,7 +215,7 @@ namespace QS3D.BricsCAD.V25
 
                 foreach (var pair in _owners)
                     pair.Value.Restore(targets[pair.Key]);
-                _persistence.Restore(project);
+                _persistence.RestoreTransition(project, transitionGuard);
             }
         }
 
@@ -618,16 +627,17 @@ namespace QS3D.BricsCAD.V25
                     "Curtain native Undo/Redo was refused because generated owner or project persistence state changed outside the tracked Curtain history. Reload and reconcile before further mutation.");
 
             var target = undo ? transition.Before : transition.After;
+            var transitionGuard = currentExpected.PrepareTransitionRestore(project);
             var restoreRollback = OwnerStateSnapshot.Capture(project, target.OwnerIds);
             try
             {
-                target.Restore(project);
+                target.Restore(project, transitionGuard);
                 if (!target.Matches(project))
                     throw new InvalidOperationException("Restored Curtain semantic owner state does not match its native revision.");
             }
             catch (Exception restoreError)
             {
-                try { restoreRollback.Restore(project); }
+                try { restoreRollback.Restore(project, transitionGuard); }
                 catch (Exception rollbackError)
                 {
                     throw MarkDesynchronized(history,
