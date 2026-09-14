@@ -171,6 +171,16 @@ namespace QS3D.BricsCAD.V25
                     ProjectPersistenceCheckpoint.Capture(project, owners.Keys));
             }
 
+            public OwnerStateSnapshot RebindPersistenceSemanticState(ProjectState project)
+            {
+                if (project == null) throw new ArgumentNullException(nameof(project));
+                if (!CoreMatches(project))
+                    throw new InvalidOperationException("Curtain Undo owner state changed before persistence semantic rebind.");
+                return new OwnerStateSnapshot(
+                    new Dictionary<string, OwnerState>(_owners, StringComparer.OrdinalIgnoreCase),
+                    _persistence.RebindSemanticState(project));
+            }
+
             public bool HasSameOwnerSet(OwnerStateSnapshot other)
             {
                 if (other == null || other._owners.Count != _owners.Count) return false;
