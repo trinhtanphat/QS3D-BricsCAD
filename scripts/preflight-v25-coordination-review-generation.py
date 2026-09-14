@@ -19,16 +19,23 @@ def method(signature: str, next_signature: str) -> str:
     return text[start:end] if start >= 0 and end > start else ""
 
 
-# Transient review state is native-generation-bound: ObjectIds, highlight/isolation,
-# implied selection and view snapshots must never cross a same-wrapper DB replacement.
 for token, message in (
     ("private readonly IntPtr _nativeDatabaseIdentity;", "review session must capture native database identity"),
     ("_nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);", "review session constructor must capture native database identity"),
-    ("private bool IsOwnerGenerationCurrent", "review session needs an exact managed/native generation predicate"),
+    ("public bool IsOwnerNativeGenerationCurrent", "review session needs a native-generation predicate independent of MDI activity"),
+    ("public bool IsOwnerGenerationActive", "review session needs a separate active-owner predicate"),
     ("document.Database.UnmanagedObject == _nativeDatabaseIdentity", "generation predicate must compare exact native database identity"),
     ("private void AbandonStaleGenerationState()", "stale generation state needs an abandon-without-native-write path"),
 ):
     require(token, message)
+
+native_predicate = method("public bool IsOwnerNativeGenerationCurrent", "public bool IsOwnerGenerationActive")
+if "MdiActiveDocument" in native_predicate:
+    errors.append("native generation freshness must not depend on MDI activity")
+active_predicate = method("public bool IsOwnerGenerationActive", "private static IntPtr GetNativeDatabaseIdentity")
+for token in ("IsOwnerNativeGenerationCurrent", "MdiActiveDocument"):
+    if token not in active_predicate:
+        errors.append("active-owner predicate must combine native generation and MDI activity: " + token)
 
 for signature, next_signature, action in (
     ("public void Highlight(IReadOnlyList<ObjectId> ids)", "private IReadOnlyList<ObjectId> UnhighlightAttemptBestEffort", "highlight"),
@@ -43,25 +50,29 @@ for signature, next_signature, action in (
         errors.append(f"{action} must generation-fence before native state access")
 
 reset = method("private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)", "public void AbandonDestroyedDocumentState()")
-if "if (!IsOwnerGenerationCurrent)" not in reset or "AbandonStaleGenerationState();" not in reset:
-    errors.append("cleanup retry must abandon generation-A ownership instead of restoring into generation B")
+if "if (!IsOwnerNativeGenerationCurrent)" not in reset or "AbandonStaleGenerationState();" not in reset:
+    errors.append("cleanup retry must abandon generation-A ownership only for actual native-generation drift")
 
 restore_selection = method("private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)", "private void RestoreObjectIsolationModeBestEffort()")
-if "IsOwnerGenerationCurrent" not in restore_selection:
-    errors.append("implied selection compensation must not write into a successor native generation")
-
+if "IsOwnerGenerationActive" not in restore_selection:
+    errors.append("implied selection compensation requires both current generation and active owner")
 restore_mode = method("private bool TryRestoreObjectIsolationModeBestEffort(object? modeBefore)", "public void Dispose()")
-if "IsOwnerGenerationCurrent" not in restore_mode:
-    errors.append("OBJECTISOLATIONMODE restore must be generation-bound")
+if "IsOwnerGenerationActive" not in restore_mode:
+    errors.append("OBJECTISOLATIONMODE restore requires both current generation and active owner")
 
-# Controller admission/status/cleanup decisions must treat same-wrapper native drift as
-# stale ownership, not as an active owner merely because MDI reference equality holds.
 require("private bool IsOwnerDocumentGenerationActive", "controller must expose generation-aware active-owner predicate")
-for legacy in (
-    "private bool IsOwnerDocumentActive =>\n                ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document);",
-):
-    if legacy in text:
-        errors.append("controller must not use managed-wrapper-only owner activity")
+abandon = method("private void AbandonStaleGenerationIfNeeded()", "public void Attach()")
+if "IsOwnerNativeGenerationCurrent" not in abandon or "IsOwnerGenerationActive" in abandon:
+    errors.append("controller must abandon ownership only on native-generation drift, never merely because another MDI document is active")
+
+activated = method("private void OnDocumentActivated(object sender, DocumentCollectionEventArgs e)", "private void OnDocumentToBeDestroyed")
+for token in ("if (!_session.IsOwnerNativeGenerationCurrent)", "AbandonStaleGenerationIfNeeded();", "_cleanupBarrier = _session.HasTransientState;"):
+    if token not in activated:
+        errors.append("DocumentActivated must distinguish successor generation from ordinary foreign MDI activation: " + token)
+
+closing = method("private void OnWindowClosing(object sender, CancelEventArgs e)", "private void OnWindowClosed")
+if "if (!_session.IsOwnerNativeGenerationCurrent)" not in closing or "e.Cancel = true;" not in closing:
+    errors.append("window close must abandon only stale native generation but retain same-generation cleanup debt while owner MDI is inactive")
 
 if errors:
     print("ERROR: V25 Coordination review generation preflight failed:", file=sys.stderr)
