@@ -95,7 +95,7 @@ namespace QS3D.BricsCAD.V25
                 bool ok;
                 string message;
                 try { ok = Install(out message); }
-                catch (Exception ex) { ok = false; message = "Không cài được Cloudflare Tunnel: " + ex.Message; }
+                catch (Exception ex) { ok = false; message = "Không cài được Cloudflare Tunnel: " + McpPublicTextSanitizer.Sanitize(ex.ToString()); }
                 finally
                 {
                     lock (Sync)
@@ -646,7 +646,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                error = "không đọc được signer certificate: " + ex.Message;
+                error = "không đọc được signer certificate: " + McpPublicTextSanitizer.Sanitize(ex.ToString());
                 return false;
             }
             return true;
