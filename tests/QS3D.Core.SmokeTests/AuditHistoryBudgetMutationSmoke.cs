@@ -146,16 +146,26 @@ namespace QS3D.Core.SmokeTests
             var beforeUpdatedUtc = project.UpdatedUtc;
 
             Throws<InvalidOperationException>(() => project.AuditEvents.RemoveAt(1));
-            Equal(2, project.AuditEvents.Count, "corrupt removal count");
-            Same(admitted, project.AuditEvents[0], "corrupt removal admitted reference");
-            Same(injected, project.AuditEvents[1], "corrupt removal injected reference");
-            Equal(beforeVersion, project.ChangeVersion, "corrupt removal revision");
-            Equal(beforeUpdatedUtc, project.UpdatedUtc, "corrupt removal timestamp");
+            AssertCorruptState(project, admitted, injected, beforeVersion, beforeUpdatedUtc, "corrupt removal");
 
             Throws<InvalidOperationException>(() => project.AuditEvents.Add(Event("c")));
-            Equal(2, project.AuditEvents.Count, "corrupt add count");
-            Equal(beforeVersion, project.ChangeVersion, "corrupt add revision");
-            Equal(beforeUpdatedUtc, project.UpdatedUtc, "corrupt add timestamp");
+            AssertCorruptState(project, admitted, injected, beforeVersion, beforeUpdatedUtc, "corrupt add");
+
+            Throws<InvalidOperationException>(() => project.AuditEvents.Clear());
+            AssertCorruptState(project, admitted, injected, beforeVersion, beforeUpdatedUtc, "corrupt clear");
+
+            Throws<InvalidOperationException>(() => admitted.Action = "aa");
+            Equal("a", admitted.Action, "corrupt owned mutation action");
+            AssertCorruptState(project, admitted, injected, beforeVersion, beforeUpdatedUtc, "corrupt owned mutation");
+        }
+
+        private static void AssertCorruptState(ProjectState project, AuditEvent admitted, AuditEvent injected, long version, DateTime updatedUtc, string label)
+        {
+            Equal(2, project.AuditEvents.Count, label + " count");
+            Same(admitted, project.AuditEvents[0], label + " admitted reference");
+            Same(injected, project.AuditEvents[1], label + " injected reference");
+            Equal(version, project.ChangeVersion, label + " revision");
+            Equal(updatedUtc, project.UpdatedUtc, label + " timestamp");
         }
 
         private static void InjectWithoutAccounting(ProjectState project, AuditEvent item)
