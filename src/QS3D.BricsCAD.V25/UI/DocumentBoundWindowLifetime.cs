@@ -33,13 +33,15 @@ namespace QS3D.BricsCAD.V25.UI
                 try
                 {
                     var registration = Registrations.GetValue(window, key => new Registration(key, document));
+                    var wasAttached = registration.IsAttached;
                     try
                     {
                         registration.Attach(document);
                     }
                     catch
                     {
-                        if (Registrations.TryGetValue(window, out var currentRegistration) &&
+                        if (!wasAttached &&
+                            Registrations.TryGetValue(window, out var currentRegistration) &&
                             ReferenceEquals(currentRegistration, registration))
                         {
                             Registrations.Remove(window);
@@ -68,6 +70,8 @@ namespace QS3D.BricsCAD.V25.UI
             private int _windowClosedDuringQuiescence;
             private string _projectId = string.Empty;
             private string _drawingFingerprint = string.Empty;
+
+            public bool IsAttached => _attached;
 
             public Registration(Window window, Document document)
             {
