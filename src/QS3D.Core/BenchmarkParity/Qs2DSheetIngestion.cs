@@ -241,6 +241,26 @@ namespace QS3D.Core.BenchmarkParity
             var expectedLength = 8 + (3 * componentCount);
             if (length != expectedLength)
                 throw new InvalidOperationException("JPEG frame length does not match its component count.");
+
+            var seenComponentIds = new bool[256];
+            for (var componentIndex = 0; componentIndex < componentCount; componentIndex++)
+            {
+                var descriptorOffset = offset + 8 + (3 * componentIndex);
+                var componentId = payload[descriptorOffset];
+                if (componentId == 0 || seenComponentIds[componentId])
+                    throw new InvalidOperationException("JPEG frame component identifiers must be non-zero and unique.");
+                seenComponentIds[componentId] = true;
+
+                var samplingFactors = payload[descriptorOffset + 1];
+                var horizontalSampling = (samplingFactors >> 4) & 0x0F;
+                var verticalSampling = samplingFactors & 0x0F;
+                if (horizontalSampling < 1 || horizontalSampling > 4 || verticalSampling < 1 || verticalSampling > 4)
+                    throw new InvalidOperationException("JPEG frame sampling factors must be between 1 and 4.");
+
+                var quantizationTable = payload[descriptorOffset + 2];
+                if (quantizationTable > 3)
+                    throw new InvalidOperationException("JPEG frame quantization-table selector must be between 0 and 3.");
+            }
         }
 
         private static void ValidateJpegTerminator(byte[] payload)
