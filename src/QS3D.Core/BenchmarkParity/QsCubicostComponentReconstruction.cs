@@ -73,7 +73,7 @@ namespace QS3D.Core.BenchmarkParity
             foreach (var component in componentSnapshot)
             {
                 ComponentReviewDecision review;
-                if (!reviewById.TryGetValue(component.Id, out review!))
+                if (!reviewById.TryGetValue(component.Id, out review))
                     throw new InvalidOperationException("Reconstructed component has no review decision: " + component.Id + ".");
 
                 ValidateEvidence(component);
