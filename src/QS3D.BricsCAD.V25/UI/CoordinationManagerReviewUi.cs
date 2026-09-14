@@ -1050,6 +1050,8 @@ namespace QS3D.BricsCAD.V25.UI
                     cleanupFailure = cleanupFailure ?? ex;
                 }
 
+                if (HasTransientState && cleanupFailure == null)
+                    cleanupFailure = new InvalidOperationException("Transient review cleanup remains pending after best-effort restore.");
                 if (throwOnSectionRestoreFailure && cleanupFailure != null)
                     throw cleanupFailure;
                 return cleanupFailure;
