@@ -32,6 +32,10 @@ def method_block(source: str, signature: str) -> str:
     raise AssertionError(f"{signature} body is unterminated.")
 
 
+def without_line_comments(source: str) -> str:
+    return "\n".join(line.split("//", 1)[0] for line in source.splitlines())
+
+
 require(NATIVE_SOURCE.exists(), "H.3 shared native lifecycle coordinator is missing.")
 source = SOURCE.read_text(encoding="utf-8")
 native = NATIVE_SOURCE.read_text(encoding="utf-8")
@@ -41,8 +45,8 @@ require("private readonly object _documentAccessGate = new object();" in source,
         "Document-bound modeless lifetime must serialize live Document access against teardown.")
 require("private readonly Document _document;" not in source,
         "WPF modeless affinity must not retain the managed Document wrapper used by the old crash path.")
-require("private readonly Document _lifecycleDocument;" in source,
-        "A lifecycle-only wrapper remains available only to shared lifecycle ownership and identity comparison.")
+require("private Document _lifecycleDocument;" in source,
+        "The lifecycle wrapper must be movable after a proven same-drawing wrapper replacement.")
 require("private int _hostQuitStarted;" not in source,
         "Host quit state must be plugin-global, not copied into every modeless registration.")
 require("private IDisposable? _nativeLifecycleSubscription;" in source,
@@ -50,6 +54,10 @@ require("private IDisposable? _nativeLifecycleSubscription;" in source,
 
 attach = method_block(source, "public void Attach(Document document)")
 for marker in (
+    "if (_attached)",
+    "MatchesBoundDocumentAffinity(document)",
+    "DocumentBoundNativeLifecycleCoordinator.Rebind(",
+    "_lifecycleDocument = document;",
     "ModelessHostQuiescenceCoordinator.EnsureInitialized();",
     "BindProjectAffinityIfPresent();",
     "_nativeLifecycleSubscription = DocumentBoundNativeLifecycleCoordinator.Register(",
@@ -60,6 +68,10 @@ for marker in (
     "_window.Activated += OnWindowActivated;",
 ):
     require(marker in attach, f"Attach is missing disposal-safe lifecycle marker: {marker}")
+require(
+    attach.index("DocumentBoundNativeLifecycleCoordinator.Rebind(") < attach.index("_lifecycleDocument = document;"),
+    "Replacement wrapper ownership must publish only after shared lifecycle rebind succeeds.",
+)
 require(
     attach.index("ModelessHostQuiescenceCoordinator.EnsureInitialized();")
     < attach.index("BindProjectAffinityIfPresent();")
@@ -92,9 +104,17 @@ for marker in (
     "foreach (Document candidate in BcadApplication.DocumentManager)",
     "candidate.IsDisposed",
     "MatchesNativeDatabase(candidate)",
+    "MatchesBoundDocumentAffinity(candidate)",
+    "DocumentBoundNativeLifecycleCoordinator.Rebind(",
+    "_lifecycleDocument = candidate;",
     "document = candidate;",
 ):
     require(marker in resolve, f"Live managed-wrapper resolution is missing: {marker}")
+rebind_index = resolve.index("DocumentBoundNativeLifecycleCoordinator.Rebind(")
+publication_index = resolve.index("_lifecycleDocument = candidate;", rebind_index)
+output_index = resolve.index("document = candidate;", publication_index + len("_lifecycleDocument = candidate;"))
+require(rebind_index < publication_index < output_index,
+        "Live wrapper resolution must rebind before publishing ownership and output.")
 require("_lifecycleDocument." not in resolve,
         "Live document resolution may compare lifecycle-wrapper identity but must never dereference the retained wrapper.")
 require("ProjectContextCoordinator.TryGetReadOnly(_lifecycleDocument" not in resolve,
@@ -167,6 +187,7 @@ require("DetachNativeLifecycleSubscription" not in begin_close,
         "Managed BeginDocumentClose must not tear down shared native ownership from a native callback.")
 
 teardown = method_block(source, "private void OnDocumentToBeDestroyed(object sender, DocumentCollectionEventArgs e)")
+teardown_code = without_line_comments(teardown)
 for marker in (
     barrier,
     "var deferForFinalDocument = !HasAnotherLiveDocument();",
@@ -175,20 +196,20 @@ for marker in (
     "Interlocked.Exchange(ref _invalidated, 1) != 0",
     "TryCloseWindow(deferForFinalDocument);",
 ):
-    require(marker in teardown, f"DocumentToBeDestroyed barrier is missing: {marker}")
-require("e.Document" not in teardown and "MatchesNativeDatabase(" not in teardown,
+    require(marker in teardown_code, f"DocumentToBeDestroyed barrier is missing: {marker}")
+require("e.Document" not in teardown_code and "MatchesNativeDatabase(" not in teardown_code,
         "DocumentToBeDestroyed must rely on coordinator-owned affinity without reopening the event Document.")
 require(
-    teardown.index(barrier)
-    < teardown.index("var deferForFinalDocument = !HasAnotherLiveDocument();")
-    < teardown.index("lock (_documentAccessGate)")
-    < teardown.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
-    < teardown.index("TryCloseWindow(deferForFinalDocument);"),
+    teardown_code.index(barrier)
+    < teardown_code.index("var deferForFinalDocument = !HasAnotherLiveDocument();")
+    < teardown_code.index("lock (_documentAccessGate)")
+    < teardown_code.index("Interlocked.Exchange(ref _invalidated, 1) != 0")
+    < teardown_code.index("TryCloseWindow(deferForFinalDocument);"),
     "DocumentToBeDestroyed must cross global quiescence before DocumentManager access and preserve ordinary close behavior.",
 )
-require("_lifecycleDocument." not in teardown,
+require("_lifecycleDocument." not in teardown_code,
         "Native destruction fallback must never touch the retained lifecycle wrapper.")
-require("DetachNativeLifecycleSubscription" not in teardown,
+require("DetachNativeLifecycleSubscription" not in teardown_code,
         "Managed destruction fallback must leave native ownership to the shared coordinator.")
 
 safe_detach = method_block(source, "private void DetachDocumentLifecycleHandlersIfSafe()")
@@ -230,4 +251,4 @@ for forbidden in (
     require(forbidden not in detach,
             f"Per-window Detach must not release native reactors directly: {forbidden}")
 
-print("[OK] Modeless affinity resolves a live wrapper under the document-access barrier and consumes shared native lifecycle ownership without stale-wrapper dereference.")
+print("[OK] Modeless affinity resolves a live wrapper under the document-access barrier, rebinds before publication, and consumes shared native lifecycle ownership without stale-wrapper dereference.")
