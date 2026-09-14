@@ -82,11 +82,11 @@ foreach ($HostMajor in @(25,26)) {
                     $UiDriver -cne $mode.UiDriver -or $PauseForOperator -ne $mode.Pause -or -not $ConfirmDisposableCopy) {
                     throw 'FAIL: wrapper changed runner mode or disposable authorization.'
                 }
-                $expectedHash = if ($HostMajor -eq 25) { 'e27d645b88af709369ac8c04b96fff43b8c688496b8908694825b7491efc2633' }
-                    else { 'a2e358d3aa5c661249f4df00631506c3773efe7e8e26f47a8187b4b600820ec2' }
+                $expectedHash = if ($HostMajor -eq 25) { '530f76d16c569304f175db40a67aed889d69b4d592d0e2a6040552d9be013e3d' }
+                    else { 'c2bdf8dbc5dd32d948976d4986f305031dcf6c7394b1d5eaedd5f6412a336451' }
                 $expectedTimeout = if ($mode.UiDriver -ceq 'OBSERVED_CLICK_V2') { 3600 } else { 600 }
                 $expectedFramework = if ($HostMajor -eq 25) { 'net48' } else { 'net8.0-windows' }
-                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne 'd5e5e3851125b279bc6807074a34f8de2700cef5' -or
+                if ($PackageSha256 -cne $expectedHash -or $ProductSourceSha -cne '25357ba9b42808dbbfd05ab5138c8772e8f123e1' -or
                     $ProductDir -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor" -or
                     $PackageZip -cne "C:\host-free-package\QS3D-BricsCAD-V$HostMajor.zip" -or
                     $ProbeDll -cne "C:\host-free-harness\tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$expectedFramework\QS3D.LocalQualification.V$HostMajor.dll" -or
@@ -123,7 +123,7 @@ function New-NativePredecessor {
     [pscustomobject]@{
         Receipt = [pscustomobject]@{
             schema='QS3D_LOCAL022_RECEIPT_V1'; run_id=('a' * 32); status='LOCAL_PASS_BOUNDED'
-            product_source_sha='d5e5e3851125b279bc6807074a34f8de2700cef5'; phases_verified=3
+            product_source_sha='25357ba9b42808dbbfd05ab5138c8772e8f123e1'; phases_verified=3
             interactive_ui_executed=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
             private_cleanup_verified=$true; protected_state_unchanged=$true
             profile_cleanup=[pscustomobject]@{
@@ -133,8 +133,8 @@ function New-NativePredecessor {
         }
         Allocation = [pscustomobject]@{
             schema='QS3D_LOCAL022_ALLOCATION_V1'; run_id=('a' * 32); host_version='25.2.10'
-            product_source_sha='d5e5e3851125b279bc6807074a34f8de2700cef5'
-            package_sha256='e27d645b88af709369ac8c04b96fff43b8c688496b8908694825b7491efc2633'
+            product_source_sha='25357ba9b42808dbbfd05ab5138c8772e8f123e1'
+            package_sha256='530f76d16c569304f175db40a67aed889d69b4d592d0e2a6040552d9be013e3d'
             interactive_ui=$false; ui_driver='NATIVE_V1'; operator_wait_policy='WALL_CLOCK_V1'
         }
         Restoration = [pscustomobject]@{ restored=$true }
@@ -143,8 +143,8 @@ function New-NativePredecessor {
 function Invoke-PredecessorGate($Fixture, [bool]$Native=$true) {
     $HostMajor=26; $NativeApi=$Native; $UiDriver='NATIVE_V1'; $operatorWaitPolicy='WALL_CLOCK_V1'; $QuantityUi=$false
     $PrecedingV25Receipt='C:\host-free-receipts\native-v25\receipt.json'; $V26ProvenancePath='C:\host-free-provenance.json'
-    $source='d5e5e3851125b279bc6807074a34f8de2700cef5'
-    $v25PackageSha256='e27d645b88af709369ac8c04b96fff43b8c688496b8908694825b7491efc2633'
+    $source='25357ba9b42808dbbfd05ab5138c8772e8f123e1'
+    $v25PackageSha256='530f76d16c569304f175db40a67aed889d69b4d592d0e2a6040552d9be013e3d'
     $script:phaseAdmissionCalled=$false
     function Assert-Local022NativeV25Phases($RunnerPath,$EvidenceRoot,$ExpectedRunId) {
         if ((Split-Path $RunnerPath -Leaf) -cne 'test-bricscad-v25-single-footing.ps1' -or
@@ -256,4 +256,39 @@ foreach($mutation in @('missing','false','string','coverage','runid','failed','v
     try { Test-ActualPhases $mutation } catch { $rejected=$true }
     if(-not $rejected) { throw "FAIL: native phase validator accepted $mutation" }
 }
+# HOST-FREE CLOUDFLARE MISSING-STATE regression: production semantics treat a
+# missing Cloudflare autostart flag as disabled. The wrapper must admit that
+# pre-state and still fail closed if the flag appears/disappears/changes later.
+$cloudflareStateHelper=$ast.Find({ param($node)
+    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-Local022CloudflarePauseState'
+},$true)
+$cloudflareUnchangedHelper=$ast.Find({ param($node)
+    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Assert-Local022CloudflarePauseStateUnchanged'
+},$true)
+if($null -eq $cloudflareStateHelper -or $null -eq $cloudflareUnchangedHelper) { throw 'FAIL: Cloudflare missing-state helpers are unavailable.' }
+. ([scriptblock]::Create($cloudflareStateHelper.Extent.Text))
+. ([scriptblock]::Create($cloudflareUnchangedHelper.Extent.Text))
+$tempRoot=Join-Path ([IO.Path]::GetTempPath()) ('qs3d-local022-cloudflare-'+[Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tempRoot | Out-Null
+try {
+    $flag=Join-Path $tempRoot 'autostart.txt'
+    $missing=Get-Local022CloudflarePauseState $flag
+    if($missing.Exists -or -not $missing.Paused) { throw 'FAIL: missing Cloudflare flag was not admitted as disabled.' }
+    Assert-Local022CloudflarePauseStateUnchanged $missing $flag
+    [IO.File]::WriteAllText($flag,'0',[Text.UTF8Encoding]::new($false))
+    $zero=Get-Local022CloudflarePauseState $flag
+    if(-not $zero.Exists -or -not $zero.Paused) { throw 'FAIL: literal Cloudflare zero was not admitted as disabled.' }
+    Assert-Local022CloudflarePauseStateUnchanged $zero $flag
+    [IO.File]::WriteAllText($flag,'1',[Text.UTF8Encoding]::new($false))
+    $rejected=$false
+    try { $null=Get-Local022CloudflarePauseState $flag } catch { if($_.Exception.Message -eq 'Cloudflare is not paused.'){$rejected=$true}else{throw} }
+    if(-not $rejected) { throw 'FAIL: enabled Cloudflare autostart was admitted.' }
+    [IO.File]::WriteAllText($flag,'0',[Text.UTF8Encoding]::new($false))
+    $zero=Get-Local022CloudflarePauseState $flag
+    Remove-Item -LiteralPath $flag -Force
+    $rejected=$false
+    try { Assert-Local022CloudflarePauseStateUnchanged $zero $flag } catch { $rejected=$true }
+    if(-not $rejected) { throw 'FAIL: Cloudflare flag disappearance after admission was ignored.' }
+}
+finally { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
 Write-Output 'PASS: actual wrapper native mode/forwarding and V26 predecessor admission reject UI, stale source/package, incomplete phases and cleanup; defaults preserved, no host/registry/preferences changed.'

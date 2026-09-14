@@ -37,8 +37,8 @@ if ($RenderExperiment -and ($NativeApi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) 
 }
 $operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$source = 'd5e5e3851125b279bc6807074a34f8de2700cef5'
-$v25PackageSha256 = 'e27d645b88af709369ac8c04b96fff43b8c688496b8908694825b7491efc2633'
+$source = '25357ba9b42808dbbfd05ab5138c8772e8f123e1'
+$v25PackageSha256 = '530f76d16c569304f175db40a67aed889d69b4d592d0e2a6040552d9be013e3d'
 # Matched V25/V26 identities are frozen; V26 still requires a cleaned V25 predecessor.
 $base = Join-Path $taskRepo 'artifacts\issue-5718-local022'
 $runRoot = Join-Path $base $AllocationName
@@ -47,6 +47,34 @@ $appData = [Environment]::GetFolderPath('ApplicationData')
 $openAiFlag = Join-Path $appData 'QS3D\MCP\OpenAiSecureTunnel\autostart.txt'
 $cloudflareFlag = Join-Path $appData 'QS3D\MCP\CloudflareAccount\autostart.txt'
 function Get-Local022Hash([string]$Path) { (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash }
+function Get-Local022CloudflarePauseState([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return [pscustomobject]@{ Exists=$false; Paused=$true; Sha256=$null; LastWriteUtcTicks=$null }
+    }
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'Unexpected Cloudflare preference; no mutation.'
+    }
+    if ([IO.File]::ReadAllText($Path).Trim() -cne '0') { throw 'Cloudflare is not paused.' }
+    return [pscustomobject]@{
+        Exists=$true; Paused=$true; Sha256=(Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash; LastWriteUtcTicks=[int64]$item.LastWriteTimeUtc.Ticks
+    }
+}
+function Assert-Local022CloudflarePauseStateUnchanged($State, [string]$Path) {
+    if ($State.Exists -isnot [bool] -or $State.Paused -isnot [bool] -or -not $State.Paused) {
+        throw 'Cloudflare admission state is invalid.'
+    }
+    if (-not $State.Exists) {
+        if (Test-Path -LiteralPath $Path) { throw 'Cloudflare preference changed after admission.' }
+        return
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'Cloudflare preference changed after admission.' }
+    $item = Get-Item -LiteralPath $Path -Force
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -cne $State.Sha256 -or [int64]$item.LastWriteTimeUtc.Ticks -ne [int64]$State.LastWriteUtcTicks) {
+        throw 'Cloudflare preference changed after admission.'
+    }
+}
 function Assert-NoLocal022Hosts {
     if (@(Get-Process bricscad -ErrorAction SilentlyContinue).Count) { throw 'Existing host; no mutation.' }
     if (@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(cloudflared|tunnel-client)' }).Count) {
@@ -142,10 +170,9 @@ if ($HostMajor -eq 26) {
 $flagInfo = Get-Item -LiteralPath $openAiFlag -Force
 if (($flagInfo.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $flagInfo.Length -ne 1 -or
     [IO.File]::ReadAllText($openAiFlag) -cne '1') { throw 'Unexpected OpenAI preference; no mutation.' }
-if ([IO.File]::ReadAllText($cloudflareFlag).Trim() -cne '0') { throw 'Cloudflare is not paused.' }
+$cloudflareState = Get-Local022CloudflarePauseState $cloudflareFlag
 $originalHash = Get-Local022Hash $openAiFlag
 $originalWriteUtc = $flagInfo.LastWriteTimeUtc
-$cloudflareHash = Get-Local022Hash $cloudflareFlag
 New-Item -ItemType Directory -Path $restoreRoot | Out-Null
 $backup = Join-Path $restoreRoot 'openai-autostart.original.bin'
 Copy-Item -LiteralPath $openAiFlag -Destination $backup
@@ -160,6 +187,7 @@ try {
     if ((Get-Local022Hash $openAiFlag) -cne $originalHash -or (Get-Item $openAiFlag).LastWriteTimeUtc -ne $originalWriteUtc) {
         throw 'Preference changed before pause.'
     }
+    Assert-Local022CloudflarePauseStateUnchanged $cloudflareState $cloudflareFlag
     [IO.File]::WriteAllText($openAiFlag,'0',[Text.UTF8Encoding]::new($false))
     $paused = $true
     $pausedHash = Get-Local022Hash $openAiFlag
@@ -168,7 +196,7 @@ try {
     $parameters = @{
         ProductDir = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor"
         PackageZip = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor.zip"
-        PackageSha256 = if ($HostMajor -eq 25) { $v25PackageSha256 } else { 'a2e358d3aa5c661249f4df00631506c3773efe7e8e26f47a8187b4b600820ec2' }
+        PackageSha256 = if ($HostMajor -eq 25) { $v25PackageSha256 } else { 'c2bdf8dbc5dd32d948976d4986f305031dcf6c7394b1d5eaedd5f6412a336451' }
         ProductSourceSha = $source
         ProbeDll = Join-Path $taskRepo "tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$framework\QS3D.LocalQualification.V$HostMajor.dll"
         ArtifactDir = $runRoot
@@ -192,9 +220,10 @@ finally {
         }
         Copy-Item -LiteralPath $backup -Destination $openAiFlag -Force
         (Get-Item $openAiFlag).LastWriteTimeUtc = $originalWriteUtc
-        if ((Get-Local022Hash $openAiFlag) -cne $originalHash -or (Get-Local022Hash $cloudflareFlag) -cne $cloudflareHash) {
+        if ((Get-Local022Hash $openAiFlag) -cne $originalHash) {
             throw 'Exact autostart restoration failed.'
         }
+        Assert-Local022CloudflarePauseStateUnchanged $cloudflareState $cloudflareFlag
         $restoreInfo.restored = $true
         [IO.File]::WriteAllText($receiptPath,($restoreInfo | ConvertTo-Json),[Text.UTF8Encoding]::new($false))
         Write-Output 'LOCAL022_ORIGINAL_AUTOSTART_RESTORED'
