@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 p=Path('src/QS3D.BricsCAD.V25/McpTransportAgentCenterAugmenter.cs')
 s=p.read_text(encoding='utf-8-sig')
 need=['McpPublicTextSanitizer.Sanitize(ex.ToString())','McpPublicTextSanitizer.Sanitize(ex.Message)']
