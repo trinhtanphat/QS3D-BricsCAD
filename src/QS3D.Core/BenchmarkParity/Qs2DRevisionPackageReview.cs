@@ -230,17 +230,10 @@ namespace QS3D.Core.BenchmarkParity
 
         private static double SumFinite(IEnumerable<double> values)
         {
-            var sum = 0d;
-            var compensation = 0d;
+            var accumulator = new QS3D.Core.Reporting.QuantityReportMath.FiniteAccumulator();
             foreach (var value in values)
-            {
-                var finite = QsModelElementSnapshot.Finite(value, "quantity");
-                var adjusted = finite - compensation;
-                var next = sum + adjusted;
-                compensation = (next - sum) - adjusted;
-                sum = QsModelElementSnapshot.Finite(next, "quantityTotal");
-            }
-            return sum;
+                accumulator.Add(QsModelElementSnapshot.Finite(value, "quantity"), "revision package quantity total");
+            return accumulator.Value("revision package quantity total");
         }
     }
 
