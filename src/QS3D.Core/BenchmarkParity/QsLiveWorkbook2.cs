@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using QS3D.Core.Reporting;
 
 namespace QS3D.Core.BenchmarkParity
 {
@@ -297,36 +298,24 @@ namespace QS3D.Core.BenchmarkParity
 
         private static bool TryCompensatedSum(IEnumerable<double> values, out double total)
         {
-            var sum = 0d;
-            var compensation = 0d;
-            foreach (var value in values)
+            try
             {
-                var tentative = sum + value;
-                if (double.IsNaN(tentative) || double.IsInfinity(tentative))
-                {
-                    total = 0d;
-                    return false;
-                }
-
-                compensation += Math.Abs(sum) >= Math.Abs(value)
-                    ? (sum - tentative) + value
-                    : (value - tentative) + sum;
-                if (double.IsNaN(compensation) || double.IsInfinity(compensation))
-                {
-                    total = 0d;
-                    return false;
-                }
-                sum = tentative;
+                var accumulator = new QuantityReportMath.FiniteAccumulator();
+                foreach (var value in values)
+                    accumulator.Add(value, "live workbook source/dependency aggregate");
+                total = accumulator.Value("live workbook source/dependency aggregate");
+                return true;
             }
-
-            total = sum + compensation;
-            if (double.IsNaN(total) || double.IsInfinity(total))
+            catch (InvalidOperationException)
             {
                 total = 0d;
                 return false;
             }
-            if (total == 0d) total = 0d;
-            return true;
+            catch (OverflowException)
+            {
+                total = 0d;
+                return false;
+            }
         }
 
         private static IReadOnlyList<string> TopologicalOrder(IDictionary<string, LiveWorkbookBinding> bindings)
