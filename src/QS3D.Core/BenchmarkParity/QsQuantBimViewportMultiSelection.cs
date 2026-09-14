@@ -25,7 +25,8 @@ namespace QS3D.Core.BenchmarkParity
             bool clearOnMiss)
         {
             if (viewportResult == null) throw new ArgumentNullException("viewportResult");
-            var guid = viewportResult.Hit == null ? null : viewportResult.Hit.Guid;
+            var hit = viewportResult.Hit;
+            var guid = hit == null ? null : hit.Guid;
             return ApplyGuid(current, guid, mode, clearOnMiss);
         }
 
