@@ -76,6 +76,7 @@ namespace QS3D.Core.BenchmarkParity
             return result == 0d ? 0d : result;
         }
     }
+
     public sealed class AutodeskTakeoffPackageRevisionComparer
     {
         public TakeoffPackageRevisionComparison Compare(
@@ -90,6 +91,8 @@ namespace QS3D.Core.BenchmarkParity
             if (currentSheets == null) throw new ArgumentNullException("currentSheets");
             if (!string.Equals(previousPackage.Id, currentPackage.Id, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Package revision compare requires the same logical package id.");
+            if (string.Equals(previousPackage.Revision, currentPackage.Revision, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Package revision compare requires distinct package revision identifiers.");
 
             var oldSheets = previousSheets.ToList();
             var newSheets = currentSheets.ToList();
@@ -111,7 +114,10 @@ namespace QS3D.Core.BenchmarkParity
                 {
                     var oldSheet = oldById[sheetId];
                     var newSheet = newById[sheetId];
-                    deltas.Add(new TakeoffPackageRevisionDelta(sheetId, oldSheet.Sheet.Revision, newSheet.Sheet.Revision, comparer.Compare(oldSheet, newSheet)));
+                    var markupDeltas = string.Equals(oldSheet.Sheet.Revision, newSheet.Sheet.Revision, StringComparison.OrdinalIgnoreCase)
+                        ? CompareRetainedSameRevision(oldSheet, newSheet)
+                        : comparer.Compare(oldSheet, newSheet);
+                    deltas.Add(new TakeoffPackageRevisionDelta(sheetId, oldSheet.Sheet.Revision, newSheet.Sheet.Revision, markupDeltas));
                     continue;
                 }
 
@@ -131,6 +137,42 @@ namespace QS3D.Core.BenchmarkParity
             }
 
             return new TakeoffPackageRevisionComparison(previousPackage.Id, previousPackage.Revision, currentPackage.Revision, deltas);
+        }
+
+        private static IReadOnlyList<RevisionMarkupDelta2D> CompareRetainedSameRevision(TakeoffSheetResult2D previous, TakeoffSheetResult2D current)
+        {
+            if (previous.Sheet.SourceKind != current.Sheet.SourceKind
+                || !string.Equals(previous.Sheet.SourceReference, current.Sheet.SourceReference, StringComparison.Ordinal))
+                throw new InvalidOperationException("Retained drawing revision changed source identity without a new drawing revision identifier.");
+
+            var oldById = previous.Evidence.ToDictionary(x => x.MarkupId, StringComparer.OrdinalIgnoreCase);
+            var newById = current.Evidence.ToDictionary(x => x.MarkupId, StringComparer.OrdinalIgnoreCase);
+            if (oldById.Count != newById.Count || oldById.Keys.Except(newById.Keys, StringComparer.OrdinalIgnoreCase).Any())
+                throw new InvalidOperationException("Retained drawing revision changed markup identity without a new drawing revision identifier.");
+
+            var result = new List<RevisionMarkupDelta2D>();
+            foreach (var id in oldById.Keys.OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            {
+                var oldValue = oldById[id];
+                var newValue = newById[id];
+                if (!SameEvidence(oldValue, newValue))
+                    throw new InvalidOperationException("Retained drawing revision changed takeoff evidence without a new drawing revision identifier.");
+                result.Add(new RevisionMarkupDelta2D(id, RevisionMarkupChangeKind.Unchanged, oldValue, newValue));
+            }
+            return new ReadOnlyCollection<RevisionMarkupDelta2D>(result);
+        }
+
+        private static bool SameEvidence(TakeoffQuantityEvidence2D left, TakeoffQuantityEvidence2D right)
+        {
+            return string.Equals(left.SheetId, right.SheetId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(left.Revision, right.Revision, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(left.SourceReference, right.SourceReference, StringComparison.Ordinal)
+                && string.Equals(left.SourceHandle, right.SourceHandle, StringComparison.Ordinal)
+                && string.Equals(left.Classification, right.Classification, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(left.Zone, right.Zone, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(left.Layer, right.Layer, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(left.Unit, right.Unit, StringComparison.OrdinalIgnoreCase)
+                && left.Quantity.Equals(right.Quantity);
         }
     }
 }
