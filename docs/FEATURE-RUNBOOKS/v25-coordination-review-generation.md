@@ -12,41 +12,34 @@ A managed `Document` wrapper can remain reference-equal while its native databas
 
 ## Production contract
 
-`TransientReviewSession` captures the non-zero native database identity at construction and treats the pair of managed owner document plus native database identity as one immutable generation.
+`TransientReviewSession` captures the non-zero native database identity at construction. Native-generation freshness is intentionally separate from MDI activity: switching to another DWG does not mean the owner generation became stale.
 
-The session revalidates that generation before native access and at re-entrant/native publication boundaries, including:
+The session revalidates the exact owner generation and active-document requirement at native access/re-entrant publication boundaries, including highlight cleanup, implied selection, `OBJECTISOLATIONMODE`, isolate/unisolate commands, section/focus view state, cleanup retry/disposal and status publication.
 
-- highlight and highlight cleanup transactions;
-- implied-selection capture/restore;
-- `OBJECTISOLATIONMODE` reads and writes;
-- isolate/unisolate command dispatch;
-- section/focus bounds and view capture/write/restore;
-- cleanup retry and disposal;
-- selection-change, activation/deactivation, window-close and status publication paths.
+When the same managed wrapper now exposes another native database, generation-A ownership is **abandoned without native restoration**. Saved ObjectIds, isolation/selection rollback debt, system-variable baseline and view snapshot are dropped so none can be applied to generation B.
 
-When the same managed wrapper is still present but the native identity no longer matches, generation-A ownership is **abandoned without native restoration**. Saved `ObjectId` values, isolation state, system-variable baseline and view snapshot are cleared from the session so none can be applied to generation B. Terminal document destruction uses the same no-write ownership release principle.
-
-Ordinary MDI switching with the original native generation remains different from native-generation replacement: pre-deactivation cleanup may run while the owner generation is still active; foreign active documents never receive application/editor cleanup writes.
+Ordinary same-generation MDI switching is different: pending cleanup ownership is retained while a foreign DWG is active. A failed isolation compensation keeps its implied-selection baseline and system-variable debt for retry when the owning DWG becomes active again. Disposal cannot mark the session complete while `HasTransientState` remains true.
 
 ## REMOTE_SAFE verification
 
-Run the focused source contract:
+Run:
 
 ```text
 python scripts/preflight-v25-coordination-review-generation.py
 ```
 
-Then require the repository aggregate feature guards, deterministic smoke and BricsCAD V25 plugin build using admitted/trusted locked references on the final exact PR head. These are `REMOTE_SAFE` source/static/build checks only.
+Then require aggregate feature guards, deterministic smoke and BricsCAD V25 plugin build using admitted/trusted locked references on the final exact PR head. These are `REMOTE_SAFE` checks only.
 
 ## LOCAL_ONLY licensed BricsCAD matrix
 
-Keep these scenarios `NO_RESULT` until they are executed in a licensed BricsCAD V25 host:
+Keep these `NO_RESULT` until executed in licensed BricsCAD V25:
 
-1. Highlight a coordination issue, replace/reload the native database while preserving the same managed `Document` wrapper, then trigger Clear/selection change/close. Verify no stale `ObjectId` is dereferenced or unhighlighted in the successor generation.
-2. Start isolation, capture a non-default `OBJECTISOLATIONMODE`, replace the native database on the same wrapper, then retry restore/close/dispose. Verify no `UNISOLATEOBJECTS`, implied-selection restore or system-variable write reaches the successor generation.
-3. Apply Section / Focus, replace the native database before Restore View, then retry cleanup. Verify the generation-A view snapshot is dropped without a `SetCurrentView` into generation B.
-4. Switch MDI documents with the original generation unchanged. Verify ordinary pre-deactivation cleanup remains functional and no application-level cleanup targets the foreign active document.
-5. Trigger native-generation drift during highlight transaction, isolation command dispatch, section-view write, or status publication. Verify later boundaries fail closed and stale ownership is abandoned.
-6. Close/destroy the owning document with transient state present. Verify disposal remains idempotent, subscriptions detach, and no cleanup write is sent to a different active document.
+1. Highlight, replace/reload the native database on the same managed `Document`, then Clear/selection-change/close. No generation-A ObjectId may be dereferenced in generation B.
+2. Start isolation, switch MDI after implied-selection/system-variable mutation but before completion, then reactivate owner. Rollback debt must remain and retry; closing while foreign MDI is active must fail closed while debt exists.
+3. Start isolation, replace the native database on the same wrapper, then restore/close/dispose. No `UNISOLATEOBJECTS`, implied-selection restore or system-variable write may reach generation B.
+4. Apply Section / Focus, replace the native database before Restore View. The generation-A snapshot must be dropped without `SetCurrentView` into generation B.
+5. Switch MDI with the original generation unchanged. Pre-deactivation cleanup/retry must remain functional and no application-level cleanup may target the foreign active document.
+6. Trigger drift during highlight transaction, isolation dispatch, view write, or status publication. Later boundaries must fail closed and stale ownership must be abandoned.
+7. Close/destroy the owner with transient state present. Disposal/subscription cleanup must remain idempotent and no native write may target another document.
 
 Do not record `LOCAL_PASS` from remote/static CI or admitted-reference compilation.
