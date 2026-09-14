@@ -494,10 +494,35 @@ namespace QS3D.Core.Domain
             if (item == null) throw new ArgumentNullException(nameof(item));
             _mutationObserver?.ValidateAdd(item);
             var alreadyOwned = ContainsReference(item);
-            _beforeMutation();
             _items.Add(item);
             if (!alreadyOwned) _attach(item);
             _mutationObserver?.CommitAdd(item);
+        }
+
+        internal void ClearRestoredPersistenceState()
+        {
+            if (_items.Count == 0)
+            {
+                _mutationObserver?.CommitClear();
+                return;
+            }
+            var owned = new List<T>();
+            for (var index = 0; index < _items.Count; index++)
+            {
+                var item = _items[index];
+                if (item == null) continue;
+                var seen = false;
+                for (var ownedIndex = 0; ownedIndex < owned.Count; ownedIndex++)
+                {
+                    if (!ReferenceEquals(owned[ownedIndex], item)) continue;
+                    seen = true;
+                    break;
+                }
+                if (!seen) owned.Add(item);
+            }
+            _items.Clear();
+            for (var index = 0; index < owned.Count; index++) _detach(owned[index]);
+            _mutationObserver?.CommitClear();
         }
 
         public void Clear()
@@ -728,6 +753,13 @@ namespace QS3D.Core.Domain
             ChangeVersion = nextChangeVersion;
         }
 
+        internal void ClearAuditEventsForRestore()
+        {
+            var auditEvents = AuditEvents as CatalogOwnershipList<AuditEvent>
+                ?? throw new InvalidOperationException("Project audit collection does not expose the canonical ownership store.");
+            auditEvents.ClearRestoredPersistenceState();
+        }
+
         internal void RestoreAuditEvent(AuditEvent auditEvent)
         {
             if (auditEvent == null) throw new ArgumentNullException(nameof(auditEvent));
@@ -780,16 +812,24 @@ namespace QS3D.Core.Domain
 
         private void AttachAuditEvent(AuditEvent auditEvent)
         {
-            auditEvent.PersistenceTextMutationValidating += _auditHistoryBudget.ValidateOwnedMutation;
+            auditEvent.PersistenceTextMutationValidating += ValidateAuditOwnedMutation;
             auditEvent.PersistenceMutationRequested += ValidateAuditHistoryAndTouch;
             auditEvent.PersistenceTextMutationCommitted += _auditHistoryBudget.CommitOwnedMutation;
         }
 
         private void DetachAuditEvent(AuditEvent auditEvent)
         {
-            auditEvent.PersistenceTextMutationValidating -= _auditHistoryBudget.ValidateOwnedMutation;
+            auditEvent.PersistenceTextMutationValidating -= ValidateAuditOwnedMutation;
             auditEvent.PersistenceMutationRequested -= ValidateAuditHistoryAndTouch;
             auditEvent.PersistenceTextMutationCommitted -= _auditHistoryBudget.CommitOwnedMutation;
+        }
+
+        private void ValidateAuditOwnedMutation(AuditEvent auditEvent, long textDelta)
+        {
+            _auditHistoryBudget.ValidateStructuralCount(AuditEvents.Count);
+            _auditHistoryBudget.ValidateOwnedMutation(auditEvent, textDelta);
+            if (_restoringSnapshot) return;
+            _ = checked(ChangeVersion + 1L);
         }
 
         private void ValidateAuditHistoryAndTouch()
