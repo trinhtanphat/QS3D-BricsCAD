@@ -10,14 +10,48 @@ namespace QS3D.BricsCAD.V25.UI
 {
     internal static class DocumentBoundWindowLifetime
     {
+        private sealed class AttachGate
+        {
+            public bool IsAttaching;
+        }
+
         private static readonly ConditionalWeakTable<Window, Registration> Registrations = new ConditionalWeakTable<Window, Registration>();
+        private static readonly ConditionalWeakTable<Window, AttachGate> AttachGates = new ConditionalWeakTable<Window, AttachGate>();
 
         public static void Attach(Window window, Document document)
         {
             if (window == null) throw new ArgumentNullException(nameof(window));
             if (document == null) throw new ArgumentNullException(nameof(document));
-            var registration = Registrations.GetValue(window, key => new Registration(key, document));
-            registration.Attach(document);
+
+            var attachGate = AttachGates.GetValue(window, _ => new AttachGate());
+            lock (attachGate)
+            {
+                if (attachGate.IsAttaching)
+                    throw new InvalidOperationException("A modeless QS3D window attach is already in progress.");
+
+                attachGate.IsAttaching = true;
+                try
+                {
+                    var registration = Registrations.GetValue(window, key => new Registration(key, document));
+                    try
+                    {
+                        registration.Attach(document);
+                    }
+                    catch
+                    {
+                        if (Registrations.TryGetValue(window, out var currentRegistration) &&
+                            ReferenceEquals(currentRegistration, registration))
+                        {
+                            Registrations.Remove(window);
+                        }
+                        throw;
+                    }
+                }
+                finally
+                {
+                    attachGate.IsAttaching = false;
+                }
+            }
         }
 
         private sealed class Registration
