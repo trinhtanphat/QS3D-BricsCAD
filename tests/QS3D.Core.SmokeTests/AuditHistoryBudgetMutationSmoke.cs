@@ -23,6 +23,7 @@ namespace QS3D.Core.SmokeTests
             DuplicateReferencePropertyDeltaUsesMultiplicity();
             RemovalAndClearReleaseBudget();
             CorruptBackingCountRejectsMutationWithoutRepair();
+            SharedAuditEventRevisionOverflowIsAtomicAcrossOwners();
         }
 
         private static void DirectAddAndInsertRejectAtCapacityWithoutMutation()
@@ -159,6 +160,28 @@ namespace QS3D.Core.SmokeTests
             AssertCorruptState(project, admitted, injected, beforeVersion, beforeUpdatedUtc, "corrupt owned mutation");
         }
 
+        private static void SharedAuditEventRevisionOverflowIsAtomicAcrossOwners()
+        {
+            var shared = Event("a");
+            var first = Project("SHARED-FIRST");
+            var overflowing = Project("SHARED-OVERFLOW");
+            first.AuditEvents.Add(shared);
+            overflowing.AuditEvents.Add(shared);
+            SetChangeVersion(overflowing, long.MaxValue);
+
+            var firstVersion = first.ChangeVersion;
+            var firstUpdatedUtc = first.UpdatedUtc;
+            var overflowingUpdatedUtc = overflowing.UpdatedUtc;
+
+            Throws<OverflowException>(() => shared.Action = "aa");
+
+            Equal("a", shared.Action, "shared overflow rejected value");
+            Equal(firstVersion, first.ChangeVersion, "shared overflow first-owner revision");
+            Equal(firstUpdatedUtc, first.UpdatedUtc, "shared overflow first-owner timestamp");
+            Equal(long.MaxValue, overflowing.ChangeVersion, "shared overflow rejecting-owner revision");
+            Equal(overflowingUpdatedUtc, overflowing.UpdatedUtc, "shared overflow rejecting-owner timestamp");
+        }
+
         private static void AssertCorruptState(ProjectState project, AuditEvent admitted, AuditEvent injected, long version, DateTime updatedUtc, string label)
         {
             Equal(2, project.AuditEvents.Count, label + " count");
@@ -175,6 +198,13 @@ namespace QS3D.Core.SmokeTests
             var items = itemsField.GetValue(project.AuditEvents) as List<AuditEvent>
                 ?? throw new Exception("AuditHistoryBudgetMutationSmoke corruption-injection storage has an unexpected shape.");
             items.Add(item);
+        }
+
+        private static void SetChangeVersion(ProjectState project, long value)
+        {
+            var changeVersion = typeof(ProjectState).GetField("<ChangeVersion>k__BackingField", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("AuditHistoryBudgetMutationSmoke could not resolve ChangeVersion backing field.");
+            changeVersion.SetValue(project, value);
         }
 
         private static ProjectState Project(string suffix) => new ProjectState("AUDIT-BUDGET-" + suffix, "Audit budget " + suffix);
