@@ -780,16 +780,23 @@ namespace QS3D.Core.Domain
 
         private void AttachAuditEvent(AuditEvent auditEvent)
         {
-            auditEvent.PersistenceTextMutationValidating += _auditHistoryBudget.ValidateOwnedMutation;
-            auditEvent.PersistenceMutationRequested += ValidateAuditHistoryAndTouch;
+            auditEvent.PersistenceTextMutationValidating += ValidateOwnedAuditMutation;
+            auditEvent.PersistenceMutationRequested += Touch;
             auditEvent.PersistenceTextMutationCommitted += _auditHistoryBudget.CommitOwnedMutation;
         }
 
         private void DetachAuditEvent(AuditEvent auditEvent)
         {
-            auditEvent.PersistenceTextMutationValidating -= _auditHistoryBudget.ValidateOwnedMutation;
-            auditEvent.PersistenceMutationRequested -= ValidateAuditHistoryAndTouch;
+            auditEvent.PersistenceTextMutationValidating -= ValidateOwnedAuditMutation;
+            auditEvent.PersistenceMutationRequested -= Touch;
             auditEvent.PersistenceTextMutationCommitted -= _auditHistoryBudget.CommitOwnedMutation;
+        }
+
+        private void ValidateOwnedAuditMutation(AuditEvent auditEvent, long perOccurrenceDelta)
+        {
+            _auditHistoryBudget.ValidateStructuralCount(AuditEvents.Count);
+            _auditHistoryBudget.ValidateOwnedMutation(auditEvent, perOccurrenceDelta);
+            if (!_restoringSnapshot) _ = checked(ChangeVersion + 1L);
         }
 
         private void ValidateAuditHistoryAndTouch()
