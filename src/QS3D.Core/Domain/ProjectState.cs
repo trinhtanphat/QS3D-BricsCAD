@@ -315,11 +315,13 @@ namespace QS3D.Core.Domain
 
     internal interface ICatalogMutationObserver<T> where T : class
     {
-        void ValidateAdd(T item);
+        void ValidateAdd(T item, int existingReferenceCount);
         void CommitAdd(T item);
-        void ValidateReplace(T previous, T replacement);
+        void ValidateReplace(T previous, T replacement, int previousReferenceCount, int replacementReferenceCount);
         void CommitReplace(T previous, T replacement);
+        void ValidateRemove(T item, int referenceCount);
         void CommitRemove(T item);
+        void ValidateClear(IReadOnlyList<T> items);
         void CommitClear();
     }
 
@@ -342,8 +344,9 @@ namespace QS3D.Core.Domain
                 throw new InvalidOperationException("Audit history structural accounting is inconsistent with project history. Repair the existing audit history before modifying it.");
         }
 
-        public void ValidateAdd(AuditEvent item)
+        public void ValidateAdd(AuditEvent item, int existingReferenceCount)
         {
+            ValidateReferenceCount(item, existingReferenceCount);
             if (_storedCount >= AuditTrail.MaxStoredEvents)
                 throw new InvalidOperationException("Audit trail already contains 10000 events and cannot record another event.");
             RequireTextCapacity(AuditTrail.CountStoredTextCharacters(item));
@@ -357,8 +360,10 @@ namespace QS3D.Core.Domain
             else _referenceCounts.Add(item, 1);
         }
 
-        public void ValidateReplace(AuditEvent previous, AuditEvent replacement)
+        public void ValidateReplace(AuditEvent previous, AuditEvent replacement, int previousReferenceCount, int replacementReferenceCount)
         {
+            ValidateReferenceCount(previous, previousReferenceCount);
+            ValidateReferenceCount(replacement, replacementReferenceCount);
             var removed = AuditTrail.CountStoredTextCharacters(previous);
             var added = AuditTrail.CountStoredTextCharacters(replacement);
             var retained = _storedTextCharacters - removed;
@@ -373,11 +378,45 @@ namespace QS3D.Core.Domain
             IncrementReference(replacement);
         }
 
+        public void ValidateRemove(AuditEvent item, int referenceCount)
+        {
+            ValidateReferenceCount(item, referenceCount);
+            var removed = AuditTrail.CountStoredTextCharacters(item);
+            if (_storedCount <= 0 || removed > _storedTextCharacters)
+                throw new InvalidOperationException("Audit history accounting is inconsistent.");
+        }
+
         public void CommitRemove(AuditEvent item)
         {
             _storedCount--;
             _storedTextCharacters -= AuditTrail.CountStoredTextCharacters(item);
             DecrementReference(item);
+        }
+
+        public void ValidateClear(IReadOnlyList<AuditEvent> items)
+        {
+            if (items == null) throw new ArgumentNullException(nameof(items));
+            if (items.Count != _storedCount)
+                throw new InvalidOperationException("Audit history structural accounting is inconsistent with project history. Repair the existing audit history before modifying it.");
+
+            var actualReferences = new Dictionary<AuditEvent, int>(ReferenceComparer.Instance);
+            long actualTextCharacters = 0L;
+            for (var index = 0; index < items.Count; index++)
+            {
+                var item = items[index];
+                if (item == null) throw new InvalidOperationException("Audit history contains a null entry.");
+                actualTextCharacters = checked(actualTextCharacters + AuditTrail.CountStoredTextCharacters(item));
+                if (actualReferences.TryGetValue(item, out var count)) actualReferences[item] = checked(count + 1);
+                else actualReferences.Add(item, 1);
+            }
+
+            if (actualTextCharacters != _storedTextCharacters || actualReferences.Count != _referenceCounts.Count)
+                throw new InvalidOperationException("Audit history reference accounting is inconsistent.");
+            foreach (var pair in actualReferences)
+            {
+                if (!_referenceCounts.TryGetValue(pair.Key, out var storedCount) || storedCount != pair.Value)
+                    throw new InvalidOperationException("Audit history reference accounting is inconsistent.");
+            }
         }
 
         public void CommitClear()
@@ -402,6 +441,20 @@ namespace QS3D.Core.Domain
             if (!_referenceCounts.TryGetValue(item, out var count) || count <= 0)
                 throw new InvalidOperationException("Owned audit event is missing from project history accounting.");
             _storedTextCharacters = checked(_storedTextCharacters + checked(perOccurrenceDelta * count));
+        }
+
+        private void ValidateReferenceCount(AuditEvent item, int actualCount)
+        {
+            if (actualCount < 0) throw new InvalidOperationException("Audit history reference accounting is inconsistent.");
+            if (actualCount == 0)
+            {
+                if (_referenceCounts.ContainsKey(item))
+                    throw new InvalidOperationException("Audit history reference accounting is inconsistent.");
+                return;
+            }
+
+            if (!_referenceCounts.TryGetValue(item, out var storedCount) || storedCount != actualCount)
+                throw new InvalidOperationException("Audit history reference accounting is inconsistent.");
         }
 
         private void RequireTextCapacity(long additionalCharacters)
@@ -463,9 +516,11 @@ namespace QS3D.Core.Domain
                 if (previous == null) throw new InvalidOperationException("Catalog contains a null entry.");
                 if (ReferenceEquals(previous, value)) return;
                 _validateCandidate?.Invoke(value);
-                _mutationObserver?.ValidateReplace(previous, value);
-                var previousWasLastReference = CountReferences(previous) == 1;
-                var valueAlreadyOwned = ContainsReference(value);
+                var previousReferenceCount = CountReferences(previous);
+                var replacementReferenceCount = CountReferences(value);
+                _mutationObserver?.ValidateReplace(previous, value, previousReferenceCount, replacementReferenceCount);
+                var previousWasLastReference = previousReferenceCount == 1;
+                var valueAlreadyOwned = replacementReferenceCount > 0;
                 _beforeMutation();
                 _items[index] = value;
                 if (previousWasLastReference) _detach(previous);
@@ -481,8 +536,9 @@ namespace QS3D.Core.Domain
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             _validateCandidate?.Invoke(item);
-            _mutationObserver?.ValidateAdd(item);
-            var alreadyOwned = ContainsReference(item);
+            var existingReferenceCount = CountReferences(item);
+            _mutationObserver?.ValidateAdd(item, existingReferenceCount);
+            var alreadyOwned = existingReferenceCount > 0;
             _beforeMutation();
             _items.Add(item);
             if (!alreadyOwned) _attach(item);
@@ -492,8 +548,9 @@ namespace QS3D.Core.Domain
         internal void AddRestoredPersistenceState(T item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
-            _mutationObserver?.ValidateAdd(item);
-            var alreadyOwned = ContainsReference(item);
+            var existingReferenceCount = CountReferences(item);
+            _mutationObserver?.ValidateAdd(item, existingReferenceCount);
+            var alreadyOwned = existingReferenceCount > 0;
             _items.Add(item);
             if (!alreadyOwned) _attach(item);
             _mutationObserver?.CommitAdd(item);
@@ -528,6 +585,7 @@ namespace QS3D.Core.Domain
         public void Clear()
         {
             if (_items.Count == 0) return;
+            _mutationObserver?.ValidateClear(_items);
             _beforeMutation();
             var owned = new List<T>();
             for (var index = 0; index < _items.Count; index++)
@@ -562,8 +620,9 @@ namespace QS3D.Core.Domain
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (index < 0 || index > _items.Count) throw new ArgumentOutOfRangeException(nameof(index));
             _validateCandidate?.Invoke(item);
-            _mutationObserver?.ValidateAdd(item);
-            var alreadyOwned = ContainsReference(item);
+            var existingReferenceCount = CountReferences(item);
+            _mutationObserver?.ValidateAdd(item, existingReferenceCount);
+            var alreadyOwned = existingReferenceCount > 0;
             _beforeMutation();
             _items.Insert(index, item);
             if (!alreadyOwned) _attach(item);
@@ -582,7 +641,9 @@ namespace QS3D.Core.Domain
         {
             var item = _items[index];
             if (item == null) throw new InvalidOperationException("Catalog contains a null entry.");
-            var detach = CountReferences(item) == 1;
+            var referenceCount = CountReferences(item);
+            _mutationObserver?.ValidateRemove(item, referenceCount);
+            var detach = referenceCount == 1;
             _beforeMutation();
             _items.RemoveAt(index);
             if (detach) _detach(item);
