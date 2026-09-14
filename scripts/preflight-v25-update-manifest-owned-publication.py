@@ -49,7 +49,10 @@ if unexpected:
 
 for token, message in (
     ("CreateFileW", "native generation acquisition is missing"),
-    ("SetFileInformationByHandle", "handle-driven rename/delete is missing"),
+    ("SetFileInformationByHandle", "handle-driven deletion is missing"),
+    ("NtSetInformationFile", "native parent-relative rename syscall is missing"),
+    ("RtlNtStatusToDosError", "NTSTATUS rename failure mapping is missing"),
+    ("FileRenameInformation = 10", "native rename information class is missing"),
     ("GetFileInformationByHandle", "stable generation identity is missing"),
     ("GetFinalPathNameByHandleW", "held-handle path verification is missing"),
     ("FileFlagOpenReparsePoint", "reparse-target following is not disabled"),
@@ -78,6 +81,7 @@ for unsafe in (
     "public static void PublishOwnedGeneration(",
     "public static void RollbackOwnedGeneration(",
     "private static void RenameOwned(Qs3dOwnedGeneration",
+    "FileRenameInfo = 3",
 ):
     if unsafe in helper:
         raise SystemExit(f"ERROR: owned-generation publication regressed to unsafe ABI/path authority: {unsafe}")

@@ -55,7 +55,7 @@ public static class Qs3dV25UpdateManifestPublicationNative
     private const uint FileFlagWriteThrough = 0x80000000;
     private const uint FileFlagBackupSemantics = 0x02000000;
     private const uint FileFlagOpenReparsePoint = 0x00200000;
-    private const int FileRenameInfo = 3;
+    private const int FileRenameInformation = 10;
     private const int FileDispositionInfo = 4;
     private const uint FileNameNormalized = 0x0;
 
@@ -98,6 +98,17 @@ public static class Qs3dV25UpdateManifestPublicationNative
         int fileInformationClass,
         IntPtr fileInformation,
         uint bufferSize);
+
+    [DllImport("ntdll.dll")]
+    private static extern int NtSetInformationFile(
+        SafeFileHandle file,
+        IntPtr ioStatusBlock,
+        IntPtr fileInformation,
+        uint length,
+        int fileInformationClass);
+
+    [DllImport("ntdll.dll")]
+    private static extern uint RtlNtStatusToDosError(int status);
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -444,13 +455,28 @@ public static class Qs3dV25UpdateManifestPublicationNative
             Marshal.WriteIntPtr(buffer, rootOffset, rootDirectory);
             Marshal.WriteInt32(buffer, fileNameLengthOffset, nameBytes.Length);
             Marshal.Copy(nameBytes, 0, IntPtr.Add(buffer, fileNameOffset), nameBytes.Length);
-            if (!SetFileInformationByHandle(
-                    generation.Stream.SafeFileHandle,
-                    FileRenameInfo,
-                    buffer,
-                    (uint)total))
+            IntPtr ioStatusBlock = Marshal.AllocHGlobal(checked(IntPtr.Size * 2));
+            try
             {
-                throw LastWin32("Could not rename owned generation to " + expectedFullPath);
+                for (int i = 0; i < IntPtr.Size * 2; i++) Marshal.WriteByte(ioStatusBlock, i, 0);
+                int status = NtSetInformationFile(
+                    generation.Stream.SafeFileHandle,
+                    ioStatusBlock,
+                    buffer,
+                    (uint)total,
+                    10);
+                if (status < 0)
+                {
+                    uint win32Error = RtlNtStatusToDosError(status);
+                    throw new Win32Exception(
+                        unchecked((int)win32Error),
+                        "Could not rename owned generation to " + expectedFullPath +
+                        " (NTSTATUS=0x" + unchecked((uint)status).ToString("X8") + ").");
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ioStatusBlock);
             }
             generation.CurrentPath = Path.GetFullPath(expectedFullPath);
             AssertOwnedPath(generation, expectedFullPath);
