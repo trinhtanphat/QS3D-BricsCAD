@@ -21,9 +21,10 @@ for token in (
 for token in (
     "internal static class CubicostQuantityAggregation",
     "internal static double SumFinite(IEnumerable<double> values, string label)",
-    "Math.Abs(sum) >= Math.Abs(value)",
-    "double.IsNaN(result) || double.IsInfinity(result)",
-    "return result == 0d ? 0d : result;",
+    "var accumulator = new QuantityReportMath.FiniteAccumulator();",
+    "accumulator.Add(value, label);",
+    "return accumulator.Value(label);",
+    "catch (OverflowException)",
 ):
     if token not in aggregation:
         raise SystemExit("Cubicost shared numeric aggregation contract missing: " + token)
@@ -35,6 +36,9 @@ for stale in (
 ):
     if stale in source:
         raise SystemExit("Cubicost downstream unsafe or duplicated identity/numeric contract remains: " + stale)
+for stale in ("Math.Abs(sum) >= Math.Abs(value)", "var compensation = 0d;"):
+    if stale in aggregation:
+        raise SystemExit("Cubicost stale local numeric authority remains: " + stale)
 for token in (
     "InventorySemanticKeysAndNumericTotalsStayExact();",
     "1e16 + 2d",
