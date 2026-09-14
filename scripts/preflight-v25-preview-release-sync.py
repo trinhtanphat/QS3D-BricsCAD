@@ -43,10 +43,25 @@ def main():
                 "PACKAGE-METADATA gitCommit must match exact release source commit",
                 "target_commitish = $env:RELEASE_COMMIT_SHA",
                 "Publish source HEAD must equal RELEASE_COMMIT_SHA",
-                "Draft prerelease target commit mismatch",
             ],
             "V25 cloud workflow",
         )
+        target_authorities = (
+            "$release.target_commitish",
+            "$draftRelease.target_commitish",
+            "$finalDraftRelease.target_commitish",
+            "$publishedRelease.target_commitish",
+            "$authoritativeReleaseBeforeCompensation.target_commitish",
+            "$authoritativeCompensatedRelease.target_commitish",
+            "$authoritativeDraftBeforeDelete.target_commitish",
+        )
+        workflow_lines = workflow.splitlines()
+        for authority in target_authorities:
+            matching = [line for line in workflow_lines if authority in line]
+            if len(matching) != 1:
+                raise ValueError(f"V25 cloud workflow must bind exactly one {authority} authority check")
+            if "$env:RELEASE_COMMIT_SHA" not in matching[0] or "[StringComparison]::OrdinalIgnoreCase" not in matching[0]:
+                raise ValueError(f"V25 cloud workflow {authority} check must bind exact release commit identity")
         if "target_commitish = $env:GITHUB_SHA" in workflow:
             raise ValueError("V25 cloud workflow regressed to publishing the stale dispatch SHA")
         validate_pos = workflow.find("- name: Validate cloud prerelease request")
