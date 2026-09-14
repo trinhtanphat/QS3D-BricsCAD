@@ -31,6 +31,12 @@ def main() -> int:
     affinity = method(safety, "private bool EnsureBoundDocumentGeneration(string operation)")
     for token in ("MdiActiveDocument", "ReferenceEquals(activeDocument, _document)", "activeDocument.Database", "database.UnmanagedObject", "_wrapperDriftNativeDatabaseIdentity", "CloseForManagedWrapperDrift()"):
         require(token in affinity, f"generation guard missing {token}")
+    inactive_start = affinity.find("if (!ReferenceEquals(activeDocument, _document))")
+    database_start = affinity.find("var database = activeDocument.Database;", inactive_start)
+    require(inactive_start >= 0 and database_start > inactive_start, "generation guard must keep an explicit inactive-MDI boundary")
+    inactive_branch = affinity[inactive_start:database_start]
+    require("return false;" in inactive_branch, "same-generation MDI inactivity must block the operation without closing the window")
+    require("CloseForManagedWrapperDrift()" not in inactive_branch, "same-generation MDI inactivity must not be treated as native-generation drift")
     bound = method(ui, "private void EnsureBoundDrawingIsActive(string operation)")
     require("EnsureBoundDocumentGeneration(operation)" in bound, "operation boundary must prove native generation")
     refresh = method(ui, "private void RefreshAfterCommit(Action refresh, string successMessage, string context)")

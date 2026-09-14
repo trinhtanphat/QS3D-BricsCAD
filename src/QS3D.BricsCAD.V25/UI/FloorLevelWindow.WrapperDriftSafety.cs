@@ -113,7 +113,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 var activeDocument = Application.DocumentManager.MdiActiveDocument;
                 if (!ReferenceEquals(activeDocument, _document))
-                    return CloseForManagedWrapperDrift();
+                    return false;
 
                 var database = activeDocument.Database;
                 if (database == null ||
