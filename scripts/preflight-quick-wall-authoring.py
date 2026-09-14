@@ -27,15 +27,16 @@ if SOURCE.is_file():
 
         for token in (
             'Guard(document, "QS3DDRAWWALL"',
-            'AcquireFixedPath(document, "Tường nhanh", 2)',
+            'AcquireFixedPath(document, nativeDatabaseIdentity, "Tường nhanh", 2)',
             'DirectDrawProjectPreviewContext.Capture(document)',
             'var defaultsProject = projectPreview.DefaultsProject;',
             'FamilyNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "ThicknessM", 0.2d)',
             'FamilyNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "HeightM", 3.6d)',
             'FamilyFiniteNumber(defaultsProject!, ElementCategory.ArchitecturalWall, "BottomOffsetM", 0d)',
-            '() => CreateLine(document, points[0], points[1])',
+            '() => CreateLine(document, points[0], points[1], nativeDatabaseIdentity)',
             'ExecuteDirect(',
-            'projectPreview);',
+            'projectPreview,',
+            'nativeDatabaseIdentity: nativeDatabaseIdentity);',
             'element.SetProperty("ThicknessM"',
             'element.SetProperty("HeightM"',
             'element.SetProperty("BottomOffsetM"',
@@ -55,11 +56,13 @@ if SOURCE.is_file():
 
         for token in (
             'Guard(document, "QS3DDRAWWALLADV"',
-            'AcquirePath(document, "Tường tùy chỉnh", minimumPoints: 2, close: false)',
+            'AcquirePath(document, nativeDatabaseIdentity, "Tường tùy chỉnh", minimumPoints: 2, close: false)',
             'PromptPositiveMeters(document.Editor, "Bề dày Tường (m)"',
             'PromptPositiveMeters(document.Editor, "Chiều cao Tường (m)"',
             'PromptFiniteMeters(document.Editor, "Offset đáy Tường so với Z source (m)"',
-            'points.Count == 2 ? CreateLine(document, points[0], points[1]) : CreatePolyline(document, points, false)',
+            'points.Count == 2',
+            'CreateLine(document, points[0], points[1], nativeDatabaseIdentity)',
+            'CreatePolyline(document, points, false, nativeDatabaseIdentity)',
             'ExecuteDirect(',
         ):
             if token not in advanced:
