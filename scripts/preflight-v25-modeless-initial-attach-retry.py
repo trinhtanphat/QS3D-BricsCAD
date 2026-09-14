@@ -42,10 +42,12 @@ attach = method_block(source, "public static void Attach(Window window, Document
 registration_attach = method_block(source, "public void Attach(Document document)")
 recovery = method_block(source, "public void TryCompleteFailedInitialAttachCleanup()")
 quiescence_aborted = method_block(source, "private void OnHostQuiescenceAborted(object? sender, EventArgs e)")
+scheduled_cleanup = method_block(source, "private void TryScheduleFailedInitialAttachCleanupAfterQuitAbort()")
 require(bool(attach), "top-level DocumentBoundWindowLifetime.Attach is missing", errors)
 require(bool(registration_attach), "Registration.Attach is missing", errors)
 require(bool(recovery), "failed-initial-attach cleanup recovery method is missing", errors)
 require(bool(quiescence_aborted), "host-quiescence-aborted handler is missing", errors)
+require(bool(scheduled_cleanup), "dispatcher-deferred failed-attach cleanup method is missing", errors)
 
 for token in (
     "private sealed class AttachGate",
@@ -98,20 +100,34 @@ for token in (
 
 for token in (
     "if (_initialAttachFailed)",
-    "TryCompleteFailedInitialAttachCleanup();",
+    "TryScheduleFailedInitialAttachCleanupAfterQuitAbort();",
     "return;",
 ):
-    require(token in quiescence_aborted, "quit-abort must eagerly discharge failed initial Attach cleanup: " + token, errors)
+    require(token in quiescence_aborted, "quit-abort must defer failed initial Attach cleanup off the native callback: " + token, errors)
 if quiescence_aborted:
     failed_index = quiescence_aborted.find("if (_initialAttachFailed)")
-    cleanup_index = quiescence_aborted.find("TryCompleteFailedInitialAttachCleanup();", failed_index)
-    return_index = quiescence_aborted.find("return;", cleanup_index)
+    schedule_index = quiescence_aborted.find("TryScheduleFailedInitialAttachCleanupAfterQuitAbort();", failed_index)
+    return_index = quiescence_aborted.find("return;", schedule_index)
     existing_recovery_index = quiescence_aborted.find("if (Volatile.Read(ref _windowClosedDuringQuiescence)", return_index)
     require(
-        0 <= failed_index < cleanup_index < return_index < existing_recovery_index,
-        "failed initial Attach cleanup must run before ordinary modeless quit-abort recovery",
+        0 <= failed_index < schedule_index < return_index < existing_recovery_index,
+        "failed initial Attach cleanup scheduling must win before ordinary modeless quit-abort recovery",
         errors,
     )
+
+for token in (
+    "_window.Dispatcher.BeginInvoke(new Action(() =>",
+    "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;",
+    "TryCompleteFailedInitialAttachCleanup();",
+):
+    require(token in scheduled_cleanup, "failed initial Attach cleanup must execute on the window dispatcher outside the native quit callback: " + token, errors)
+if scheduled_cleanup:
+    begin_index = scheduled_cleanup.find("_window.Dispatcher.BeginInvoke(new Action(() =>")
+    quiescence_index = scheduled_cleanup.find("if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;", begin_index)
+    cleanup_index = scheduled_cleanup.find("TryCompleteFailedInitialAttachCleanup();", quiescence_index)
+    require(0 <= begin_index < quiescence_index < cleanup_index,
+            "dispatcher callback must recheck quiescence before failed-attach cleanup",
+            errors)
 
 if attach:
     get_index = attach.find("Registrations.GetValue(window")
@@ -141,4 +157,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: failed initial modeless Attach retains cleanup ownership through quiescence, cleans eagerly after quit abort, recreates only after cleanup is complete, rejects reentrancy, and preserves successful rebind ownership.")
+print("PASS: failed initial modeless Attach retains cleanup ownership through quiescence, defers quit-abort cleanup to the WPF dispatcher, recreates only after cleanup is complete, rejects reentrancy, and preserves successful rebind ownership.")
