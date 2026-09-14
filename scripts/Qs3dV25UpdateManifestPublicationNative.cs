@@ -288,46 +288,6 @@ public static class Qs3dV25UpdateManifestPublicationNative
         }
     }
 
-    public static void PublishOwnedGeneration(
-        Qs3dOwnedGeneration staging,
-        string destinationPath,
-        Qs3dOwnedGeneration prior,
-        string backupPath)
-    {
-        RequireOwned(staging);
-        string destination = Path.GetFullPath(destinationPath ?? throw new ArgumentNullException(nameof(destinationPath)));
-        string backup = prior == null ? null : Path.GetFullPath(backupPath ?? throw new ArgumentNullException(nameof(backupPath)));
-
-        if (prior != null)
-        {
-            RequireOwned(prior);
-            RenameOwned(prior, backup, false);
-        }
-
-        try
-        {
-            RenameOwned(staging, destination, false);
-        }
-        catch (Exception publishError)
-        {
-            if (prior != null && !PathsEqual(prior.CurrentPath, destination))
-            {
-                try
-                {
-                    RenameOwned(prior, destination, false);
-                }
-                catch (Exception restoreError)
-                {
-                    throw new AggregateException(
-                        "Owned staging publication failed and the prior generation could not be restored; prior generation remains held at " + prior.CurrentPath,
-                        publishError,
-                        restoreError);
-                }
-            }
-            throw;
-        }
-    }
-
     public static void PublishOwnedGenerationInDirectory(
         Qs3dOwnedGeneration staging,
         Qs3dOwnedDirectory destinationParent,
@@ -370,34 +330,6 @@ public static class Qs3dV25UpdateManifestPublicationNative
             }
             throw;
         }
-    }
-
-    public static void RollbackOwnedGeneration(
-        Qs3dOwnedGeneration staging,
-        Qs3dOwnedGeneration prior,
-        string outputPath,
-        string originalStagePath)
-    {
-        RequireOwned(staging);
-        string output = Path.GetFullPath(outputPath ?? throw new ArgumentNullException(nameof(outputPath)));
-
-        if (PathsEqual(staging.CurrentPath, output))
-        {
-            string quarantine = FindRollbackName(originalStagePath);
-            RenameOwned(staging, quarantine, false);
-        }
-
-        if (prior != null)
-        {
-            RequireOwned(prior);
-            if (!PathsEqual(prior.CurrentPath, output))
-            {
-                RenameOwned(prior, output, false);
-            }
-            AssertOwnedPath(prior, output);
-        }
-
-        DeleteOwnedGeneration(staging);
     }
 
     public static void RollbackOwnedGenerationInDirectory(
@@ -456,6 +388,7 @@ public static class Qs3dV25UpdateManifestPublicationNative
         RequireOwned(generation);
         if (generation.DeletePending) return;
 
+        // FILE_DISPOSITION_INFO.DeleteFile is Win32 BOOLEAN: exactly one byte.
         IntPtr buffer = Marshal.AllocHGlobal(1);
         try
         {
@@ -474,13 +407,6 @@ public static class Qs3dV25UpdateManifestPublicationNative
         {
             Marshal.FreeHGlobal(buffer);
         }
-    }
-
-    private static void RenameOwned(Qs3dOwnedGeneration generation, string destinationPath, bool replaceIfExists)
-    {
-        RequireOwned(generation);
-        string destination = Path.GetFullPath(destinationPath ?? throw new ArgumentNullException(nameof(destinationPath)));
-        RenameOwnedCore(generation, IntPtr.Zero, destination, destination, replaceIfExists);
     }
 
     private static void RenameOwnedInDirectory(
@@ -533,19 +459,6 @@ public static class Qs3dV25UpdateManifestPublicationNative
         {
             Marshal.FreeHGlobal(buffer);
         }
-    }
-
-    private static string FindRollbackName(string originalStagePath)
-    {
-        string basePath = Path.GetFullPath(originalStagePath ?? throw new ArgumentNullException(nameof(originalStagePath)));
-        string directory = Path.GetDirectoryName(basePath);
-        string fileName = Path.GetFileName(basePath);
-        for (int attempt = 0; attempt < 8; attempt++)
-        {
-            string candidate = Path.Combine(directory, fileName + ".rollback-" + Guid.NewGuid().ToString("N"));
-            if (!File.Exists(candidate) && !Directory.Exists(candidate)) return candidate;
-        }
-        throw new IOException("Could not allocate a unique rollback quarantine pathname.");
     }
 
     private static string RequireLeafName(string value, string parameterName)
