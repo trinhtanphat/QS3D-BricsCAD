@@ -47,7 +47,7 @@ if not errors:
     required_builder = [
         'BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)',
         'if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));',
-        'if (selectedIds.Length == 0) return 0;',
+        'if (selectedIds.Length == 0) return new BeamRebarBuildOutcome(0, postCommitCleanupWarning: false);',
         'var ids = (ObjectId[])selectedIds.Clone();',
         'ProjectStateSnapshot.Capture(project)',
         'using (document.LockDocument())',
