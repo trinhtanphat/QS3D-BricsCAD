@@ -16,7 +16,7 @@ def fail(message: str) -> None:
 
 for token in (
     "NativeDatabaseIdentity",
-    "Database.UnmanagedObject",
+    "UnmanagedObject",
     "RequireActiveNativeDatabaseGeneration",
 ):
     if token not in text:
