@@ -8,10 +8,12 @@ smoke = (ROOT / "tests/QS3D.Core.SmokeTests/QsTakeoffPackageUxSmoke.cs").read_te
 
 required = {
     "line estimated-cost finite fence": (workflow, 'EstimatedCost = QsModelElementSnapshot.Finite(FormulaQuantity * UnitRate, "estimatedCost")'),
-    "package compensated sum": (package, "compensation += Math.Abs(sum) >= Math.Abs(value)"),
-    "package finite publication fence": (package, 'QsModelElementSnapshot.Finite(sum + compensation, "estimatedCost")'),
-    "signed-zero canonicalization": (package, "return total == 0d ? 0d : total;"),
+    "package canonical accumulator": (package, "var accumulator = new QuantityReportMath.FiniteAccumulator();"),
+    "package canonical add": (package, 'accumulator.Add(line.EstimatedCost, "estimatedCost");'),
+    "package canonical finite publication": (package, 'return accumulator.Value("estimatedCost");'),
+    "aggregate overflow mapping": (package, 'throw new ArgumentOutOfRangeException("estimatedCost", "must be finite");'),
     "line overflow regression": (smoke, "RejectsNonFiniteLineEstimatedCost();"),
+    "aggregate overflow regression": (smoke, "RejectsAggregateEstimatedCostOverflow();"),
     "high dynamic range regression": (smoke, "PreservesHighDynamicRangeEstimatedCost();"),
     "signed-zero regression": (smoke, "CanonicalizesSignedZeroEstimatedCost();"),
 }
@@ -25,4 +27,4 @@ if missing:
         print(f"ERROR: {item}", file=sys.stderr)
     raise SystemExit(1)
 
-print("PASS: Takeoff package estimated-cost arithmetic is finite, compensated, and regression-guarded.")
+print("PASS: Takeoff package estimated-cost arithmetic uses the canonical finite accumulator with overflow and signed-zero regressions.")
