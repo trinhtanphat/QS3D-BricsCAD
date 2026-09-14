@@ -19,3 +19,8 @@ A verified CAD save remains a verified save even if ACK durability cannot be pro
 ## Runtime classification
 Source/static and deterministic preflight evidence is REMOTE_SAFE.
 Same-wrapper database replacement, native save timing, and licensed BricsCAD V25/V26 behavior remain LOCAL_ONLY / NO_RESULT until exercised in the real host.
+
+## Fatal native repair classification
+A second defect in the same actual-state-truth SOW allowed fatal native-corruption exceptions to inherit transient/source-repair advice from code/message tokens.
+`AccessViolationException` and `SEHException` now suppress transient/source-repair classification, open the repair circuit immediately, require human review, and never emit `retry_transient`.
+This remains metadata-only: no automatic retry executor, replay path, writer, or expanded CAD authority is introduced.
