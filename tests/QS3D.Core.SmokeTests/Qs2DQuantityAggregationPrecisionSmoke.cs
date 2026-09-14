@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using QS3D.Core.BenchmarkParity;
@@ -90,7 +90,7 @@ namespace QS3D.Core.SmokeTests
             var inventory = new CubicostReviewedQuantityDownstreamBridge().BuildInventory(lines).Single();
 
             Equal(10000000000000004d, inventory.Quantity, "Cubicost canonical positive residual");
-            if (inventory.ComponentCount != 4) throw new InvalidOperationException("Cubicost precision component cardinality drifted.");
+            if (inventory.SourceCount != 4) throw new InvalidOperationException("Cubicost precision component cardinality drifted.");
         }
 
         private static TakeoffQuantityEvidence2D Evidence(string markupId, double quantity)
@@ -108,3 +108,4 @@ namespace QS3D.Core.SmokeTests
         }
     }
 }
+
