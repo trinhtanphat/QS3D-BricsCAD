@@ -80,6 +80,39 @@ try {
                 if (-not $response.IsSuccessStatusCode) {
                     throw "GitHub release asset upload failed for $Name with HTTP $([int]$response.StatusCode)."
                 }
+
+                $responseBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+                if ([string]::IsNullOrWhiteSpace($responseBody)) {
+                    throw "GitHub release asset upload returned an empty response for $Name."
+                }
+
+                try {
+                    $uploadedAsset = $responseBody | ConvertFrom-Json -ErrorAction Stop
+                }
+                catch {
+                    throw "GitHub release asset upload returned invalid JSON for $Name. $($_.Exception.Message)"
+                }
+
+                $uploadedAssetId = 0L
+                if (-not [Int64]::TryParse(([string]$uploadedAsset.id), [ref]$uploadedAssetId) -or $uploadedAssetId -le 0) {
+                    throw "GitHub release asset upload returned an invalid asset id for $Name."
+                }
+                if (-not [string]::Equals(([string]$uploadedAsset.name), $Name, [StringComparison]::Ordinal)) {
+                    throw "GitHub release asset upload returned a mismatched asset name for $Name."
+                }
+                if (-not [string]::Equals(([string]$uploadedAsset.state), 'uploaded', [StringComparison]::Ordinal)) {
+                    throw "GitHub release asset upload did not reach uploaded state for $Name."
+                }
+                if ([Int64]$uploadedAsset.size -ne $ExpectedSize) {
+                    throw "GitHub release asset upload returned a mismatched asset size for $Name. Expected=$ExpectedSize, API=$($uploadedAsset.size)."
+                }
+
+                $expectedDigest = 'sha256:' + $ExpectedSha256.ToLowerInvariant()
+                $uploadedDigest = ([string]$uploadedAsset.digest).Trim()
+                if ($uploadedDigest -notmatch '^sha256:[0-9A-Fa-f]{64}$' -or
+                    -not [string]::Equals($uploadedDigest, $expectedDigest, [StringComparison]::OrdinalIgnoreCase)) {
+                    throw "GitHub release asset upload returned a mismatched SHA-256 digest for $Name. Expected=$expectedDigest, API=$uploadedDigest."
+                }
             }
             finally {
                 $response.Dispose()
