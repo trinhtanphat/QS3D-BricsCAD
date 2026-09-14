@@ -180,7 +180,7 @@ finally {
 
 # Python escapes embedded PowerShell quotes above. Remove only those quote
 # escapes before execution; preserve JSON's \u escapes for equivalence tests.
-probe = probe.replace('\"', '"')
+probe = probe.replace(r'\"', '"')
 
 with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as tmp:
     tmp.write(probe)
