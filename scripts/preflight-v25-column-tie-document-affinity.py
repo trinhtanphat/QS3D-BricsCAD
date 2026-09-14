@@ -13,7 +13,7 @@ required = [
     "private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)",
     "ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument)",
     "document.Database.UnmanagedObject == nativeDatabaseIdentity",
-    "FinalizeUi(document, nativeDatabaseIdentity, message);",
+    "FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);",
     "RefreshModelTree(document, nativeDatabaseIdentity);",
 ]
 for needle in required:
@@ -32,7 +32,7 @@ else:
     elif body.rfind("RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);", 0, mutation) < 0:
         errors.append("exact document/native generation fence must precede retained ObjectId geometry handoff")
 
-finalize_start = text.find("private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)")
+finalize_start = text.find("private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)")
 if finalize_start < 0:
     errors.append("FinalizeUi must carry captured native database generation")
 else:
@@ -43,7 +43,7 @@ else:
     refresh = body.find("RefreshModelTree(document, nativeDatabaseIdentity);")
     regen = body.find("document.Editor.Regen();")
     status = body.find("TrySetPaletteStatus(document, nativeDatabaseIdentity, message);")
-    output = body.find("document.Editor.WriteMessage(\"\\nQS3D \" + message);")
+    output = body.find("document.Editor.WriteMessage(\"\\nQS3D \" + message +")
     first_fence = body.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;")
     if min(refresh, regen, status, output) < 0:
         errors.append("post-commit UI path must use generation-safe refresh/Regen/status/output")
@@ -56,10 +56,10 @@ else:
             errors.append("generation must be revalidated after Regen before status")
         if body.find("if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;", status) < 0:
             errors.append("generation must be revalidated after status before editor output")
-    if "ex.Message" in body:
-        errors.append("post-commit UI warning must redact exception message")
-    if "ex.GetType().Name" not in body:
-        errors.append("post-commit UI warning should retain type-only diagnostic evidence")
+    if "ex.Message" in body or "ex.GetType().Name" in body:
+        errors.append("post-commit UI warning must not expose host exception-derived diagnostics")
+    if "postCommitCleanupWarning" not in body or "Cleanup warning: CAD/project" not in body:
+        errors.append("post-commit cleanup warning must preserve durable-commit/no-retry truth")
 
 forbidden = [
     "FinalizeUi(document, message);",
