@@ -480,7 +480,15 @@ namespace QS3D.Core.Domain
 
     internal sealed class CatalogOwnershipList<T> : IList<T> where T : class
     {
+        private sealed class ReferenceComparer : IEqualityComparer<T>
+        {
+            internal static readonly ReferenceComparer Instance = new ReferenceComparer();
+            public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
+            public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
+        }
+
         private readonly List<T> _items = new List<T>();
+        private readonly Dictionary<T, int> _referenceCounts = new Dictionary<T, int>(ReferenceComparer.Instance);
         private readonly Action<T> _attach;
         private readonly Action<T> _detach;
         private readonly Action _beforeMutation;
@@ -516,13 +524,15 @@ namespace QS3D.Core.Domain
                 if (previous == null) throw new InvalidOperationException("Catalog contains a null entry.");
                 if (ReferenceEquals(previous, value)) return;
                 _validateCandidate?.Invoke(value);
-                var previousReferenceCount = CountReferences(previous);
-                var replacementReferenceCount = CountReferences(value);
+                var previousReferenceCount = GetReferenceCount(previous);
+                var replacementReferenceCount = GetReferenceCount(value);
                 _mutationObserver?.ValidateReplace(previous, value, previousReferenceCount, replacementReferenceCount);
                 var previousWasLastReference = previousReferenceCount == 1;
                 var valueAlreadyOwned = replacementReferenceCount > 0;
                 _beforeMutation();
                 _items[index] = value;
+                DecrementReference(previous);
+                IncrementReference(value);
                 if (previousWasLastReference) _detach(previous);
                 if (!valueAlreadyOwned) _attach(value);
                 _mutationObserver?.CommitReplace(previous, value);
@@ -536,11 +546,12 @@ namespace QS3D.Core.Domain
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
             _validateCandidate?.Invoke(item);
-            var existingReferenceCount = CountReferences(item);
+            var existingReferenceCount = GetReferenceCount(item);
             _mutationObserver?.ValidateAdd(item, existingReferenceCount);
             var alreadyOwned = existingReferenceCount > 0;
             _beforeMutation();
             _items.Add(item);
+            IncrementReference(item);
             if (!alreadyOwned) _attach(item);
             _mutationObserver?.CommitAdd(item);
         }
@@ -548,10 +559,11 @@ namespace QS3D.Core.Domain
         internal void AddRestoredPersistenceState(T item)
         {
             if (item == null) throw new ArgumentNullException(nameof(item));
-            var existingReferenceCount = CountReferences(item);
+            var existingReferenceCount = GetReferenceCount(item);
             _mutationObserver?.ValidateAdd(item, existingReferenceCount);
             var alreadyOwned = existingReferenceCount > 0;
             _items.Add(item);
+            IncrementReference(item);
             if (!alreadyOwned) _attach(item);
             _mutationObserver?.CommitAdd(item);
         }
@@ -560,24 +572,13 @@ namespace QS3D.Core.Domain
         {
             if (_items.Count == 0)
             {
+                _referenceCounts.Clear();
                 _mutationObserver?.CommitClear();
                 return;
             }
-            var owned = new List<T>();
-            for (var index = 0; index < _items.Count; index++)
-            {
-                var item = _items[index];
-                if (item == null) continue;
-                var seen = false;
-                for (var ownedIndex = 0; ownedIndex < owned.Count; ownedIndex++)
-                {
-                    if (!ReferenceEquals(owned[ownedIndex], item)) continue;
-                    seen = true;
-                    break;
-                }
-                if (!seen) owned.Add(item);
-            }
+            var owned = new List<T>(_referenceCounts.Keys);
             _items.Clear();
+            _referenceCounts.Clear();
             for (var index = 0; index < owned.Count; index++) _detach(owned[index]);
             _mutationObserver?.CommitClear();
         }
@@ -585,27 +586,13 @@ namespace QS3D.Core.Domain
         public void Clear()
         {
             if (_items.Count == 0) return;
+            ValidateReferenceIndex();
             _mutationObserver?.ValidateClear(_items);
             _beforeMutation();
-            var owned = new List<T>();
-            for (var index = 0; index < _items.Count; index++)
-            {
-                var item = _items[index];
-                var seen = false;
-                for (var ownedIndex = 0; ownedIndex < owned.Count; ownedIndex++)
-                {
-                    if (!ReferenceEquals(owned[ownedIndex], item)) continue;
-                    seen = true;
-                    break;
-                }
-                if (!seen) owned.Add(item);
-            }
+            var owned = new List<T>(_referenceCounts.Keys);
             _items.Clear();
-            for (var index = 0; index < owned.Count; index++)
-            {
-                var item = owned[index];
-                if (item != null) _detach(item);
-            }
+            _referenceCounts.Clear();
+            for (var index = 0; index < owned.Count; index++) _detach(owned[index]);
             _mutationObserver?.CommitClear();
         }
 
@@ -620,11 +607,12 @@ namespace QS3D.Core.Domain
             if (item == null) throw new ArgumentNullException(nameof(item));
             if (index < 0 || index > _items.Count) throw new ArgumentOutOfRangeException(nameof(index));
             _validateCandidate?.Invoke(item);
-            var existingReferenceCount = CountReferences(item);
+            var existingReferenceCount = GetReferenceCount(item);
             _mutationObserver?.ValidateAdd(item, existingReferenceCount);
             var alreadyOwned = existingReferenceCount > 0;
             _beforeMutation();
             _items.Insert(index, item);
+            IncrementReference(item);
             if (!alreadyOwned) _attach(item);
             _mutationObserver?.CommitAdd(item);
         }
@@ -641,26 +629,52 @@ namespace QS3D.Core.Domain
         {
             var item = _items[index];
             if (item == null) throw new InvalidOperationException("Catalog contains a null entry.");
-            var referenceCount = CountReferences(item);
+            var referenceCount = GetReferenceCount(item);
             _mutationObserver?.ValidateRemove(item, referenceCount);
             var detach = referenceCount == 1;
             _beforeMutation();
             _items.RemoveAt(index);
+            DecrementReference(item);
             if (detach) _detach(item);
             _mutationObserver?.CommitRemove(item);
         }
 
-        private bool ContainsReference(T item)
+        private int GetReferenceCount(T item)
         {
-            for (var i = 0; i < _items.Count; i++) if (ReferenceEquals(_items[i], item)) return true;
-            return false;
+            return _referenceCounts.TryGetValue(item, out var count) ? count : 0;
         }
 
-        private int CountReferences(T item)
+        private void IncrementReference(T item)
         {
-            var count = 0;
-            for (var i = 0; i < _items.Count; i++) if (ReferenceEquals(_items[i], item)) count++;
-            return count;
+            if (_referenceCounts.TryGetValue(item, out var count)) _referenceCounts[item] = checked(count + 1);
+            else _referenceCounts.Add(item, 1);
+        }
+
+        private void DecrementReference(T item)
+        {
+            if (!_referenceCounts.TryGetValue(item, out var count) || count <= 0)
+                throw new InvalidOperationException("Catalog reference accounting is inconsistent.");
+            if (count == 1) _referenceCounts.Remove(item);
+            else _referenceCounts[item] = count - 1;
+        }
+
+        private void ValidateReferenceIndex()
+        {
+            var actual = new Dictionary<T, int>(ReferenceComparer.Instance);
+            for (var index = 0; index < _items.Count; index++)
+            {
+                var item = _items[index];
+                if (item == null) throw new InvalidOperationException("Catalog contains a null entry.");
+                if (actual.TryGetValue(item, out var count)) actual[item] = checked(count + 1);
+                else actual.Add(item, 1);
+            }
+            if (actual.Count != _referenceCounts.Count)
+                throw new InvalidOperationException("Catalog reference accounting is inconsistent.");
+            foreach (var pair in actual)
+            {
+                if (!_referenceCounts.TryGetValue(pair.Key, out var storedCount) || storedCount != pair.Value)
+                    throw new InvalidOperationException("Catalog reference accounting is inconsistent.");
+            }
         }
     }
 
