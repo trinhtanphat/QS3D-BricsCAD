@@ -110,7 +110,10 @@ for marker in (
     "document = candidate;",
 ):
     require(marker in resolve, f"Live managed-wrapper resolution is missing: {marker}")
-require(resolve.index("DocumentBoundNativeLifecycleCoordinator.Rebind(") < resolve.index("_lifecycleDocument = candidate;") < resolve.index("document = candidate;"),
+rebind_index = resolve.index("DocumentBoundNativeLifecycleCoordinator.Rebind(")
+publication_index = resolve.index("_lifecycleDocument = candidate;", rebind_index)
+output_index = resolve.index("document = candidate;", publication_index + len("_lifecycleDocument = candidate;"))
+require(rebind_index < publication_index < output_index,
         "Live wrapper resolution must rebind before publishing ownership and output.")
 require("_lifecycleDocument." not in resolve,
         "Live document resolution may compare lifecycle-wrapper identity but must never dereference the retained wrapper.")
