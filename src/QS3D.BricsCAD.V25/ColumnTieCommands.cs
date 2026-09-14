@@ -33,11 +33,12 @@ namespace QS3D.BricsCAD.V25
 
                 var project = ExistingProjectMutationContext.Require(document, "Column Tie 3D");
                 RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
-                var count = ColumnTieSolidBuilder.BuildSelected(document, project, selectedIds);
+                var result = ColumnTieSolidBuilder.BuildSelected(document, project, selectedIds);
+                var count = result.Count;
                 var message = count == 0
                     ? SelectionGuidance
                     : "Tie 3D: đã tạo/cập nhật " + count + " đai cột.";
-                FinalizeUi(document, nativeDatabaseIdentity, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);
             }
             catch (Exception)
             {
@@ -45,7 +46,7 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)
         {
             if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try
@@ -56,12 +57,12 @@ namespace QS3D.BricsCAD.V25
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 TrySetPaletteStatus(document, nativeDatabaseIdentity, message);
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                document.Editor.WriteMessage("\nQS3D " + message);
+                document.Editor.WriteMessage("\nQS3D " + message + (postCommitCleanupWarning ? " Cleanup warning: CAD/project Ä‘Ã£ commit; khÃ´ng cháº¡y láº¡i lá»‡nh Ä‘á»ƒ trÃ¡nh táº¡o trÃ¹ng." : string.Empty));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message + " " + UiSyncWarning + " (" + ex.GetType().Name + ").");
+                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message + " " + UiSyncWarning);
             }
         }
 
