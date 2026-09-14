@@ -118,25 +118,25 @@ namespace QS3D.BricsCAD.V25
                 var state = SessionOne(context);
                 var after = state.After ?? throw new InvalidOperationException("Level lifecycle baseline is missing.");
                 var owner = RequireOwner(context.Project, state.OwnerId);
-                var configSignature = RequireLevelConfiguration(context.Project, owner);
-                var currentHosts = Canonical(PropertyValues(owner, "GeneratedSolidHandle"), "Undo host");
-                Require(Same(state.BeforeHostHandles, currentHosts), "Undo must restore the pre-build host ownership");
-                RequireAllLive(context.Document, currentHosts, "Undo host");
-                var currentRange = ReadZRange(context.Document, currentHosts, "Undo host");
-                RequireNear(state.BeforeHostRange.MinimumM, currentRange.MinimumM, "Undo host bottom");
-                RequireNear(state.BeforeHostRange.MaximumM, currentRange.MaximumM, "Undo host top");
-                RequireSnapshot(owner, "GeneratedSolid", LegacyBottomM, LegacyTopM, "LegacySourceRelative");
-                Require(PropertyValues(owner, "GeneratedCurtainFrameHandles").Count == 0,
-                    "Undo must restore empty Curtain frame ownership");
-                Require(PropertyValues(owner, "GeneratedCurtainPanelHandles").Count == 0,
-                    "Undo must restore empty Curtain panel ownership");
-                Require(owner.IsGeneratedSolidStale(), "Undo-restored legacy host must remain stale for the Level configuration");
+                var configSignature = RunProbeStep("UNDO_LEVEL_CONFIG_REJECTED", () => RequireLevelConfiguration(context.Project, owner));
+                var currentHosts = RunProbeStep("UNDO_HOST_OWNERSHIP_REJECTED", () => Canonical(PropertyValues(owner, "GeneratedSolidHandle"), "Undo host"));
+                RunProbeStep("UNDO_HOST_OWNERSHIP_REJECTED", () => Require(Same(state.BeforeHostHandles, currentHosts), "Undo must restore the pre-build host ownership"));
+                RunProbeStep("UNDO_HOST_LIVENESS_REJECTED", () => RequireAllLive(context.Document, currentHosts, "Undo host"));
+                var currentRange = RunProbeStep("UNDO_HOST_RANGE_REJECTED", () => ReadZRange(context.Document, currentHosts, "Undo host"));
+                RunProbeStep("UNDO_HOST_BOTTOM_REJECTED", () => RequireNear(state.BeforeHostRange.MinimumM, currentRange.MinimumM, "Undo host bottom"));
+                RunProbeStep("UNDO_HOST_TOP_REJECTED", () => RequireNear(state.BeforeHostRange.MaximumM, currentRange.MaximumM, "Undo host top"));
+                RunProbeStep("UNDO_LEGACY_SNAPSHOT_REJECTED", () => RequireSnapshot(owner, "GeneratedSolid", LegacyBottomM, LegacyTopM, "LegacySourceRelative"));
+                RunProbeStep("UNDO_FRAME_OWNERSHIP_REJECTED", () => Require(PropertyValues(owner, "GeneratedCurtainFrameHandles").Count == 0,
+                    "Undo must restore empty Curtain frame ownership"));
+                RunProbeStep("UNDO_PANEL_OWNERSHIP_REJECTED", () => Require(PropertyValues(owner, "GeneratedCurtainPanelHandles").Count == 0,
+                    "Undo must restore empty Curtain panel ownership"));
+                RunProbeStep("UNDO_HOST_STALE_REJECTED", () => Require(owner.IsGeneratedSolidStale(), "Undo-restored legacy host must remain stale for the Level configuration"));
                 state.UndoLevelConfigurationPreserved = string.Equals(configSignature, state.ConfigSignature, StringComparison.Ordinal);
                 state.UndoPreBuildHostRestored = Same(state.BeforeHostHandles, currentHosts);
                 state.UndoGeneratedAfterAbsent = AllAbsent(context.Document, GeneratedHandles(after));
-                Require(state.UndoLevelConfigurationPreserved, "Undo Level configuration preservation");
-                Require(state.UndoPreBuildHostRestored, "Undo pre-build host restoration");
-                Require(state.UndoGeneratedAfterAbsent, "Undo generated-after removal");
+                RunProbeStep("UNDO_LEVEL_CONFIG_REJECTED", () => Require(state.UndoLevelConfigurationPreserved, "Undo Level configuration preservation"));
+                RunProbeStep("UNDO_HOST_OWNERSHIP_REJECTED", () => Require(state.UndoPreBuildHostRestored, "Undo pre-build host restoration"));
+                RunProbeStep("UNDO_GENERATED_AFTER_PRESENT", () => Require(state.UndoGeneratedAfterAbsent, "Undo generated-after removal"));
                 state.UndoChecked = true;
             });
         }
@@ -296,11 +296,30 @@ namespace QS3D.BricsCAD.V25
         private static void Execute(string phase, Action action)
         {
             try { action(); }
+            catch (ProbeFailureException error)
+            {
+                TryWriteFailure(phase, error.Code);
+                throw;
+            }
             catch (Exception)
             {
                 TryWriteFailure(phase, "STATE_REJECTED");
                 throw;
             }
+        }
+
+        private static void RunProbeStep(string code, Action action)
+        {
+            try { action(); }
+            catch (ProbeFailureException) { throw; }
+            catch (Exception) { throw new ProbeFailureException(code); }
+        }
+
+        private static T RunProbeStep<T>(string code, Func<T> action)
+        {
+            try { return action(); }
+            catch (ProbeFailureException) { throw; }
+            catch (Exception) { throw new ProbeFailureException(code); }
         }
 
         private static ProbeContext Context()
@@ -626,6 +645,16 @@ namespace QS3D.BricsCAD.V25
         private static string Number(double value) => value.ToString("R", CultureInfo.InvariantCulture);
         private static string Boolean(bool value) => value ? "true" : "false";
         private static string OneLine(string value) => (value ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ');
+
+        private sealed class ProbeFailureException : InvalidOperationException
+        {
+            public ProbeFailureException(string code)
+            {
+                Code = code;
+            }
+
+            public string Code { get; }
+        }
 
         private sealed class ProbeContext
         {
