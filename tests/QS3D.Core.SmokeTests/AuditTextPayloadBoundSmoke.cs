@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
@@ -65,14 +67,14 @@ namespace QS3D.Core.SmokeTests
                 Action = "a",
                 Detail = new string('x', (TextBudget / 2) - 1)
             });
-            project.AuditEvents.Add(new AuditEvent
+            var second = new AuditEvent
             {
                 Utc = new DateTime(2026, 8, 21, 0, 0, 2, DateTimeKind.Utc),
                 Action = "b",
                 Detail = new string('y', TextBudget / 2)
-            });
+            };
+            InjectWithoutAccounting(project, second);
             var first = project.AuditEvents[0];
-            var second = project.AuditEvents[1];
             var beforeVersion = project.ChangeVersion;
             var trail = AuditTrail.ForProject(project);
 
@@ -89,6 +91,15 @@ namespace QS3D.Core.SmokeTests
             Equal(2, project.AuditEvents.Count, "oversized append count");
             if (!ReferenceEquals(first, project.AuditEvents[0]) || !ReferenceEquals(second, project.AuditEvents[1]))
                 throw new Exception("AuditTextPayloadBoundSmoke oversized history was replaced during refusal.");
+        }
+
+        private static void InjectWithoutAccounting(ProjectState project, AuditEvent item)
+        {
+            var itemsField = project.AuditEvents.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? throw new Exception("AuditTextPayloadBoundSmoke could not resolve corruption-injection storage.");
+            var items = itemsField.GetValue(project.AuditEvents) as List<AuditEvent>
+                ?? throw new Exception("AuditTextPayloadBoundSmoke corruption-injection storage has an unexpected shape.");
+            items.Add(item);
         }
 
         private static void Equal<T>(T expected, T actual, string label)

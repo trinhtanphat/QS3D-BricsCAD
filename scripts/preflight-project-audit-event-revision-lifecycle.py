@@ -9,22 +9,29 @@ project_text = PROJECT_STATE.read_text(encoding="utf-8")
 audit_text = AUDIT_TRAIL.read_text(encoding="utf-8")
 smoke_text = SMOKE.read_text(encoding="utf-8")
 
-# Guard semantics rather than a single formatting/source-shape spelling. AuditEvents must
-# remain a public persisted list backed by the ownership-aware boundary, and ProjectState
-# must wire/unwire AuditEvent persistence-mutation notifications to its revision lifecycle.
+# AuditEvents must remain a public persisted list backed by the ownership-aware
+# collection boundary. Owned AuditEvent mutation is deliberately three-phase:
+# all owners validate first (including budget + revision overflow), then revision
+# publication occurs, then cached text accounting commits after the field mutation.
 required_project = [
     "public IList<AuditEvent> AuditEvents { get; }",
     "AuditEvents = new CatalogOwnershipList<AuditEvent>(",
     "AttachAuditEvent",
     "DetachAuditEvent",
-    "auditEvent.PersistenceMutationRequested += Touch",
-    "auditEvent.PersistenceMutationRequested -= Touch",
+    "auditEvent.PersistenceTextMutationValidating += ValidateAuditOwnedMutation;",
+    "auditEvent.PersistenceMutationRequested += Touch;",
+    "auditEvent.PersistenceTextMutationCommitted += _auditHistoryBudget.CommitOwnedMutation;",
+    "auditEvent.PersistenceTextMutationValidating -= ValidateAuditOwnedMutation;",
+    "auditEvent.PersistenceMutationRequested -= Touch;",
+    "auditEvent.PersistenceTextMutationCommitted -= _auditHistoryBudget.CommitOwnedMutation;",
+    "_auditHistoryBudget.ValidateOwnedMutation(auditEvent, textDelta);",
+    "_ = checked(ChangeVersion + 1L);",
 ]
 missing_project = [token for token in required_project if token not in project_text]
 if missing_project:
     raise SystemExit(
         "ERROR: audit-event revision lifecycle preflight failed: persisted ProjectState.AuditEvents "
-        "must use the ownership/revision-aware collection boundary; missing token(s): "
+        "must preserve owner admission, revision publication and budget-accounting lifecycle; missing token(s): "
         + ", ".join(repr(token) for token in missing_project)
     )
 
@@ -39,8 +46,9 @@ for stale in (
         )
 
 required_audit = [
+    "PersistenceTextMutationValidating",
     "PersistenceMutationRequested",
-    "PersistenceMutationRequested?.Invoke();",
+    "PersistenceTextMutationCommitted",
     "return new AuditTrail(project.AuditEvents);",
     "new AuditTrail(project.AuditEvents).ValidateExistingHistory(",
     "_events.Add(item);",
@@ -52,6 +60,18 @@ if missing_audit:
         "ERROR: audit-event revision lifecycle preflight failed: AuditEvent/AuditTrail must publish "
         "owned entry changes through the revision-aware project collection; missing token(s): "
         + ", ".join(repr(token) for token in missing_audit)
+    )
+
+validation_call = "PersistenceTextMutationValidating?.Invoke(this, delta);"
+revision_call = "PersistenceMutationRequested?.Invoke();"
+commit_call = "PersistenceTextMutationCommitted?.Invoke(this, delta);"
+validation_pos = audit_text.find(validation_call)
+revision_pos = audit_text.find(revision_call, validation_pos + len(validation_call))
+commit_pos = audit_text.find(commit_call, revision_pos + len(revision_call))
+if validation_pos < 0 or revision_pos < 0 or commit_pos < 0 or not (validation_pos < revision_pos < commit_pos):
+    raise SystemExit(
+        "ERROR: audit-event revision lifecycle preflight failed: owned text mutation must validate "
+        "all owners before revision publication and commit accounting only after mutation."
     )
 
 if "_project?.Touch();" in audit_text:
