@@ -164,7 +164,7 @@ namespace QS3D.BricsCAD.V25
                     var element = project.FindElement(id);
                     if (element == null || element.Category != ElementCategory.GlassWall)
                         throw new InvalidOperationException("Curtain Undo owner is missing or is no longer a GlassWall: " + id + ".");
-                    owners.Add(id, OwnerState.Capture(element));
+                    owners.Add(id, OwnerState.Capture(project, element));
                 }
                 return new OwnerStateSnapshot(
                     owners,
@@ -214,29 +214,37 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 foreach (var pair in _owners)
-                    pair.Value.Restore(targets[pair.Key]);
+                    pair.Value.Restore(project, targets[pair.Key]);
                 _persistence.RestoreTransition(project, transitionGuard);
             }
         }
 
         private sealed class OwnerState
         {
-            private OwnerState(IReadOnlyList<string> sourceHandles, Dictionary<string, string> properties)
+            private OwnerState(
+                IReadOnlyList<string> sourceHandles,
+                Dictionary<string, string> properties,
+                ProjectStateSnapshot.ElementStateSnapshot elementState)
             {
                 SourceHandles = sourceHandles;
                 Properties = properties;
+                ElementState = elementState ?? throw new ArgumentNullException(nameof(elementState));
             }
 
             public IReadOnlyList<string> SourceHandles { get; }
             public Dictionary<string, string> Properties { get; }
+            public ProjectStateSnapshot.ElementStateSnapshot ElementState { get; }
 
-            public static OwnerState Capture(ProjectElement element)
+            public static OwnerState Capture(ProjectState project, ProjectElement element)
             {
+                if (project == null) throw new ArgumentNullException(nameof(project));
+                if (element == null) throw new ArgumentNullException(nameof(element));
                 var handles = element.SourceHandles.Select(x => x ?? string.Empty).ToList().AsReadOnly();
                 var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var pair in element.Properties)
                     if (IsTrackedProperty(pair.Key)) properties.Add(pair.Key, pair.Value ?? string.Empty);
-                return new OwnerState(handles, properties);
+                var elementState = ProjectStateSnapshot.CaptureElement(project, element.Id);
+                return new OwnerState(handles, properties, elementState);
             }
 
             public bool CoreMatches(ProjectElement element)
@@ -259,14 +267,13 @@ namespace QS3D.BricsCAD.V25
                 return true;
             }
 
-            public void Restore(ProjectElement element)
+            public void Restore(ProjectState elementProject, ProjectElement element)
             {
-                element.SourceHandles.Clear();
-                foreach (var handle in SourceHandles) element.SourceHandles.Add(handle);
-
-                foreach (var key in element.Properties.Keys.Where(IsTrackedProperty).ToList())
-                    element.Properties.Remove(key);
-                foreach (var pair in Properties) element.Properties[pair.Key] = pair.Value;
+                if (elementProject == null) throw new ArgumentNullException(nameof(elementProject));
+                if (element == null) throw new ArgumentNullException(nameof(element));
+                if (!string.Equals(ElementState.ElementId, element.Id, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Curtain Undo owner snapshot target id changed before restore.");
+                ElementState.Restore(elementProject);
             }
         }
 

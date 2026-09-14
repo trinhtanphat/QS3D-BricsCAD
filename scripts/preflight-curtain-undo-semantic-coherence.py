@@ -5,6 +5,14 @@ HERE = Path(__file__).resolve()
 BASE = HERE.parent / "_guard_bases" / "curtain-undo-semantic-coherence.py"
 source = BASE.read_text(encoding="utf-8")
 
+old_whole_snapshot_guard = '''if "ProjectStateSnapshot" in coord:
+    errors.append("Curtain Undo must not restore whole-project snapshots during native Undo/Redo")'''
+new_whole_snapshot_guard = '''if "ProjectStateSnapshot.Capture(" in coord:
+    errors.append("Curtain Undo must not restore whole-project snapshots during native Undo/Redo")'''
+if old_whole_snapshot_guard not in source:
+    raise SystemExit("Curtain Undo base guard whole-project snapshot boundary drifted")
+source = source.replace(old_whole_snapshot_guard, new_whole_snapshot_guard, 1)
+
 old = '''for token in (
     "CurtainWallUndoCoordinator.Attach(docs.MdiActiveDocument);",
     "CurtainWallUndoCoordinator.Stop();",
@@ -54,12 +62,12 @@ if old_sync not in source:
 source = source.replace(old_sync, new_sync, 1)
 
 old_order = 'elif not (capture < begin < regen < line_host < line_frame < line_panel < stage < commit < post < refresh):'
-new_order = 'elif not (regen < capture < begin < line_host < line_frame < line_panel < stage < commit < post < refresh):'
+new_order = 'elif not (capture < begin < regen < line_host < line_frame < line_panel < stage < commit < post < refresh):'
 if old_order not in source:
     raise SystemExit("Curtain Undo base guard ordering contract drifted")
 source = source.replace(old_order, new_order, 1)
 old_order_message = 'Curtain Undo must capture/register before mutation, stage after all builders, commit marker with CAD, then finalize the exact post-fingerprint state'
-new_order_message = 'Curtain Undo must regenerate semantic state before capturing the native-before owner checkpoint, then register before native mutation, stage after all builders, commit marker with CAD, and finalize the exact post-fingerprint state'
+new_order_message = 'Curtain Undo must capture/register exact command-entry owner state before semantic regeneration and native mutation, stage after all builders, commit marker with CAD, and finalize the exact post-fingerprint state'
 if old_order_message not in source:
     raise SystemExit("Curtain Undo base guard ordering message drifted")
 source = source.replace(old_order_message, new_order_message, 1)

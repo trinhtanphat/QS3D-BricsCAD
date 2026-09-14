@@ -60,6 +60,26 @@ namespace QS3D.Core.Persistence
                 capturedElements);
         }
 
+        public static ElementStateSnapshot CaptureElement(ProjectState project, string elementId)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            var id = elementId ?? string.Empty;
+            if (id.Length == 0 || string.IsNullOrWhiteSpace(id))
+                throw new ArgumentException("Element snapshot id is required.", nameof(elementId));
+            if (!string.Equals(id, id.Trim(), StringComparison.Ordinal))
+                throw new ArgumentException("Element snapshot id must be canonical without leading or trailing whitespace.", nameof(elementId));
+
+            var element = project.FindElement(id)
+                ?? throw new InvalidOperationException("Cannot capture missing element snapshot target: " + id + ".");
+            var detached = CloneElement(element);
+            RequireEquivalentElementState(detached, element);
+            var current = project.FindElement(id);
+            if (!ReferenceEquals(current, element))
+                throw new InvalidOperationException("Cannot capture an element whose object generation changed during snapshot materialization.");
+            RequireEquivalentElementState(detached, element);
+            return new ElementStateSnapshot(project, project.ProjectId, element, detached);
+        }
+
         public static ProjectState CreateDetachedCopy(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -77,6 +97,51 @@ namespace QS3D.Core.Persistence
             var preservedFamilies = preservingIdentity ? _capturedFamilies : null;
             var preservedElements = preservingIdentity ? _capturedElements : null;
             CopyInto(_snapshot, project, preservedZones, preservedFloors, preservedFamilies, preservedElements);
+        }
+
+        public sealed class ElementStateSnapshot
+        {
+            private readonly ProjectState _capturedProject;
+            private readonly string _projectId;
+            private readonly ProjectElement _capturedElement;
+            private readonly ProjectElement _snapshot;
+
+            internal ElementStateSnapshot(
+                ProjectState capturedProject,
+                string projectId,
+                ProjectElement capturedElement,
+                ProjectElement snapshot)
+            {
+                _capturedProject = capturedProject ?? throw new ArgumentNullException(nameof(capturedProject));
+                _projectId = projectId ?? throw new ArgumentNullException(nameof(projectId));
+                _capturedElement = capturedElement ?? throw new ArgumentNullException(nameof(capturedElement));
+                _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            public string ElementId => _snapshot.Id;
+
+            public bool Matches(ProjectState project)
+            {
+                if (project == null) throw new ArgumentNullException(nameof(project));
+                if (!ReferenceEquals(project, _capturedProject) ||
+                    !string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal)) return false;
+                var current = project.FindElement(_snapshot.Id);
+                if (!ReferenceEquals(current, _capturedElement)) return false;
+                try { RequireEquivalentElementState(_snapshot, current); return true; }
+                catch (InvalidOperationException) { return false; }
+            }
+
+            public void Restore(ProjectState project)
+            {
+                if (project == null) throw new ArgumentNullException(nameof(project));
+                if (!ReferenceEquals(project, _capturedProject) ||
+                    !string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Cannot restore an element snapshot across project generations.");
+                var current = project.FindElement(_snapshot.Id);
+                if (!ReferenceEquals(current, _capturedElement))
+                    throw new InvalidOperationException("Cannot restore an element snapshot across element generations: " + _snapshot.Id + ".");
+                CopyElementInto(_snapshot, current);
+            }
         }
 
         private static ProjectState Clone(ProjectState source)
@@ -267,6 +332,27 @@ namespace QS3D.Core.Persistence
                     && string.Equals(left.Actor, right.Actor, StringComparison.Ordinal)
                     && string.Equals(left.CorrelationId, right.CorrelationId, StringComparison.Ordinal),
                 "audit events");
+        }
+
+        private static void RequireEquivalentElementState(ProjectElement expected, ProjectElement actual)
+        {
+            if (expected == null || actual == null ||
+                !string.Equals(expected.Id, actual.Id, StringComparison.Ordinal) ||
+                expected.Category != actual.Category ||
+                !string.Equals(expected.FamilyId, actual.FamilyId, StringComparison.Ordinal) ||
+                !string.Equals(expected.FloorId, actual.FloorId, StringComparison.Ordinal) ||
+                !string.Equals(expected.ZoneId, actual.ZoneId, StringComparison.Ordinal) ||
+                !string.Equals(expected.DrawingFingerprint, actual.DrawingFingerprint, StringComparison.Ordinal) ||
+                expected.Dirty != actual.Dirty ||
+                expected.UpdatedUtc != actual.UpdatedUtc)
+                throw new InvalidOperationException("Element snapshot scalar state changed during capture or restore.");
+
+            RequireEquivalentSequence(expected.SourceHandles, actual.SourceHandles,
+                (left, right) => string.Equals(left, right, StringComparison.Ordinal), "element source handles");
+            RequireEquivalentSequence(expected.DependsOn, actual.DependsOn,
+                (left, right) => string.Equals(left, right, StringComparison.Ordinal), "element dependencies");
+            RequireEquivalentMap(expected.Properties, actual.Properties, "element properties");
+            RequireEquivalentDoubleMap(expected.Quantities, actual.Quantities, "element quantities");
         }
 
         private static void RequireEquivalentMap(
