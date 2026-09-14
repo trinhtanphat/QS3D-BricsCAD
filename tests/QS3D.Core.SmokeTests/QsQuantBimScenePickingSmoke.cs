@@ -24,7 +24,7 @@ namespace QS3D.Core.SmokeTests
 
             var ray = new IfcSceneRay(0.25, 0.25, 0.0, 0.0, 0.0, 10.0);
             var hit = picker.PickNearest(scene, ray);
-            True(hit != null, "nearest hit exists");
+            if (hit == null) throw new InvalidOperationException("nearest hit exists: expected true.");
             Equal("NEAR", hit.Guid, "nearest guid");
             Equal("ifc-step://#10", hit.GeometryReference, "geometry evidence reference");
             Near(2.0, hit.Distance, "normalized-ray distance");
