@@ -23,7 +23,9 @@ if not errors:
         'ExistingProjectMutationContext.Require(document, "Rebar 3D")',
         'expectedChangeVersion',
         'expectedTargetIds.SetEquals',
-        'ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds)',
+        'var outcome = ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds);',
+        'var count = outcome.Count;',
+        'outcome.PostCommitCleanupWarning',
         'SelectionGuidance',
         'OperationFailure',
         'UiSyncWarning',
@@ -42,14 +44,14 @@ if not errors:
     if min(acquire, empty, preview, require, build) < 0 or not (acquire < empty < preview < require < build):
         errors.append("Column Rebar must enforce PICKFIRST snapshot -> empty return -> read-only preview -> canonical project bind -> same-snapshot native build")
 
-    for token in (".SelectImplied()", "ex.Message", "exception.Message"):
+    for token in (".SelectImplied()", "ex.Message", "exception.Message", "PostCommitCleanupWarning.Message"):
         if token in command:
-            errors.append("RebarGeometryCommands.cs must not expose/re-read native selection detail: " + token)
+            errors.append("RebarGeometryCommands.cs must not expose/re-read native selection or cleanup detail: " + token)
 
     required_builder = [
-        'BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)',
+        'ColumnRebarBuildOutcome BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)',
         'if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));',
-        'if (selectedIds.Length == 0) return 0;',
+        'if (selectedIds.Length == 0) return new ColumnRebarBuildOutcome(0, false);',
         'var ids = (ObjectId[])selectedIds.Clone();',
         'ProjectStateSnapshot.Capture(project)',
         'using (document.LockDocument())',
@@ -59,6 +61,7 @@ if not errors:
         'GeneratedRebarNativeOwnershipService.RequireMatchingOwnership',
         'CommitSemanticUpdate(project, update)',
         'transaction.Commit()',
+        'return new ColumnRebarBuildOutcome(totalBars, cleanupWarning);',
     ]
     for token in required_builder:
         if token not in builder:
@@ -74,4 +77,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Column Rebar captures PICKFIRST once, revalidates project/semantic targets, passes the exact cloned snapshot into native generation, preserves rollback/ownership/bounds, and redacts host exception detail from user-visible command/UI-sync failures.")
+print("PASS: Column Rebar captures PICKFIRST once, revalidates project/semantic targets, passes the exact cloned snapshot into native generation, preserves rollback/ownership/bounds, returns committed cleanup state, and redacts host exception detail from user-visible failures.")
