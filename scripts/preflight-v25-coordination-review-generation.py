@@ -53,11 +53,11 @@ for signature, next_signature, action in (
 
 isolate = method("public void Isolate(IReadOnlyList<ObjectId> ids)", "public void RestoreIsolation")
 for token in (
-    "if (!TryRestoreImpliedSelectionBestEffort(impliedSelectionBefore))",
+    "if (!TryRestoreImpliedSelectionBestEffort(impliedSelectionBefore) && !_generationAbandoned)",
     "_impliedSelectionBeforeIsolation = impliedSelectionBefore;",
 ):
     if token not in isolate:
-        errors.append("isolation failure must retain selection compensation debt: " + token)
+        errors.append("isolation failure must retain same-generation selection compensation debt: " + token)
 restore_isolation = method("public void RestoreIsolation()", "public void ApplySectionFocus")
 for token in ("RestorePendingImpliedSelectionBestEffort();", "RestoreObjectIsolationModeBestEffort();"):
     if token not in restore_isolation:
