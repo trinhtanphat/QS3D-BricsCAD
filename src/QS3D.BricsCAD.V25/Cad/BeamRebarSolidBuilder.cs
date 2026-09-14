@@ -17,7 +17,7 @@ namespace QS3D.BricsCAD.V25.Cad
         private const int MaxBarsPerElement = 1024;
         private const int MaxBarsPerBatch = 4096;
 
-        internal readonly struct BeamRebarBuildOutcome
+        internal struct BeamRebarBuildOutcome
         {
             public BeamRebarBuildOutcome(int count, bool postCommitCleanupWarning)
             {
