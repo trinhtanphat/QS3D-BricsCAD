@@ -147,6 +147,14 @@ namespace QS3D.BricsCAD.V25
                     matrix.Add(new MatrixCase(category, "BottomTopLevels", boundedSource, bounded, 3.1d, 6.8d));
                 }
 
+                failureCase = "straight_openings";
+                var hostedOpeningHost = project.FindElement("bounded-ArchitecturalWall")
+                    ?? throw new InvalidOperationException("Complete-family opening host is missing.");
+                var doorSource = CreateLineSource(document, 10d, 3.4d, 1d, 1.8d);
+                var wallOpeningSource = CreateLineSource(document, 10d, 3.4d, 3d, 3.8d);
+                var door = AddOpening(project, ElementCategory.Door, "bounded-door", doorSource, hostedOpeningHost.Id);
+                var wallOpening = AddOpening(project, ElementCategory.WallOpening, "bounded-wall-opening", wallOpeningSource, hostedOpeningHost.Id);
+
                 foreach (var item in matrix)
                 {
                     failureCase = item.Category + "/" + item.Mode;
@@ -162,7 +170,7 @@ namespace QS3D.BricsCAD.V25
                 }
                 failureStage = "hosted_openings";
                 failureCase = "straight_openings";
-                var hostedOpeningCount = VerifyStraightHostedOpenings(document, project);
+                var hostedOpeningCount = VerifyStraightHostedOpenings(document, project, door, wallOpening);
                 failureStage = "fail_closed";
                 failureCase = "TopOnly";
                 var topOnlyFailClosed = VerifyFailure(document, FailureKind.TopOnly, 220d);
@@ -361,14 +369,14 @@ namespace QS3D.BricsCAD.V25
             }
         }
 
-        private static int VerifyStraightHostedOpenings(Document document, ProjectState project)
+        private static int VerifyStraightHostedOpenings(
+            Document document,
+            ProjectState project,
+            ProjectElement door,
+            ProjectElement wallOpening)
         {
             var host = project.FindElement("bounded-ArchitecturalWall")
                 ?? throw new InvalidOperationException("Complete-family opening host is missing.");
-            var doorSource = CreateLineSource(document, 10d, 3.4d, 1d, 1.8d);
-            var wallOpeningSource = CreateLineSource(document, 10d, 3.4d, 3d, 3.8d);
-            var door = AddOpening(project, ElementCategory.Door, "bounded-door", doorSource, host.Id);
-            var wallOpening = AddOpening(project, ElementCategory.WallOpening, "bounded-wall-opening", wallOpeningSource, host.Id);
             var hostHandle = Handles(host, "GeneratedSolidHandle").Single();
             var before = ReadSolidVolume(document, hostHandle, "opening host before cuts");
             Require(OpeningBooleanService.CutLinkedOpenings(document, project, new[] { door.Id }) == 1, "Door straight cut");

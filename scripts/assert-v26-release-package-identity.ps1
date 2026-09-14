@@ -186,6 +186,9 @@ function Get-JsonPropertyOccurrenceCount {
     )
 
     $firstNonWhitespace = 0
+    if ($JsonText.Length -gt 0 -and $JsonText[0] -eq [char]0xFEFF) {
+        $firstNonWhitespace = 1
+    }
     while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
     if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') {
         throw 'V26 release package metadata must have a top-level JSON object.'
