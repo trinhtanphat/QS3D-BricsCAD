@@ -43,11 +43,13 @@ registration_attach = method_block(source, "public void Attach(Document document
 recovery = method_block(source, "public void TryCompleteFailedInitialAttachCleanup()")
 quiescence_aborted = method_block(source, "private void OnHostQuiescenceAborted(object? sender, EventArgs e)")
 scheduled_cleanup = method_block(source, "private void TryScheduleFailedInitialAttachCleanupAfterQuitAbort()")
+detach = method_block(source, "private void Detach()")
 require(bool(attach), "top-level DocumentBoundWindowLifetime.Attach is missing", errors)
 require(bool(registration_attach), "Registration.Attach is missing", errors)
 require(bool(recovery), "failed-initial-attach cleanup recovery method is missing", errors)
 require(bool(quiescence_aborted), "host-quiescence-aborted handler is missing", errors)
 require(bool(scheduled_cleanup), "dispatcher-deferred failed-attach cleanup method is missing", errors)
+require(bool(detach), "Registration.Detach is missing", errors)
 
 for token in (
     "private sealed class AttachGate",
@@ -55,12 +57,14 @@ for token in (
     "ConditionalWeakTable<Window, AttachGate>",
     "AttachGates",
     "private bool _initialAttachFailed;",
+    "private bool _managedHandlerCleanupPending;",
     "public bool IsAttached => _attached;",
     "public bool HasFailedInitialAttach => _initialAttachFailed;",
     "public bool CanRestartAfterFailedInitialAttach =>",
     "_initialAttachFailed &&",
     "!_attached &&",
-    "_nativeLifecycleSubscription == null;",
+    "_nativeLifecycleSubscription == null &&",
+    "!_managedHandlerCleanupPending;",
 ):
     require(token in source, "initial Attach retry state contract missing token: " + token, errors)
 
@@ -85,16 +89,23 @@ for token in (
     require(token in attach, "initial Attach retry contract missing token: " + token, errors)
 
 for token in (
+    "_managedHandlerCleanupPending = true;",
     "_initialAttachFailed = true;",
     "_attached = true;",
     "Detach();",
 ):
     require(token in registration_attach, "failed initial Attach must retain rollback obligation: " + token, errors)
+if registration_attach:
+    pending_index = registration_attach.find("_managedHandlerCleanupPending = true;")
+    first_managed_subscribe = registration_attach.find("ModelessHostQuiescenceCoordinator.QuiescenceAborted +=", pending_index)
+    require(0 <= pending_index < first_managed_subscribe,
+            "managed cleanup obligation must be recorded before the first managed/modeless event subscription",
+            errors)
 
 for token in (
     "if (!_initialAttachFailed) return;",
     "if (ModelessHostQuiescenceCoordinator.IsQuiescing) return;",
-    "if (_attached) Detach();",
+    "if (_attached || _managedHandlerCleanupPending || _nativeLifecycleSubscription != null) Detach();",
 ):
     require(token in recovery, "deferred failed-initial cleanup contract missing token: " + token, errors)
 
@@ -129,6 +140,23 @@ if scheduled_cleanup:
             "dispatcher callback must recheck quiescence before failed-attach cleanup",
             errors)
 
+for token in (
+    "if (!_attached && !_managedHandlerCleanupPending && _nativeLifecycleSubscription == null) return;",
+    "var managedCleanupSucceeded = true;",
+    "managedCleanupSucceeded = false;",
+    "if (managedCleanupSucceeded) _managedHandlerCleanupPending = false;",
+    "_attached = false;",
+):
+    require(token in detach, "Detach must preserve managed unsubscribe cleanup obligations: " + token, errors)
+if detach:
+    cleanup_state_index = detach.find("var managedCleanupSucceeded = true;")
+    first_unsubscribe_index = detach.find("ModelessHostQuiescenceCoordinator.QuiescenceAborted -=", cleanup_state_index)
+    clear_pending_index = detach.find("if (managedCleanupSucceeded) _managedHandlerCleanupPending = false;", first_unsubscribe_index)
+    attached_false_index = detach.find("_attached = false;", clear_pending_index)
+    require(0 <= cleanup_state_index < first_unsubscribe_index < clear_pending_index < attached_false_index,
+            "managed cleanup success must cover all unsubscribe attempts before cleanup ownership is cleared",
+            errors)
+
 if attach:
     get_index = attach.find("Registrations.GetValue(window")
     failed_index = attach.find("if (registration.HasFailedInitialAttach)", get_index)
@@ -157,4 +185,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: failed initial modeless Attach retains cleanup ownership through quiescence, defers quit-abort cleanup to the WPF dispatcher, recreates only after cleanup is complete, rejects reentrancy, and preserves successful rebind ownership.")
+print("PASS: failed initial modeless Attach retains native and managed cleanup ownership through quiescence/unsubscribe failures, defers quit-abort cleanup to the WPF dispatcher, recreates only after cleanup is complete, rejects reentrancy, and preserves successful rebind ownership.")
