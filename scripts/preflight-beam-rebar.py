@@ -31,7 +31,7 @@ if builder.is_file():
         "MaxBarsPerElement = 1024", "MaxBarsPerBatch = 4096",
         "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)",
         "if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));",
-        "if (selectedIds.Length == 0) return 0;", "var ids = (ObjectId[])selectedIds.Clone();",
+        "if (selectedIds.Length == 0) return new BeamRebarBuildOutcome(0, postCommitCleanupWarning: false);", "var ids = (ObjectId[])selectedIds.Clone();",
         "CadElementVerticalPlacement.Resolve(", "vertical.CenterDrawing", "GeneratedRebar", "CadGeometryGuard.Finite(nx * localX",
         "var halfBarLength = CadGeometryGuard.Finite(barLength / 2d", "var longitudinalCenterX = CadGeometryGuard.Add(startX",
         "var longitudinalCenterY = CadGeometryGuard.Add(startY", "CadGeometryGuard.Add(longitudinalCenterX",
