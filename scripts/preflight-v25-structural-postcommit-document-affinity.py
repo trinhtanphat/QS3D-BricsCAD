@@ -11,10 +11,13 @@ errors = []
 for source in SOURCES:
     text = source.read_text(encoding="utf-8")
     label = source.name
+    beam_rebar = label == "BeamRebarCommands.cs"
+    finalize_call = "FinalizeUi(document, nativeDatabaseIdentity, message, outcome.PostCommitCleanupWarning);" if beam_rebar else "FinalizeUi(document, nativeDatabaseIdentity, message);"
+    finalize_signature = "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)" if beam_rebar else "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)"
     required = [
         "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
         "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);",
-        "FinalizeUi(document, nativeDatabaseIdentity, message);",
+        finalize_call,
         "private static IntPtr GetNativeDatabaseIdentity(Document document)",
         "return document.Database.UnmanagedObject;",
         "private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)",
@@ -37,9 +40,9 @@ for source in SOURCES:
     elif mutation_fence < 0:
         errors.append(f"{label}: exact document-generation authority fence must precede geometry handoff")
 
-    finalize = text.find("private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)")
+    finalize = text.find(finalize_signature)
     if finalize < 0:
-        errors.append(f"{label}: FinalizeUi must carry the captured native database generation")
+        errors.append(f"{label}: FinalizeUi must carry the captured native database generation and current committed-outcome contract")
     else:
         body_end = text.find("private static", finalize + 20)
         if body_end < 0:

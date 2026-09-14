@@ -16,7 +16,7 @@ def block(signature: str, next_signature: str) -> str:
 
 
 finalize = block(
-    "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)",
+    "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)",
     "private static IntPtr GetNativeDatabaseIdentity(Document document)",
 )
 generation = block(
@@ -57,10 +57,11 @@ for name, body, native_call in [
         sys.exit(1)
 
 ordered = [
+    "var visibleMessage = postCommitCleanupWarning ? message + \" \" + UiSyncWarning : message;",
     "RefreshModelTree(document, nativeDatabaseIdentity);",
     "document.Editor.Regen();",
-    "TrySetPaletteStatus(document, nativeDatabaseIdentity, message);",
-    'document.Editor.WriteMessage("\\nQS3D " + message);',
+    "TrySetPaletteStatus(document, nativeDatabaseIdentity, visibleMessage);",
+    'document.Editor.WriteMessage("\\nQS3D " + visibleMessage);',
 ]
 pos = [finalize.find(token) for token in ordered]
 if min(pos) < 0 or pos != sorted(pos):
