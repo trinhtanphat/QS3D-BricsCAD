@@ -182,7 +182,7 @@ namespace QS3D.BricsCAD.V25
             {
                 McpAgentExperience.Error(
                     "onboarding",
-                    "Không lưu được Runtime API key vào Windows Credential Manager: " + ex.Message,
+                    "Không lưu được Runtime API key vào Windows Credential Manager: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                     "Key mới không được dùng cho tunnel trong phiên này; kiểm tra Windows Credential Manager rồi thử lại.");
             }
         }
@@ -380,7 +380,7 @@ namespace QS3D.BricsCAD.V25
             {
                 McpAgentExperience.Error(
                     "desktop-control",
-                    "Không đổi được Foreground Control: " + (error == null ? "unknown error" : error.Message),
+                    "Không đổi được Foreground Control: " + (error == null ? "unknown error" : McpPublicTextSanitizer.Sanitize(error.ToString())),
                     "QS3D đã fail-closed về foreground OFF; Background Control vẫn là đường mặc định. Thử lại từ checkbox Agent Center nếu vẫn cần foreground access.");
             }
             catch { }
