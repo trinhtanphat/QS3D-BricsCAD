@@ -27,6 +27,7 @@ namespace QS3D.BricsCAD.V25.UI
         private readonly Action<QuantityReportRow>? _locate;
         private readonly Func<IReadOnlyList<QuantityReportRow>>? _recalculate;
         private readonly Document _document;
+        private readonly IntPtr _nativeDatabaseIdentity;
         private readonly string _projectId;
         private bool _detailMode;
         private bool _initialized;
@@ -40,6 +41,7 @@ namespace QS3D.BricsCAD.V25.UI
         public QuantitySummaryWindow(Document document, IReadOnlyList<QuantityReportRow> rows, Action<QuantityReportRow>? locate = null, Func<IReadOnlyList<QuantityReportRow>>? recalculate = null)
         {
             _document = document ?? throw new ArgumentNullException(nameof(document));
+            _nativeDatabaseIdentity = GetNativeDatabaseIdentity(_document);
             if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                 throw new InvalidOperationException("BQ cần một QS3D project hiện hữu; bảng modeless không tạo replacement project khi mở.");
             _projectId = string.IsNullOrWhiteSpace(project.ProjectId)
@@ -565,10 +567,40 @@ namespace QS3D.BricsCAD.V25.UI
                 "QS3D project của bản vẽ đã được thay thế kể từ khi bảng BQ được mở. Đóng bảng BQ và mở lại trước khi " + operation + ".");
         }
 
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
+        {
+            if (document == null) throw new ArgumentNullException(nameof(document));
+            var database = document.Database;
+            if (database == null)
+                throw new InvalidOperationException("BQ cần một BricsCAD document database hợp lệ.");
+
+            var identity = database.UnmanagedObject;
+            if (identity == IntPtr.Zero)
+                throw new InvalidOperationException("BQ cần một native BricsCAD database đang hoạt động.");
+            return identity;
+        }
+
+        private bool IsCurrentNativeGeneration()
+        {
+            try
+            {
+                var database = _document.Database;
+                return database != null &&
+                       database.UnmanagedObject != IntPtr.Zero &&
+                       database.UnmanagedObject == _nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private void EnsureActive(string operation)
         {
             if (!ReferenceEquals(BcadApplication.DocumentManager.MdiActiveDocument, _document))
                 throw new InvalidOperationException("Bảng BQ này thuộc một DWG khác. Hãy kích hoạt lại đúng bản vẽ trước khi " + operation + ".");
+            if (!IsCurrentNativeGeneration())
+                throw new InvalidOperationException("Bảng BQ này thuộc native database generation cũ. Đóng bảng BQ và mở lại trước khi " + operation + ".");
         }
     }
 }

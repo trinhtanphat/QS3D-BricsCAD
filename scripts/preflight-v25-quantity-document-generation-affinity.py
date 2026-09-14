@@ -33,6 +33,9 @@ require(insight, "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(documen
 require(insight, "_boundNativeDatabaseIdentity = nativeDatabaseIdentity;", "QuantityInsightPanel")
 require(insight, "_boundNativeDatabaseIdentity = IntPtr.Zero;", "QuantityInsightPanel")
 require(insight, "if (!IsBoundToCurrentNativeGeneration(document))", "QuantityInsightPanel")
+require(insight, "if (GetNativeDatabaseIdentity(document) != nativeDatabaseIdentity)", "QuantityInsightPanel")
+ordered(insight, "var rows = BuildPreviewRows(document, project, out var regenerated);", "if (GetNativeDatabaseIdentity(document) != nativeDatabaseIdentity)", "QuantityInsightPanel refresh generation checkpoint")
+ordered(insight, "if (GetNativeDatabaseIdentity(document) != nativeDatabaseIdentity)", "_viewModel.Replace(floors, totals, rows.Count);", "QuantityInsightPanel refresh publication")
 ordered(insight, "if (!IsBoundToCurrentNativeGeneration(document))", "LocateSelectionGeometry(document, item);", "QuantityInsightPanel Locate")
 
 require(summary, "private readonly IntPtr _nativeDatabaseIdentity;", "QuantitySummaryWindow")
