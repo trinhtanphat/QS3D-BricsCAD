@@ -136,11 +136,11 @@ namespace QS3D.BricsCAD.V25.UI
                 review.Children.Add(_status);
             }
 
-            private bool IsOwnerDocumentGenerationActive => _session.IsOwnerGenerationCurrent;
+            private bool IsOwnerDocumentGenerationActive => _session.IsOwnerGenerationActive;
 
             private void AbandonStaleGenerationIfNeeded()
             {
-                if (_session.IsOwnerGenerationCurrent) return;
+                if (_session.IsOwnerNativeGenerationCurrent) return;
                 _session.AbandonStaleGenerationState();
                 _cleanupBarrier = false;
             }
@@ -205,35 +205,23 @@ namespace QS3D.BricsCAD.V25.UI
                 return button;
             }
 
-            private void OnHighlight(object sender, RoutedEventArgs e)
-            {
+            private void OnHighlight(object sender, RoutedEventArgs e) =>
                 RunValidated("Highlight", ids => _session.Highlight(ids));
-            }
 
-            private void OnClearHighlight(object sender, RoutedEventArgs e)
-            {
+            private void OnClearHighlight(object sender, RoutedEventArgs e) =>
                 RunCleanup("Clear Highlight", () => _session.ClearHighlight());
-            }
 
-            private void OnIsolate(object sender, RoutedEventArgs e)
-            {
+            private void OnIsolate(object sender, RoutedEventArgs e) =>
                 RunValidated("Isolate", ids => _session.Isolate(ids));
-            }
 
-            private void OnRestoreIsolation(object sender, RoutedEventArgs e)
-            {
+            private void OnRestoreIsolation(object sender, RoutedEventArgs e) =>
                 RunCleanup("Restore Isolation", () => _session.RestoreIsolation());
-            }
 
-            private void OnSection(object sender, RoutedEventArgs e)
-            {
+            private void OnSection(object sender, RoutedEventArgs e) =>
                 RunValidated("Section / Focus", ids => _session.ApplySectionFocus(ids));
-            }
 
-            private void OnRestoreView(object sender, RoutedEventArgs e)
-            {
+            private void OnRestoreView(object sender, RoutedEventArgs e) =>
                 RunCleanup("Restore View", () => _session.RestoreSectionView());
-            }
 
             private void RunCleanup(string actionName, Action effect)
             {
@@ -241,6 +229,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!IsOwnerDocumentGenerationActive)
                 {
                     AbandonStaleGenerationIfNeeded();
+                    _cleanupBarrier = _session.HasTransientState;
                     UpdateActionState();
                     return;
                 }
@@ -270,6 +259,7 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!IsOwnerDocumentGenerationActive)
                 {
                     AbandonStaleGenerationIfNeeded();
+                    _cleanupBarrier = _session.HasTransientState;
                     UpdateActionState();
                     return;
                 }
@@ -282,8 +272,6 @@ namespace QS3D.BricsCAD.V25.UI
 
                 try
                 {
-                    // IMPORTANT: all canonical provenance/relink/full-pair checks complete
-                    // before the supplied native CAD effect is invoked.
                     var resolved = ResolveReviewTargets();
                     effect(resolved);
                     SetStatus(actionName + " • " + resolved.Count + " object(s) • validated full pair.");
@@ -338,7 +326,7 @@ namespace QS3D.BricsCAD.V25.UI
             private ProjectState RequireCurrentProject()
             {
                 if (!IsOwnerDocumentGenerationActive)
-                    throw new InvalidOperationException("DWG/native database generation đã đổi; review action bị fail-closed.");
+                    throw new InvalidOperationException("DWG/native database generation đã đổi hoặc owner không active; review action bị fail-closed.");
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(_document, out var project))
                     throw new InvalidOperationException("QS3D project hiện hành không còn khả dụng.");
@@ -366,11 +354,11 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!IsOwnerDocumentGenerationActive)
                 {
                     AbandonStaleGenerationIfNeeded();
+                    _cleanupBarrier = _session.HasTransientState;
                     UpdateActionState();
                     return;
                 }
 
-                // A previous row must never leak presentation state into the next row.
                 var cleanupFailure = _session.TryResetTransientStateBestEffort();
                 _cleanupBarrier = cleanupFailure != null || _session.HasTransientState;
                 SetStatus(_cleanupBarrier
@@ -394,8 +382,7 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (!_attached || _disposeInProgress || _disposed) return;
 
-                var ownerActive = IsOwnerDocumentGenerationActive;
-                if (ownerActive)
+                if (IsOwnerDocumentGenerationActive)
                 {
                     if (_cleanupBarrier || _session.HasTransientState)
                     {
@@ -409,8 +396,22 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                AbandonStaleGenerationIfNeeded();
+                if (!_session.IsOwnerNativeGenerationCurrent)
+                {
+                    AbandonStaleGenerationIfNeeded();
+                    UpdateActionState();
+                    if (_window.IsLoaded) _window.Close();
+                    return;
+                }
+
+                _cleanupBarrier = _session.HasTransientState;
                 UpdateActionState();
+                if (_cleanupBarrier)
+                {
+                    _status.Text = "Review CAD đang chờ cleanup trên DWG sở hữu; kích hoạt lại DWG đó để retry.";
+                    return;
+                }
+
                 if (_window.IsLoaded) _window.Close();
             }
 
@@ -427,9 +428,19 @@ namespace QS3D.BricsCAD.V25.UI
                 if (!_attached || _disposeInProgress || _disposed) return;
                 if (e.Cancel) return;
 
-                if (!IsOwnerDocumentGenerationActive)
+                if (!_session.IsOwnerNativeGenerationCurrent)
                 {
                     AbandonStaleGenerationIfNeeded();
+                    return;
+                }
+
+                if (!IsOwnerDocumentGenerationActive)
+                {
+                    if (!_session.HasTransientState) return;
+                    e.Cancel = true;
+                    _cleanupBarrier = true;
+                    _status.Text = "Không thể đóng Coordination Manager khi cleanup của DWG sở hữu còn pending; kích hoạt lại DWG đó để retry.";
+                    UpdateActionState();
                     return;
                 }
 
@@ -443,10 +454,7 @@ namespace QS3D.BricsCAD.V25.UI
                 UpdateActionState();
             }
 
-            private void OnWindowClosed(object sender, EventArgs e)
-            {
-                Dispose();
-            }
+            private void OnWindowClosed(object sender, EventArgs e) => Dispose();
 
             private void UpdateActionState()
             {
@@ -564,12 +572,12 @@ namespace QS3D.BricsCAD.V25.UI
             public bool HasIsolation => _isolationActive || _objectIsolationModeBefore != null;
             public bool HasSectionView => _viewBeforeSection != null;
             public bool HasTransientState => HasHighlight || HasIsolation || HasSectionView;
-            public bool IsOwnerGenerationCurrent
+
+            public bool IsOwnerNativeGenerationCurrent
             {
                 get
                 {
                     if (_destroyed || _generationAbandoned) return false;
-                    if (!ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document)) return false;
                     try
                     {
                         return _document.Database != null &&
@@ -582,6 +590,10 @@ namespace QS3D.BricsCAD.V25.UI
                 }
             }
 
+            public bool IsOwnerGenerationActive =>
+                IsOwnerNativeGenerationCurrent &&
+                ReferenceEquals(Bricscad.ApplicationServices.Application.DocumentManager.MdiActiveDocument, _document);
+
             private static IntPtr GetNativeDatabaseIdentity(Document document)
             {
                 try { return document.Database?.UnmanagedObject ?? IntPtr.Zero; }
@@ -590,15 +602,20 @@ namespace QS3D.BricsCAD.V25.UI
 
             private void RequireOwnerGeneration(string operation)
             {
-                if (IsOwnerGenerationCurrent) return;
-                AbandonStaleGenerationState();
-                throw new InvalidOperationException(operation + " bị từ chối vì native database generation đã thay đổi.");
+                if (IsOwnerGenerationActive) return;
+                if (!IsOwnerNativeGenerationCurrent)
+                {
+                    AbandonStaleGenerationState();
+                    throw new InvalidOperationException(operation + " bị từ chối vì native database generation đã thay đổi.");
+                }
+                throw new InvalidOperationException(operation + " bị từ chối vì DWG sở hữu không active.");
             }
 
             private bool EnsureOwnerGenerationOrAbandon()
             {
-                if (IsOwnerGenerationCurrent) return true;
-                AbandonStaleGenerationState();
+                if (IsOwnerGenerationActive) return true;
+                if (!IsOwnerNativeGenerationCurrent)
+                    AbandonStaleGenerationState();
                 return false;
             }
 
@@ -654,20 +671,27 @@ namespace QS3D.BricsCAD.V25.UI
             {
                 if (pending == null || pending.Count == 0 || _destroyed)
                     return Array.Empty<ObjectId>();
-                if (!EnsureOwnerGenerationOrAbandon())
+                if (!IsOwnerNativeGenerationCurrent)
+                {
+                    AbandonStaleGenerationState();
                     return Array.Empty<ObjectId>();
+                }
+                if (!IsOwnerGenerationActive)
+                    return pending.ToArray();
 
                 var unreleased = new List<ObjectId>();
                 try
                 {
                     using (_document.LockDocument())
                     {
-                        if (!EnsureOwnerGenerationOrAbandon()) return Array.Empty<ObjectId>();
+                        if (!EnsureOwnerGenerationOrAbandon())
+                            return _generationAbandoned ? Array.Empty<ObjectId>() : pending.ToArray();
                         using (var transaction = _document.Database.TransactionManager.StartTransaction())
                         {
                             foreach (var id in pending)
                             {
-                                if (!EnsureOwnerGenerationOrAbandon()) return Array.Empty<ObjectId>();
+                                if (!EnsureOwnerGenerationOrAbandon())
+                                    return _generationAbandoned ? Array.Empty<ObjectId>() : pending.ToArray();
                                 try
                                 {
                                     var entity = transaction.GetObject(id, OpenMode.ForRead, false) as Entity
@@ -679,7 +703,8 @@ namespace QS3D.BricsCAD.V25.UI
                                     unreleased.Add(id);
                                 }
                             }
-                            if (!EnsureOwnerGenerationOrAbandon()) return Array.Empty<ObjectId>();
+                            if (!EnsureOwnerGenerationOrAbandon())
+                                return _generationAbandoned ? Array.Empty<ObjectId>() : pending.ToArray();
                             transaction.Commit();
                         }
                     }
@@ -695,7 +720,7 @@ namespace QS3D.BricsCAD.V25.UI
             public void ClearHighlight()
             {
                 if (_highlighted.Count == 0) return;
-                if (!EnsureOwnerGenerationOrAbandon()) return;
+                RequireOwnerGeneration("Highlight cleanup");
                 var pending = _highlighted.ToArray();
                 if (_destroyed)
                 {
@@ -778,7 +803,12 @@ namespace QS3D.BricsCAD.V25.UI
 
             public void RestoreIsolation()
             {
-                if (!EnsureOwnerGenerationOrAbandon()) return;
+                if (!IsOwnerNativeGenerationCurrent)
+                {
+                    AbandonStaleGenerationState();
+                    return;
+                }
+                RequireOwnerGeneration("Isolation restore");
                 if (!_isolationActive)
                 {
                     RestoreObjectIsolationModeBestEffort();
@@ -866,7 +896,12 @@ namespace QS3D.BricsCAD.V25.UI
             public void RestoreSectionView()
             {
                 if (_viewBeforeSection == null) return;
-                if (!EnsureOwnerGenerationOrAbandon()) return;
+                if (!IsOwnerNativeGenerationCurrent)
+                {
+                    AbandonStaleGenerationState();
+                    return;
+                }
+                RequireOwnerGeneration("Section view restore");
                 var snapshot = _viewBeforeSection;
                 if (_destroyed)
                 {
@@ -874,7 +909,6 @@ namespace QS3D.BricsCAD.V25.UI
                     return;
                 }
 
-                RequireOwnerGeneration("Section view restore / read");
                 using (var view = _document.Editor.GetCurrentView())
                 {
                     snapshot.Apply(view);
@@ -888,7 +922,12 @@ namespace QS3D.BricsCAD.V25.UI
             private bool TryRestoreSectionViewBestEffort(ViewSnapshot snapshot)
             {
                 if (snapshot == null || _destroyed) return true;
-                if (!EnsureOwnerGenerationOrAbandon()) return true;
+                if (!IsOwnerNativeGenerationCurrent)
+                {
+                    AbandonStaleGenerationState();
+                    return true;
+                }
+                if (!IsOwnerGenerationActive) return false;
                 try
                 {
                     using (var view = _document.Editor.GetCurrentView())
@@ -978,22 +1017,22 @@ namespace QS3D.BricsCAD.V25.UI
                     throw new InvalidOperationException("Validated review target set is empty.");
             }
 
-            public void ResetTransientStateBestEffort()
-            {
-                ResetTransientStateBestEffort(false);
-            }
+            public void ResetTransientStateBestEffort() => ResetTransientStateBestEffort(false);
 
-            public Exception? TryResetTransientStateBestEffort()
-            {
-                return ResetTransientStateBestEffort(false);
-            }
+            public Exception? TryResetTransientStateBestEffort() => ResetTransientStateBestEffort(false);
 
             private Exception? ResetTransientStateBestEffort(bool throwOnSectionRestoreFailure)
             {
-                if (!IsOwnerGenerationCurrent)
+                if (!IsOwnerNativeGenerationCurrent)
                 {
                     AbandonStaleGenerationState();
                     return null;
+                }
+                if (!IsOwnerGenerationActive)
+                {
+                    var inactive = new InvalidOperationException("Owner DWG is not active; transient review cleanup remains pending.");
+                    if (throwOnSectionRestoreFailure) throw inactive;
+                    return inactive;
                 }
 
                 Exception? cleanupFailure = null;
@@ -1022,11 +1061,12 @@ namespace QS3D.BricsCAD.V25.UI
             private void RestoreImpliedSelectionBestEffort(ObjectId[] impliedSelectionBefore)
             {
                 if (impliedSelectionBefore == null || _destroyed) return;
-                if (!IsOwnerGenerationCurrent)
+                if (!IsOwnerNativeGenerationCurrent)
                 {
                     AbandonStaleGenerationState();
                     return;
                 }
+                if (!IsOwnerGenerationActive) return;
                 try { _document.Editor.SetImpliedSelection(impliedSelectionBefore); } catch { }
             }
 
@@ -1041,11 +1081,12 @@ namespace QS3D.BricsCAD.V25.UI
             private bool TryRestoreObjectIsolationModeBestEffort(object? modeBefore)
             {
                 if (modeBefore == null) return true;
-                if (!IsOwnerGenerationCurrent)
+                if (!IsOwnerNativeGenerationCurrent)
                 {
                     AbandonStaleGenerationState();
                     return true;
                 }
+                if (!IsOwnerGenerationActive) return false;
                 try
                 {
                     Bricscad.ApplicationServices.Application.SetSystemVariable("OBJECTISOLATIONMODE", modeBefore);
@@ -1064,7 +1105,7 @@ namespace QS3D.BricsCAD.V25.UI
                 _disposeInProgress = true;
                 try
                 {
-                    if (!IsOwnerGenerationCurrent)
+                    if (!IsOwnerNativeGenerationCurrent)
                         AbandonStaleGenerationState();
                     else
                         ResetTransientStateBestEffort(true);
