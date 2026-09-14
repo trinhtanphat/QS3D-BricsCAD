@@ -17,8 +17,8 @@ required = [
     "Application.DocumentManager.DocumentToBeDeactivated += OnDocumentToBeDeactivated;",
     "Application.DocumentManager.DocumentToBeDeactivated -= OnDocumentToBeDeactivated",
     "private void OnDocumentToBeDeactivated(object sender, DocumentCollectionEventArgs e)",
-    "private bool IsOwnerDocumentActive",
-    "var ownerActive = IsOwnerDocumentActive;",
+    "private bool IsOwnerDocumentGenerationActive",
+    "var ownerActive = IsOwnerDocumentGenerationActive;",
     "_highlight.IsEnabled = ownerActive && mutationsAllowed;",
     "_clearHighlight.IsEnabled = ownerActive && _session.HasHighlight;",
     "_restoreIsolation.IsEnabled = ownerActive && _session.HasIsolation;",
@@ -53,40 +53,40 @@ activated = method_body(
     "private void OnDocumentActivated",
     "private void OnDocumentToBeDestroyed")
 if activated:
-    # Owner reactivation may retry retained cleanup debt. Only the foreign-active branch
-    # is forbidden from touching owner transient CAD state.
-    foreign_marker = activated.find("The new active document is foreign to this controller")
-    if foreign_marker < 0:
-        errors.append("DocumentActivated must mark the foreign-document branch explicitly")
-    elif "ResetTransientStateBestEffort" in activated[foreign_marker:]:
-        errors.append("foreign DocumentActivated handling must not clean owner-document transient CAD state")
     for needle in [
-        "IsOwnerDocumentActive",
+        "IsOwnerDocumentGenerationActive",
         "_session.HasTransientState",
+        "if (!_session.IsOwnerNativeGenerationCurrent)",
+        "AbandonStaleGenerationIfNeeded();",
         "UpdateActionState();",
     ]:
         if needle not in activated:
-            errors.append("DocumentActivated handling missing fail-closed affinity token: " + needle)
+            errors.append("DocumentActivated handling missing generation-aware affinity token: " + needle)
+    stale_at = activated.find("if (!_session.IsOwnerNativeGenerationCurrent)")
+    foreign_at = activated.find("_cleanupBarrier = _session.HasTransientState;", stale_at)
+    if stale_at < 0 or foreign_at < stale_at:
+        errors.append("DocumentActivated must distinguish native-generation replacement before ordinary foreign-MDI handling")
 
 abandon = method_body(
     "public void AbandonDestroyedDocumentState",
-    "private void RestoreImpliedSelectionBestEffort")
+    "private bool TryRestoreImpliedSelectionBestEffort")
 if abandon and "RestoreObjectIsolationModeBestEffort" in abandon:
-    errors.append("destroyed-document abandon must not restore owner OBJECTISOLATIONMODE through the foreign active host context")
-if abandon and "_objectIsolationModeBefore = null;" not in abandon:
-    errors.append("destroyed-document abandon must explicitly discard OBJECTISOLATIONMODE cleanup debt")
+    errors.append("destroyed-document abandon must not restore owner OBJECTISOLATIONMODE through a foreign active host context")
+for needle in ["_objectIsolationModeBefore = null;", "_impliedSelectionBeforeIsolation = null;"]:
+    if abandon and needle not in abandon:
+        errors.append("destroyed-document abandon must explicitly discard terminal cleanup debt: " + needle)
 
 restore_mode = method_body(
     "private bool TryRestoreObjectIsolationModeBestEffort",
     "public void Dispose")
 if restore_mode:
-    if "IsOwnerDocumentActive" not in restore_mode:
-        errors.append("OBJECTISOLATIONMODE restoration must refuse to mutate when the owner document is inactive")
+    if "IsOwnerGenerationActive" not in restore_mode:
+        errors.append("OBJECTISOLATIONMODE restoration must require current native generation and active owner")
     if "Application.SetSystemVariable(\"OBJECTISOLATIONMODE\"" not in restore_mode:
         errors.append("expected encapsulated OBJECTISOLATIONMODE restoration is missing")
 
-# The owner-session may read/write this per-document host variable only inside Isolate
-# and the guarded restoration helper. Any extra call site re-opens an A->B mutation path.
+# Application-level OBJECTISOLATIONMODE may only be captured by Isolate and written
+# by the launch path plus the generation-aware guarded restoration helper.
 get_count = text.count('Application.GetSystemVariable("OBJECTISOLATIONMODE")')
 set_count = text.count('Application.SetSystemVariable("OBJECTISOLATIONMODE"')
 if get_count != 1:
@@ -100,4 +100,4 @@ if errors:
         print("ERROR:", error)
     print("FAILED with %d error(s)." % len(errors))
     sys.exit(1)
-print("PASS: coordination review cleans owner transient state before MDI deactivation, never restores owner isolation mode through a foreign active document, disables CAD actions while inactive, and abandons destroyed-document mode debt without cross-document publication.")
+print("PASS: coordination review keeps MDI activity separate from native-generation identity, retries same-generation cleanup only on the owner, and abandons terminal generation debt without cross-document publication.")
