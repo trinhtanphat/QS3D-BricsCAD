@@ -17,6 +17,18 @@ namespace QS3D.BricsCAD.V25.Cad
         private const int MaxBarsPerElement = 1024;
         private const int MaxBarsPerBatch = 4096;
 
+        internal readonly struct BeamRebarBuildOutcome
+        {
+            public BeamRebarBuildOutcome(int count, bool postCommitCleanupWarning)
+            {
+                Count = count;
+                PostCommitCleanupWarning = postCommitCleanupWarning;
+            }
+
+            public int Count { get; }
+            public bool PostCommitCleanupWarning { get; }
+        }
+
         private sealed class PendingUpdate
         {
             public ProjectElement Element { get; set; } = null!;
@@ -29,12 +41,12 @@ namespace QS3D.BricsCAD.V25.Cad
             public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
         }
 
-        public static int BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
+        public static BeamRebarBuildOutcome BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
-            if (selectedIds.Length == 0) return 0;
+            if (selectedIds.Length == 0) return new BeamRebarBuildOutcome(0, postCommitCleanupWarning: false);
             var ids = (ObjectId[])selectedIds.Clone();
             var pending = new List<PendingUpdate>();
             var processedElements = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -135,20 +147,20 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             catch (Exception operationError)
             {
-                if (!cadCommitted)
+                if (cadCommitted)
+                    return new BeamRebarBuildOutcome(totalBars, postCommitCleanupWarning: true);
+
+                try { rollback.Restore(project); }
+                catch (Exception restoreError)
                 {
-                    try { rollback.Restore(project); }
-                    catch (Exception restoreError)
-                    {
-                        throw new InvalidOperationException(
-                            "Beam longitudinal rebar replacement failed before CAD commit and project rollback also failed.",
-                            new AggregateException(operationError, restoreError));
-                    }
+                    throw new InvalidOperationException(
+                        "Beam longitudinal rebar replacement failed before CAD commit and project rollback also failed.",
+                        new AggregateException(operationError, restoreError));
                 }
                 throw;
             }
 
-            return totalBars;
+            return new BeamRebarBuildOutcome(totalBars, postCommitCleanupWarning: false);
         }
 
         private static void CommitSemanticUpdate(ProjectState project, PendingUpdate update)
