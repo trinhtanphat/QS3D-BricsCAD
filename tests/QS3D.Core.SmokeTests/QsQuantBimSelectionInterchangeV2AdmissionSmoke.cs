@@ -26,14 +26,16 @@ namespace QS3D.Core.SmokeTests
             var otherPath = QuantBimStandaloneIfcSession.Parse("other.ifc", Ifc("G1"));
             Expect<InvalidOperationException>(() => new QuantBimSelectionInterchangeV2Admission().Admit(otherPath, encoded), "foreign path");
 
-            var unknownPackage = new QuantBimSelectionInterchangePackage(
+            var unknownBundle = new QuantBimSelectionExportBundle(
                 bundle.DocumentPath,
                 bundle.Revision,
                 bundle.SelectionName,
                 new[] { "UNKNOWN" },
+                bundle.Evidence,
+                bundle.Boq,
                 bundle.BoqCsv,
                 bundle.EvidenceCsv);
-            var unknownEncoded = QuantBimSelectionInterchangeV2Codec.Encode(unknownPackage);
+            var unknownEncoded = QuantBimSelectionInterchangeV2Codec.Encode(unknownBundle);
             Expect<InvalidOperationException>(() => new QuantBimSelectionInterchangeV2Admission().Admit(session, unknownEncoded), "unknown selection guid");
 
             Expect<System.IO.InvalidDataException>(
