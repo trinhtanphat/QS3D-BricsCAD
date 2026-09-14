@@ -18,7 +18,8 @@ The production contract is intentionally stricter than native pointer equality:
 - both repeated `Attach(window, replacement)` and interaction-time live-document resolution move native lifecycle subscriptions immediately after affinity proof;
 - the window lifetime updates its current managed-wrapper owner only after coordinator rebind succeeds, so a still-enumerated stale wrapper cannot regain priority;
 - events arriving from a stale managed wrapper are ignored after ownership moves;
-- unregister/detach targets current plus pending lifecycle wrappers and remains fail-closed/idempotent.
+- unregister/detach targets current plus pending lifecycle wrappers and remains fail-closed/idempotent;
+- when the current lifecycle document is terminally destroyed, pending stale wrappers receive a final best-effort native detach before dictionary ownership is removed, and the retired entry drops all remaining strong managed-wrapper cleanup roots even if the host refuses an unsubscribe.
 
 ## REMOTE_SAFE verification
 
@@ -43,6 +44,7 @@ These scenarios require a real licensed BricsCAD V25 host and must remain `NO_RE
 7. Close the window after rebind; verify current-wrapper handlers are removed exactly once, no duplicate handler remains on the stale wrapper, and reopening a new window does not duplicate callbacks.
 8. Inject or reproduce a native event-unsubscribe failure during stale-wrapper rebind; verify replacement ownership is not published, pending wrappers remain tracked, and a retry cannot subscribe duplicates until cleanup succeeds.
 9. Exercise a double-failure path where stale-wrapper detach and replacement rollback both fail; verify both wrapper owners remain tracked and no later attach loses either cleanup obligation.
-10. Exercise MDI switching before and after wrapper replacement; verify project/document affinity remains pinned to the bound drawing and no selection/palette action leaks to another active document.
+10. Destroy the current lifecycle wrapper while an older wrapper still has a pending native-detach obligation; verify the stale wrapper gets a final detach attempt and the terminal coordinator entry no longer strongly retains that stale managed wrapper even if BricsCAD rejects the final unsubscribe.
+11. Exercise MDI switching before and after wrapper replacement; verify project/document affinity remains pinned to the bound drawing and no selection/palette action leaks to another active document.
 
 Record native-host evidence separately from remote CI. Do not label any of these scenarios `LOCAL_PASS` without a licensed BricsCAD V25 execution artifact.
