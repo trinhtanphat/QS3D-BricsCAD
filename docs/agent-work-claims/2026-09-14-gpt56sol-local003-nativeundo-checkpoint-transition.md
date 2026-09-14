@@ -58,3 +58,11 @@ Completion requires TDD RED on the old capture-before-regeneration ordering, GRE
 the minimal reorder, all existing source/Core/V25 gates, protected PR integration, and a
 fresh exact-merged-main licensed synthetic lifecycle rerun. No `LOCAL_PASS` from source
 or static evidence alone.
+
+## Follow-up — composite pre-regeneration persistence target
+
+Merged `main@6767a77ae439b45781f2289facb595c4964eee3a` advanced LOCAL-003 Level session one to PASS, but the embedded historical P11 contract reported `UNDO_NATIVE_REMOVED_SEMANTIC_NOT_RESTORED`. Source audit proved the P11 semantic signature includes pre-command project revision/time and owner Dirty plus generated-owner state, while the hardened `ProjectPersistenceCheckpoint` must validate post-regeneration quantities/properties before restoring persistence metadata.
+
+This lane now additionally reserves the smallest composite-target extension in `ProjectPersistenceCheckpoint`, matching Core smoke coverage, and the existing Curtain Undo coordinator/build ordering hunks already owned by this claim. The target design preserves pre-regeneration project/element persistence stamps, binds the semantic signature only after deterministic regeneration, and still requires an exact current transition guard before restore. Normal `Restore()` and stale/replacement/newer-generation refusals remain unchanged.
+
+P11 probe/runner files remain out of scope: the goal is to preserve the prior P11 product guarantee rather than weaken its automation expectation. Completion requires Core RED->GREEN, focused Curtain/LOCAL-003/generic gates, Core smoke, V25 build, protected CI merge, then fresh exact-merged-main licensed lifecycle evidence. No private/customer DWG and no broad LOCAL_PASS claim.
