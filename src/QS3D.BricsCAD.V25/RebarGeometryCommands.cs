@@ -20,6 +20,8 @@ namespace QS3D.BricsCAD.V25
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try
             {
                 // Capture PICKFIRST once before canonical project binding. The same
@@ -27,7 +29,7 @@ namespace QS3D.BricsCAD.V25
                 var selectedIds = CadSelectionGuard.ReadImpliedSelection(document);
                 if (selectedIds.Length == 0)
                 {
-                    Report(document, SelectionGuidance);
+                    Report(document, nativeDatabaseIdentity, SelectionGuidance);
                     return;
                 }
 
@@ -39,20 +41,20 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (selectedHandles.Count == 0)
                 {
-                    Report(document, "Rebar 3D: selection không có source handle hợp lệ.");
+                    Report(document, nativeDatabaseIdentity, "Rebar 3D: selection không có source handle hợp lệ.");
                     return;
                 }
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
                 {
-                    Report(document, "Rebar 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
+                    Report(document, nativeDatabaseIdentity, "Rebar 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
                     return;
                 }
 
                 var previewTargets = ResolveColumnTargets(previewProject, selectedHandles);
                 if (previewTargets.Count == 0)
                 {
-                    Report(document, SelectionGuidance);
+                    Report(document, nativeDatabaseIdentity, SelectionGuidance);
                     return;
                 }
 
@@ -69,15 +71,17 @@ namespace QS3D.BricsCAD.V25
                 if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
                     throw new InvalidOperationException("Rebar 3D: semantic Column target set đã thay đổi sau khi đọc PICKFIRST selection; hãy chọn lại target.");
 
-                var count = ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds);
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
+                var outcome = ColumnRebarSolidBuilder.BuildSelected(document, project, selectedIds);
+                var count = outcome.Count;
                 var message = count == 0
                     ? SelectionGuidance
                     : "Rebar 3D: đã tạo/cập nhật " + count + " thanh đứng cho cột được chọn.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message, outcome.PostCommitCleanupWarning);
             }
             catch (Exception)
             {
-                Report(document, OperationFailure);
+                Report(document, nativeDatabaseIdentity, OperationFailure);
             }
         }
 
@@ -87,30 +91,81 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private static void FinalizeUi(Document document, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            var visibleMessage = postCommitCleanupWarning ? message + " " + UiSyncWarning : message;
             try
             {
-                PaletteCoordinator.RefreshProject();
+                RefreshModelTree(document, nativeDatabaseIdentity);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.Regen();
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                TrySetPaletteStatus(document, nativeDatabaseIdentity, visibleMessage);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                document.Editor.WriteMessage("\nQS3D " + visibleMessage);
             }
             catch (Exception)
             {
-                TryWriteMessage(document, "\nQS3D " + message + " " + UiSyncWarning);
+                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message + " " + UiSyncWarning);
             }
         }
 
-        private static void Report(Document document, string message)
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
-            try { PaletteCoordinator.SetStatus(message); }
-            catch { }
-            TryWriteMessage(document, "\nQS3D " + message);
+            try
+            {
+                return document.Database.UnmanagedObject;
+            }
+            catch
+            {
+                return IntPtr.Zero;
+            }
         }
 
-        private static void TryWriteMessage(Document document, string message)
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
         {
+            if (nativeDatabaseIdentity == IntPtr.Zero ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                return false;
+
+            try
+            {
+                return document.Database.UnmanagedObject == nativeDatabaseIdentity;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException("Column Rebar 3D document generation changed before geometry mutation.");
+        }
+
+        private static void RefreshModelTree(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            PaletteCoordinator.RefreshProject();
+        }
+
+        private static void TrySetPaletteStatus(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            PaletteCoordinator.SetStatus(message);
+        }
+
+        private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            TrySetPaletteStatus(document, nativeDatabaseIdentity, message);
+            TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message);
+        }
+
+        private static void TryWriteMessage(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { document.Editor.WriteMessage(message); }
             catch { }
         }

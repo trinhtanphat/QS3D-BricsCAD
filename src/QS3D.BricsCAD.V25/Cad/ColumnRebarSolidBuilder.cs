@@ -12,6 +12,18 @@ using Teigha.Geometry;
 
 namespace QS3D.BricsCAD.V25.Cad
 {
+    internal sealed class ColumnRebarBuildOutcome
+    {
+        public ColumnRebarBuildOutcome(int count, bool postCommitCleanupWarning)
+        {
+            Count = count;
+            PostCommitCleanupWarning = postCommitCleanupWarning;
+        }
+
+        public int Count { get; }
+        public bool PostCommitCleanupWarning { get; }
+    }
+
     internal static class ColumnRebarSolidBuilder
     {
         private const int MaxBarsPerElement = 1200;
@@ -26,12 +38,12 @@ namespace QS3D.BricsCAD.V25.Cad
             public CadElementVerticalPlacement VerticalPlacement { get; set; } = null!;
         }
 
-        public static int BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
+        public static ColumnRebarBuildOutcome BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
-            if (selectedIds.Length == 0) return 0;
+            if (selectedIds.Length == 0) return new ColumnRebarBuildOutcome(0, false);
             var ids = (ObjectId[])selectedIds.Clone();
 
             var pending = new List<PendingUpdate>();
@@ -40,6 +52,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var totalBars = 0;
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
+            var cleanupWarning = false;
 
             try
             {
@@ -167,7 +180,11 @@ namespace QS3D.BricsCAD.V25.Cad
             }
             catch (Exception operationError)
             {
-                if (!cadCommitted)
+                if (cadCommitted)
+                {
+                    cleanupWarning = true;
+                }
+                else
                 {
                     try { rollback.Restore(project); }
                     catch (Exception restoreError)
@@ -176,11 +193,11 @@ namespace QS3D.BricsCAD.V25.Cad
                             "Column rebar replacement failed before CAD commit and project rollback also failed.",
                             new AggregateException(operationError, restoreError));
                     }
+                    throw;
                 }
-                throw;
             }
 
-            return totalBars;
+            return new ColumnRebarBuildOutcome(totalBars, cleanupWarning);
         }
 
         private static void CommitSemanticUpdate(ProjectState project, PendingUpdate update)

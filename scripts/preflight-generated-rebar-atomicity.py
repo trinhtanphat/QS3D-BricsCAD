@@ -38,12 +38,17 @@ for label, (relative, semantic_call) in families.items():
             errors.append(label + ": missing generated replacement contract: " + token)
 
     if "if (!cadCommitted)" not in text:
-        beam_committed_cleanup = (
+        committed_cleanup = (
             label == "beam longitudinal"
             and "if (cadCommitted)" in text
             and "return new BeamRebarBuildOutcome(totalBars, postCommitCleanupWarning: true);" in text
+        ) or (
+            label == "column longitudinal"
+            and "if (cadCommitted)" in text
+            and "cleanupWarning = true;" in text
+            and "return new ColumnRebarBuildOutcome(totalBars, cleanupWarning);" in text
         )
-        if not beam_committed_cleanup:
+        if not committed_cleanup:
             errors.append(label + ": missing generated replacement rollback/committed-cleanup discriminator")
 
     semantic = text.find(semantic_call)
