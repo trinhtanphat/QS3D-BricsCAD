@@ -36,6 +36,17 @@ if ([string]::IsNullOrWhiteSpace($UploadBase) -or [string]::IsNullOrWhiteSpace($
     throw 'UploadBase and Name are required.'
 }
 
+$uploadBaseUri = $null
+if (-not [Uri]::TryCreate($UploadBase, [UriKind]::Absolute, [ref]$uploadBaseUri) -or
+    -not [string]::Equals($uploadBaseUri.Scheme, 'https', [StringComparison]::OrdinalIgnoreCase) -or
+    -not [string]::Equals($uploadBaseUri.Host, 'uploads.github.com', [StringComparison]::OrdinalIgnoreCase) -or
+    -not $uploadBaseUri.IsDefaultPort -or
+    -not [string]::IsNullOrEmpty($uploadBaseUri.UserInfo) -or
+    -not [string]::IsNullOrEmpty($uploadBaseUri.Fragment) -or
+    -not [string]::IsNullOrEmpty($uploadBaseUri.Query)) {
+    throw 'UploadBase must be an absolute HTTPS uploads.github.com endpoint with the default port and no credentials, fragment, or query.'
+}
+
 $resolvedPath = (Resolve-Path -LiteralPath $Path).Path
 $stream = [System.IO.File]::Open(
     $resolvedPath,
@@ -61,9 +72,11 @@ try {
 
     $stream.Position = 0
     $encodedName = [Uri]::EscapeDataString($Name)
-    $uploadUri = $UploadBase + '?name=' + $encodedName
+    $uploadUri = $uploadBaseUri.AbsoluteUri + '?name=' + $encodedName
 
-    $client = [System.Net.Http.HttpClient]::new()
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $handler.AllowAutoRedirect = $false
+    $client = [System.Net.Http.HttpClient]::new($handler)
     try {
         foreach ($key in $Headers.Keys) {
             $headerValue = [string]$Headers[$key]
@@ -77,8 +90,8 @@ try {
             $content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse($ContentType)
             $response = $client.PostAsync($uploadUri, $content).GetAwaiter().GetResult()
             try {
-                if (-not $response.IsSuccessStatusCode) {
-                    throw "GitHub release asset upload failed for $Name with HTTP $([int]$response.StatusCode)."
+                if ($response.StatusCode -ne [System.Net.HttpStatusCode]::Created) {
+                    throw "GitHub release asset upload failed for $Name with HTTP $([int]$response.StatusCode); expected HTTP 201 Created."
                 }
 
                 $responseBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
