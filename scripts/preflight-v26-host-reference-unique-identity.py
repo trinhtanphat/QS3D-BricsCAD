@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 
@@ -9,19 +8,17 @@ parse_anchor = "try { $provenance = $provenanceText | ConvertFrom-Json -ErrorAct
 parse_pos = source.index(parse_anchor)
 preparse = source[:parse_pos]
 
-loop = re.search(
-    r"foreach \(\$hostPropertyName in @\('name', 'sha256', 'length'\)\) \{\s*"
-    r"if \(\(Get-JsonPropertyOccurrenceCount -JsonText \$provenanceText -PropertyName \$hostPropertyName\) -ne \$requiredHostNames\.Count\)",
-    preparse,
-    re.S,
+required_preparse = (
+    "$hostReferenceExpectedPropertyCounts = @{ name=1; sha256=1; length=1 }",
+    "Assert-JsonArrayObjectPropertyCounts -JsonText $provenanceText -ArrayPropertyName 'hostReferences' -ExpectedObjectCount $requiredHostNames.Count -ExpectedPropertyCounts $hostReferenceExpectedPropertyCounts -Label 'V26 candidate provenance'",
 )
-if not loop:
-    raise SystemExit(
-        "ERROR: V26 provenance must prove exact raw host-reference name/sha256/length cardinality before ConvertFrom-Json"
-    )
+for required in required_preparse:
+    if required not in preparse:
+        raise SystemExit(
+            "ERROR: V26 provenance must prove per-record host-reference name/sha256/length cardinality before ConvertFrom-Json: "
+            + required
+        )
 
-if "V26 candidate provenance host-reference identity must contain exactly" not in preparse[loop.start():]:
-    raise SystemExit("ERROR: nested host-reference duplicate rejection must fail closed with an explicit admission error")
 
 # Keep the post-parse per-entry checks as a second fence: global raw cardinality alone
 # cannot prove each admitted object has the required value shape.
@@ -42,20 +39,25 @@ function_start = source.index("function Get-JsonPropertyOccurrenceCount")
 function_end = source.index("if ([string]::IsNullOrWhiteSpace($ExpectedInstallerSha256)", function_start)
 helper = source[function_start:function_end]
 probe = helper + r'''
-$cases = @(
-    @{ Json='{"name":"bricscad.exe"}'; Name='name'; Expected=1 },
-    @{ Json='{"name":"bricscad.exe","name":"evil"}'; Name='name'; Expected=2 },
-    @{ Json='{"na\u006de":"bricscad.exe","name":"evil"}'; Name='name'; Expected=2 },
-    @{ Json='{"sha256":"a","SHA256":"b"}'; Name='sha256'; Expected=2 },
-    @{ Json='{"length":1,"LENGTH":2}'; Name='length'; Expected=2 }
+$expected = @{ name=1; sha256=1; length=1 }
+$sha = ('a' * 64) -join ''
+$valid = '{"hostReferences":[{"name":"bricscad.exe","sha256":"' + $sha + '","length":1}]}'
+Assert-JsonArrayObjectPropertyCounts -JsonText $valid -ArrayPropertyName 'hostReferences' -ExpectedObjectCount 1 -ExpectedPropertyCounts $expected -Label 'valid host references'
+
+$badCases = @(
+    '{"hostReferences":[{"name":"bricscad.exe","NAME":"evil","sha256":"' + $sha + '","length":1}]}',
+    '{"hostReferences":[{"na\u006de":"bricscad.exe","name":"evil","sha256":"' + $sha + '","length":1}]}',
+    '{"hostReferences":[{"name":"bricscad.exe","sha256":"' + $sha + '","SHA256":"b","length":1}]}',
+    '{"hostReferences":[{"name":"bricscad.exe","sha256":"' + $sha + '","length":1,"LENGTH":2}]}'
 )
-foreach ($case in $cases) {
-    $actual = Get-JsonPropertyOccurrenceCount -JsonText $case.Json -PropertyName $case.Name
-    if ($actual -ne $case.Expected) {
-        throw "host-reference duplicate-property probe failed for $($case.Name): expected $($case.Expected), got $actual"
-    }
+foreach ($bad in $badCases) {
+    $rejected = $false
+    try { Assert-JsonArrayObjectPropertyCounts -JsonText $bad -ArrayPropertyName 'hostReferences' -ExpectedObjectCount 1 -ExpectedPropertyCounts $expected -Label 'duplicate host reference' }
+    catch { $rejected = $true }
+    if (-not $rejected) { throw 'duplicate/case/escaped-equivalent host-reference property was not rejected' }
 }
 '''
+
 
 with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as tmp:
     tmp.write(probe)
