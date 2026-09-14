@@ -44,20 +44,20 @@ namespace QS3D.BricsCAD.V25
                 validatedSelection = CurtainWallBuildSelectionGuard.Validate(document, project);
                 rollback = ProjectStateSnapshot.Capture(project);
 
-                // Capture only the selected GlassWall generated-owner surface. This is intentionally
-                // narrower than the command rollback snapshot so a later native Undo cannot erase
-                // unrelated semantic edits made elsewhere in the project.
+                // Resolve rule/dependency failures before native mutation. The command snapshot restores
+                // this semantic phase as well when any later host/frame phase fails before outer commit.
+                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
+                CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.SemanticRegeneration);
+
+                // Capture only the selected GlassWall generated-owner surface after semantic regeneration
+                // has reached its stable pre-native state. This keeps native Undo scoped to generated-owner
+                // metadata while the command rollback snapshot above still owns pre-regeneration failures.
                 var undoBefore = CurtainWallUndoCoordinator.OwnerStateSnapshot.CaptureSelectedOwners(
                     document,
                     project,
                     validatedSelection.AllSourceIds);
                 if (undoBefore.Count > 0)
                     undoTransition = CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore);
-
-                // Resolve rule/dependency failures before native mutation. The command snapshot restores
-                // this semantic phase as well when any later host/frame phase fails before outer commit.
-                regenerated = new RegenerationEngine(new DependencyGraph(), RegeneratorCatalog.CreateDefault()).RegenerateDirty(project);
-                CurtainWallBuildFailureInjection.ThrowIfArmed(CurtainWallBuildFailureInjection.SemanticRegeneration);
 
                 var hostSolids = 0;
                 var frameElements = 0;

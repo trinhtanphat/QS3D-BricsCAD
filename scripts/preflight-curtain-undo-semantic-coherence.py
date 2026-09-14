@@ -53,6 +53,17 @@ if old_sync not in source:
     raise SystemExit("Curtain Undo base guard sync-body contract drifted")
 source = source.replace(old_sync, new_sync, 1)
 
+old_order = 'elif not (capture < begin < regen < line_host < line_frame < line_panel < stage < commit < post < refresh):'
+new_order = 'elif not (regen < capture < begin < line_host < line_frame < line_panel < stage < commit < post < refresh):'
+if old_order not in source:
+    raise SystemExit("Curtain Undo base guard ordering contract drifted")
+source = source.replace(old_order, new_order, 1)
+old_order_message = 'Curtain Undo must capture/register before mutation, stage after all builders, commit marker with CAD, then finalize the exact post-fingerprint state'
+new_order_message = 'Curtain Undo must regenerate semantic state before capturing the native-before owner checkpoint, then register before native mutation, stage after all builders, commit marker with CAD, and finalize the exact post-fingerprint state'
+if old_order_message not in source:
+    raise SystemExit("Curtain Undo base guard ordering message drifted")
+source = source.replace(old_order_message, new_order_message, 1)
+
 extra = r'''
 for token in (
     "public TransitionRestoreGuard PrepareTransitionRestore(ProjectState project)",

@@ -38,3 +38,23 @@ historical context only; this successor is driven by #72 current evidence.
 4. Run focused gates, generic preflight, Core smoke and V25 Release build.
 5. Push exact SHA, rerun licensed synthetic Level lifecycle, and publish only
    sanitized evidence. No `LOCAL_PASS` unless native evidence is green.
+## Follow-up — native Undo boundary after regeneration
+
+Fresh licensed V25 rerun on merged/current `main` `21c7946447b1383efd53ee000d527b84acfc8969`
+still reproduced `native_undo / UNDO_HOST_OWNERSHIP_REJECTED` with exact plugin/Core
+identity and complete cleanup. A Core reproducer proved the remaining boundary defect:
+when the persistence checkpoint is captured before `RegenerateDirty`, transition restore
+fails because the target semantic state includes pre-regeneration quantities; capturing
+the native-before checkpoint after regeneration makes the same transition pass.
+
+This follow-up additionally reserves only the Undo-order hunk in
+`src/QS3D.BricsCAD.V25/CurtainWallBuildCommands.cs` and the matching ordering contract
+in `scripts/preflight-curtain-undo-semantic-coherence.py`. The intended order is:
+command rollback snapshot -> semantic regeneration -> selected-owner Undo capture/register
+-> LINE/path host/frame/panel native mutation. The six partition guards owned historically
+by #1106 are not changed. No Core hardening relaxation is permitted.
+
+Completion requires TDD RED on the old capture-before-regeneration ordering, GREEN after
+the minimal reorder, all existing source/Core/V25 gates, protected PR integration, and a
+fresh exact-merged-main licensed synthetic lifecycle rerun. No `LOCAL_PASS` from source
+or static evidence alone.
