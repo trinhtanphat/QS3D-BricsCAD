@@ -128,6 +128,9 @@ namespace QS3D.Core.BenchmarkParity
                 if (payload[markerStart + i] != PdfEofMarker[i])
                     throw new InvalidOperationException("PDF payload is truncated or missing the terminal %%EOF marker.");
             }
+
+            if (markerStart == 0 || !IsPdfLineTerminator(payload[markerStart - 1]))
+                throw new InvalidOperationException("PDF terminal %%EOF marker must begin on its own line.");
         }
 
         private static bool IsSupportedPdfVersion(byte major, byte minor)

@@ -16,10 +16,13 @@ namespace QS3D.Core.SmokeTests
             AcceptsCrTerminatedHeader();
             AcceptsCrLfTerminatedHeader();
             AcceptsPdf10And20();
+            AcceptsCanonicalEofLineAndTrailingWhitespace();
             RejectsUnsupportedPdfVersions();
             RejectsInlineDataAfterVersion();
             RejectsSpaceAfterVersion();
             RejectsTruncatedVersionOnlyHeader();
+            RejectsInlineEofAfterPdfData();
+            RejectsSpaceIndentedEofMarker();
         }
 
         private static void AcceptsLfTerminatedHeader()
@@ -46,6 +49,11 @@ namespace QS3D.Core.SmokeTests
             Equal(1, Ingest("%PDF-2.0\n%%EOF").PdfPageNumber, "PDF 2.0 page number");
         }
 
+        private static void AcceptsCanonicalEofLineAndTrailingWhitespace()
+        {
+            Equal(1, Ingest("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\r\n\t ").PdfPageNumber, "canonical EOF line");
+        }
+
         private static void RejectsUnsupportedPdfVersions()
         {
             ThrowsInvalidOperation(() => Ingest("%PDF-0.9\n%%EOF"), "PDF 0.9");
@@ -67,6 +75,16 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsTruncatedVersionOnlyHeader()
         {
             ThrowsInvalidOperation(() => Ingest("%PDF-1.7"), "truncated PDF version header");
+        }
+
+        private static void RejectsInlineEofAfterPdfData()
+        {
+            ThrowsInvalidOperation(() => Ingest("%PDF-1.7\n1 0 obj%%EOF"), "inline EOF after PDF data");
+        }
+
+        private static void RejectsSpaceIndentedEofMarker()
+        {
+            ThrowsInvalidOperation(() => Ingest("%PDF-1.7\n1 0 obj\n %%EOF"), "space-indented EOF marker");
         }
 
         private static IngestedDrawingSheet2D Ingest(string payload)
