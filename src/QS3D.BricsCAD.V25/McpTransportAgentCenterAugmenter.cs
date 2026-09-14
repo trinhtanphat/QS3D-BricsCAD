@@ -147,7 +147,7 @@ namespace QS3D.BricsCAD.V25
             {
                 McpAgentExperience.Warning(
                     "onboarding",
-                    "Không thể tự ghi nhận MCP traffic cho OpenAI Tunnel: " + ex.Message,
+                    "Không thể tự ghi nhận MCP traffic cho OpenAI Tunnel: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                     "Giữ tunnel-client chạy và thử initialize/tools/list lại; nút xác nhận thủ công vẫn là fallback.");
             }
         }
@@ -185,7 +185,7 @@ namespace QS3D.BricsCAD.V25
                 {
                     McpAgentExperience.Warning(
                         "onboarding",
-                        "Không bật được auto-confirm ChatGPT Tunnel traffic: " + ex.Message,
+                        "Không bật được auto-confirm ChatGPT Tunnel traffic: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                         "MCP vẫn hoạt động; dùng nút xác nhận thủ công và kiểm tra preflight nếu source layout đã đổi.");
                 }
                 return null;
@@ -295,7 +295,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                McpAgentExperience.Error("onboarding", "Không copy được lệnh WinGet recovery: " + ex.Message,
+                McpAgentExperience.Error("onboarding", "Không copy được lệnh WinGet recovery: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                     "Có thể chạy thủ công: " + WingetRecoveryCommand);
             }
         }
@@ -419,7 +419,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                McpAgentExperience.Error("onboarding", "Không copy được tunnel diagnostics: " + ex.Message,
+                McpAgentExperience.Error("onboarding", "Không copy được tunnel diagnostics: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                     "Thử lại từ Agent Center trên UI thread.");
             }
         }
@@ -440,7 +440,7 @@ namespace QS3D.BricsCAD.V25
             }
             catch (Exception ex)
             {
-                McpAgentExperience.Error("onboarding", "Không mở được tunnel diagnostics log: " + ex.Message,
+                McpAgentExperience.Error("onboarding", "Không mở được tunnel diagnostics log: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                     "Dùng Copy tunnel diagnostics làm fallback.");
             }
         }
@@ -472,17 +472,18 @@ namespace QS3D.BricsCAD.V25
                 McpOpenAiSecureTunnelManager.StopForHostShutdown();
                 string message;
                 var ok = McpOpenAiSecureTunnelManager.Start(McpOpenAiSecureTunnelManager.SavedTunnelId, string.Empty, out message);
+                var publicMessage = ok ? message : McpPublicTextSanitizer.Sanitize(message);
                 if (ok)
-                    McpAgentExperience.Success("onboarding", message, "Chờ tunnel-client READY rồi tiếp tục ChatGPT.");
+                    McpAgentExperience.Success("onboarding", publicMessage, "Chờ tunnel-client READY rồi tiếp tục ChatGPT.");
                 else
-                    McpAgentExperience.Error("onboarding", message, "Kiểm tra saved/environment key, Tunnel ID, trust verification và diagnostics.");
-                MessageBox.Show(message, "QS3D MCP", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                    McpAgentExperience.Error("onboarding", publicMessage, "Kiểm tra saved/environment key, Tunnel ID, trust verification và diagnostics.");
+                MessageBox.Show(publicMessage, "QS3D MCP", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
             }
             catch (Exception ex)
             {
-                McpAgentExperience.Error("onboarding", "Restart OpenAI tunnel lỗi: " + ex.Message,
+                McpAgentExperience.Error("onboarding", "Restart OpenAI tunnel lỗi: " + McpPublicTextSanitizer.Sanitize(ex.ToString()),
                     "Kiểm tra diagnostics rồi khởi động lại thủ công.");
-                try { MessageBox.Show(ex.Message, "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning); } catch { }
+                try { MessageBox.Show(McpPublicTextSanitizer.Sanitize(ex.ToString()), "QS3D MCP", MessageBoxButton.OK, MessageBoxImage.Warning); } catch { }
             }
         }
 
