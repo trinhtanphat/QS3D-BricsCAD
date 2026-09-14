@@ -26,6 +26,9 @@ for token in required_source:
 for token in required_smoke:
     assert token in smoke, f"missing regression smoke: {token}"
 
-assert source.index("ValidatePngChunkStream(payload);") < source.index("format = RasterSheetFormat.Png;")
-assert source.index("format = RasterSheetFormat.Png;") < source.index("new DrawingSheet2D")
+raster_start = source.index("public IngestedDrawingSheet2D IngestRaster")
+raster_end = source.index("private static void RequirePayload", raster_start)
+raster = source[raster_start:raster_end]
+assert raster.index("ValidatePngChunkStream(payload);") < raster.index("format = RasterSheetFormat.Png;")
+assert raster.index("format = RasterSheetFormat.Png;") < raster.index("var sheet = new DrawingSheet2D")
 print("PASS: PNG chunk stream is validated before raster drawing/evidence publication")
