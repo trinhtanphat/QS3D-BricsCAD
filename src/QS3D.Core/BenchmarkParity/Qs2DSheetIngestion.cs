@@ -175,10 +175,38 @@ namespace QS3D.Core.BenchmarkParity
                 throw new InvalidOperationException("PNG first chunk must be IHDR.");
 
             ValidatePngChunkCrc(payload, 12, 13, "IHDR");
+            ValidatePngIhdrSemantics(payload);
             width = ReadInt32BigEndian(payload, 16);
             height = ReadInt32BigEndian(payload, 20);
             if (width <= 0 || height <= 0) throw new InvalidOperationException("PNG dimensions are invalid.");
             return true;
+        }
+
+        private static void ValidatePngIhdrSemantics(byte[] payload)
+        {
+            var bitDepth = payload[24];
+            var colorType = payload[25];
+            var compressionMethod = payload[26];
+            var filterMethod = payload[27];
+            var interlaceMethod = payload[28];
+
+            if (!IsSupportedPngBitDepth(colorType, bitDepth))
+                throw new InvalidOperationException("PNG IHDR color type and bit depth combination is invalid.");
+            if (compressionMethod != 0)
+                throw new InvalidOperationException("PNG IHDR compression method must be 0.");
+            if (filterMethod != 0)
+                throw new InvalidOperationException("PNG IHDR filter method must be 0.");
+            if (interlaceMethod > 1)
+                throw new InvalidOperationException("PNG IHDR interlace method must be 0 or 1.");
+        }
+
+        private static bool IsSupportedPngBitDepth(byte colorType, byte bitDepth)
+        {
+            if (colorType == 0) return bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 || bitDepth == 16;
+            if (colorType == 2) return bitDepth == 8 || bitDepth == 16;
+            if (colorType == 3) return bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8;
+            if (colorType == 4 || colorType == 6) return bitDepth == 8 || bitDepth == 16;
+            return false;
         }
 
         private static void ValidatePngChunkCrc(byte[] payload, int typeOffset, int dataLength, string chunkName)
