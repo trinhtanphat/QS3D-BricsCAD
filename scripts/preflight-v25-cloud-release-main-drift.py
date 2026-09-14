@@ -9,6 +9,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "release-v25-cloud.yml"
+HELPER = ROOT / "scripts" / "assert-v25-cloud-release-main-drift.ps1"
 
 RELEASE_RELEVANT_PATHS = (
     "src/",
@@ -39,73 +40,135 @@ def _section(text: str, start: str, end: str) -> str:
     return text[start_index:end_index]
 
 
-def _require_release_drift_gate(section: str, label: str) -> None:
+def _require_order(section: str, before: str, after: str, label: str) -> None:
+    before_index = section.find(before)
+    after_index = section.find(after)
+    if before_index < 0:
+        raise GuardFailure(f"{label} is missing required drift admission call: {before}")
+    if after_index < 0:
+        raise GuardFailure(f"{label} is missing authority boundary marker: {after}")
+    if before_index >= after_index:
+        raise GuardFailure(f"{label} drift admission must occur before authority boundary: {after}")
+
+
+def _require_helper(helper: str) -> None:
     required_fragments = (
+        "param(",
+        "$SourceSha",
+        "$CurrentMainSha",
         "$releaseRelevantPathspecs = @(",
-        'if ($sourceSha -ne $currentMain)',
-        '& git diff --quiet --no-ext-diff "$sourceSha..$currentMain" -- @releaseRelevantPathspecs',
+        '& git diff --quiet --no-ext-diff "$SourceSha..$CurrentMainSha" -- @releaseRelevantPathspecs',
         "$releaseDriftStatus = $LASTEXITCODE",
         "if ($releaseDriftStatus -eq 1)",
         "if ($releaseDriftStatus -ne 0)",
     )
     for fragment in required_fragments:
-        if fragment not in section:
-            raise GuardFailure(f"{label} is missing fail-closed release-relevant drift contract: {fragment}")
+        if fragment not in helper:
+            raise GuardFailure(f"release-main-drift helper is missing fail-closed contract: {fragment}")
 
     for path in RELEASE_RELEVANT_PATHS:
-        if section.count(f"'{path}'") != 1:
-            raise GuardFailure(f"{label} must admit release-relevant path exactly once: {path}")
+        if helper.count(f"'{path}'") != 1:
+            raise GuardFailure(f"release-main-drift helper must admit release-relevant path exactly once: {path}")
 
     stale_block = re.search(
         r"if \(\$releaseDriftStatus -eq 1\) \{(?P<body>.*?)\n\s*\}",
-        section,
+        helper,
         flags=re.DOTALL,
     )
     if stale_block is None or "throw " not in stale_block.group("body"):
-        raise GuardFailure(f"{label} must terminally reject release-relevant protected-main drift")
+        raise GuardFailure("release-main-drift helper must terminally reject release-relevant drift")
 
     error_block = re.search(
         r"if \(\$releaseDriftStatus -ne 0\) \{(?P<body>.*?)\n\s*\}",
-        section,
+        helper,
         flags=re.DOTALL,
     )
     if error_block is None or "throw " not in error_block.group("body"):
-        raise GuardFailure(f"{label} must fail closed when release-relevant drift inspection errors")
+        raise GuardFailure("release-main-drift helper must fail closed when git diff errors")
 
 
-def validate(text: str) -> None:
+def validate(workflow: str, helper: str) -> None:
+    _require_helper(helper)
+
     source_admission = _section(
-        text,
+        workflow,
         "- name: Classify trusted current-main release source",
         "  release:\n",
     )
+    source_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $sourceSha -CurrentMainSha $currentMain"
+    if source_admission.count(source_call) != 1:
+        raise GuardFailure("source-admission must invoke exact release-main-drift helper once")
+
     release_readmission = _section(
-        text,
+        workflow,
         "- name: Validate cloud prerelease request",
         "      - name: Prepare exact release source commit",
     )
-    _require_release_drift_gate(source_admission, "source-admission")
-    _require_release_drift_gate(release_readmission, "release-job re-admission")
+    release_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $sourceSha -CurrentMainSha $currentMain"
+    if release_readmission.count(release_call) != 1:
+        raise GuardFailure("release-job re-admission must invoke exact release-main-drift helper once")
+
+    publish = _section(
+        workflow,
+        "      - name: Publish GitHub prerelease",
+        "      - name: Cleanup held V25 release assets",
+    )
+    pre_mutation_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $preMutationPublishMain"
+    final_publish_call = ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $publishMain"
+    if publish.count(pre_mutation_call) != 1:
+        raise GuardFailure("pre-mutation admission must invoke exact release-main-drift helper once")
+    if publish.count(final_publish_call) != 1:
+        raise GuardFailure("final-publication admission must invoke exact release-main-drift helper once")
+
+    _require_order(
+        publish,
+        pre_mutation_call,
+        "$releaseCreatedByThisRun = $false",
+        "pre-mutation admission",
+    )
+    _require_order(
+        publish,
+        final_publish_call,
+        "$publishBody = @{ draft = $false } | ConvertTo-Json",
+        "final-publication admission",
+    )
+
+
+def _remove_nth(text: str, token: str, occurrence: int) -> str:
+    start = -1
+    for _ in range(occurrence):
+        start = text.find(token, start + 1)
+        if start < 0:
+            raise GuardFailure(f"mutation fixture could not find occurrence {occurrence}: {token}")
+    return text[:start] + text[start + len(token):]
 
 
 def main() -> int:
-    text = WORKFLOW.read_text(encoding="utf-8")
-    validate(text)
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    helper = HELPER.read_text(encoding="utf-8")
+    validate(workflow, helper)
 
-    # Mutation self-checks: removing either semantic terminal rejection must be
-    # detected so this guard cannot silently become a lexical false positive.
-    mutations = (
-        text.replace("if ($releaseDriftStatus -eq 1) {", "if ($releaseDriftStatus -eq 2) {", 1),
-        text[::-1].replace("{ )1 qe- sutatStfirDesaeler$( fi"[::-1], "{ )2 qe- sutatStfirDesaeler$( fi"[::-1], 1)[::-1],
+    workflow_calls = (
+        ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $sourceSha -CurrentMainSha $currentMain",
+        ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $preMutationPublishMain",
+        ".\\scripts\\assert-v25-cloud-release-main-drift.ps1 -SourceSha $env:SOURCE_SHA -CurrentMainSha $publishMain",
     )
-    for index, mutation in enumerate(mutations, start=1):
+    mutations = (
+        (_remove_nth(workflow, workflow_calls[0], 1), helper),
+        (_remove_nth(workflow, workflow_calls[0], 2), helper),
+        (_remove_nth(workflow, workflow_calls[1], 1), helper),
+        (_remove_nth(workflow, workflow_calls[2], 1), helper),
+        (workflow, helper.replace("if ($releaseDriftStatus -eq 1) {", "if ($releaseDriftStatus -eq 2) {", 1)),
+        (workflow, helper.replace("if ($releaseDriftStatus -ne 0) {", "if ($releaseDriftStatus -eq 0) {", 1)),
+    )
+    for index, (mutated_workflow, mutated_helper) in enumerate(mutations, start=1):
         try:
-            validate(mutation)
+            validate(mutated_workflow, mutated_helper)
         except GuardFailure:
             continue
         raise GuardFailure(f"mutation self-check {index} was not rejected")
 
-    print("PASS: V25 cloud release rejects stale release-relevant protected-main drift in both admission phases.")
+    print("PASS: V25 cloud release rejects stale release-relevant protected-main drift at all four authority boundaries.")
     return 0
 
 
