@@ -40,6 +40,7 @@ if builder.is_file():
         "GeneratedSlabMeshFootprintMode", "GeneratedSlabMeshXDiameterMm", "GeneratedSlabMeshYDiameterMm",
         "GeneratedSlabMeshXActualSpacingM", "GeneratedSlabMeshYActualSpacingM", '"GeneratedSlabMeshMode"] = Mode',
         "CadGeometryGuard.Midpoint", "CadGeometryGuard.Subtract", "CadGeometryGuard.Multiply", "CadGeometryGuard.Hypot3", "CreateFrustum",
+        "PostCommitCleanupWarning", "if (cadCommitted)", "rollback.Restore(project)",
     ):
         if needle not in text: errors.append("native slab-mesh builder guard missing: " + needle)
     for obsolete in ('HandlesKey = "GeneratedRebarHandles"', "EnsureSlabMeshOwnsGenericRebarSlot", "cùng đường kính"):
@@ -78,10 +79,13 @@ if command.is_file():
     for needle in (
         'CommandMethod("QS3DSLABREBAR3D"', "SlabMeshSolidBuilder.BuildSelected", "RebarSlabXNotation/RebarSlabYNotation",
         'CommandMethod("QS3DSLABREBARHEALTH"', "GeneratedSlabMeshHealthService", "GeneratedSlabMeshHandles",
-        'Report(document, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.")',
-        'Report(document, "QS3DSLABREBARHEALTH không thể hoàn tất kiểm tra. Project/native geometry không bị thay đổi.")',
+        'Report(document, nativeDatabaseIdentity, "QS3DSLABREBAR3D không thể hoàn tất. Kiểm tra selection/project và thử lại.")',
+        'Report(document, nativeDatabaseIdentity, "QS3DSLABREBARHEALTH không thể hoàn tất kiểm tra. Project/native geometry không bị thay đổi.")',
+        "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);", "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);",
+        "IsActiveDocumentGeneration(document, nativeDatabaseIdentity)",
+        "FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);",
         "var uiSyncFailed = false;", "PaletteCoordinator.RefreshProject()", "document.Editor.Regen()",
-        "native update đã hoàn tất; một phần UI không thể đồng bộ", "TryWriteMessage(document",
+        "native update đã hoàn tất; một phần UI không thể đồng bộ", "TryWriteMessage(document, nativeDatabaseIdentity",
     ):
         if needle not in text: errors.append("native slab-mesh command missing lifecycle/redaction token: " + needle)
     for forbidden in ("ex.Message", "Exception.Message", "GetBaseException()", "StackTrace", "UI sync warning:"):
@@ -106,4 +110,4 @@ if errors:
     for error in errors: print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-print("PASS: Slab X/Y mesh planner-to-Solid3d wiring retains dedicated ownership and freshness semantics while command failures are redacted and health/post-commit UI reporting is fail-isolated; runtime remains V25-gated.")
+print("PASS: Slab X/Y mesh planner-to-Solid3d wiring retains dedicated ownership and freshness semantics while command failures are redacted, committed cleanup outcomes remain truthful, and health/post-commit UI reporting is generation-bound/fail-isolated; runtime remains V25-gated.")
