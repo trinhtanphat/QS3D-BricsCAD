@@ -336,6 +336,12 @@ namespace QS3D.Core.Domain
         private int _storedCount;
         private long _storedTextCharacters;
 
+        internal void ValidateStructuralCount(int actualCount)
+        {
+            if (actualCount != _storedCount)
+                throw new InvalidOperationException("Audit history structural accounting is inconsistent with project history. Repair the existing audit history before modifying it.");
+        }
+
         public void ValidateAdd(AuditEvent item)
         {
             if (_storedCount >= AuditTrail.MaxStoredEvents)
@@ -665,7 +671,7 @@ namespace QS3D.Core.Domain
             QuantityRules = new StructuralRevisionList<QuantityRule>(Touch);
             Metadata = new ProjectMetadataDictionary();
             MeasurementWorkItemMappings = new ProjectMeasurementWorkItemMappingCollection(this, Metadata);
-            AuditEvents = new CatalogOwnershipList<AuditEvent>(AttachAuditEvent, DetachAuditEvent, Touch, ValidateAuditEventCandidate, _auditHistoryBudget);
+            AuditEvents = new CatalogOwnershipList<AuditEvent>(AttachAuditEvent, DetachAuditEvent, ValidateAuditHistoryAndTouch, ValidateAuditEventCandidate, _auditHistoryBudget);
         }
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
@@ -775,15 +781,21 @@ namespace QS3D.Core.Domain
         private void AttachAuditEvent(AuditEvent auditEvent)
         {
             auditEvent.PersistenceTextMutationValidating += _auditHistoryBudget.ValidateOwnedMutation;
-            auditEvent.PersistenceMutationRequested += Touch;
+            auditEvent.PersistenceMutationRequested += ValidateAuditHistoryAndTouch;
             auditEvent.PersistenceTextMutationCommitted += _auditHistoryBudget.CommitOwnedMutation;
         }
 
         private void DetachAuditEvent(AuditEvent auditEvent)
         {
             auditEvent.PersistenceTextMutationValidating -= _auditHistoryBudget.ValidateOwnedMutation;
-            auditEvent.PersistenceMutationRequested -= Touch;
+            auditEvent.PersistenceMutationRequested -= ValidateAuditHistoryAndTouch;
             auditEvent.PersistenceTextMutationCommitted -= _auditHistoryBudget.CommitOwnedMutation;
+        }
+
+        private void ValidateAuditHistoryAndTouch()
+        {
+            _auditHistoryBudget.ValidateStructuralCount(AuditEvents.Count);
+            Touch();
         }
 
         private static void ValidateAuditEventCandidate(AuditEvent auditEvent)
