@@ -16,6 +16,7 @@ namespace QS3D.Core.SmokeTests
             ProjectsUnitSafePackageSummary();
             ProjectsClassificationZoneLayerGroupSummary();
             GroupsPackageIdentityCaseInsensitively();
+            PreservesSignedDeltaResidualAcrossCancellation();
             RejectsAmbiguousRetainedGroupingMetadata();
         }
 
@@ -139,6 +140,28 @@ namespace QS3D.Core.SmokeTests
             Equal(2, result.GroupSummaries[0].MarkupCount, "case-insensitive grouped markup count");
         }
 
+        private static void PreservesSignedDeltaResidualAcrossCancellation()
+        {
+            var calibration = new DrawingCalibration(1d, 1d, "m");
+            var previous = Extract("R1", "A101-R1.pdf", calibration, new[]
+            {
+                new TakeoffMarkup2D("M-C", "A101", TakeoffMeasurementKind.Length, 1e16, "ARC.WALL", "L01", "A-WALL", "H-C")
+            });
+            var current = Extract("R2", "A101-R2.pdf", calibration, new[]
+            {
+                new TakeoffMarkup2D("M-A", "A101", TakeoffMeasurementKind.Length, 1e16, "ARC.WALL", "L01", "A-WALL", "H-A"),
+                new TakeoffMarkup2D("M-B", "A101", TakeoffMeasurementKind.Length, 1d, "ARC.WALL", "L01", "A-WALL", "H-B")
+            });
+
+            var result = new RevisionTakeoffPackageReview2D().BuildResult(new RevisionTakeoffPackage2D(previous, current));
+            var quantity = result.QuantitySummaries.Single(x => x.Unit == "m");
+            var group = result.GroupSummaries.Single();
+            Near(1d, quantity.QuantityDelta, "signed package delta preserves cancellation residual");
+            Near(1d, group.QuantityDelta, "signed group delta preserves cancellation residual");
+            Equal(2, group.AddedCount, "cancellation group added count");
+            Equal(1, group.RemovedCount, "cancellation group removed count");
+            Equal(3, group.MarkupCount, "cancellation group markup count");
+        }
         private static RevisionTakeoffPackage2D BuildSamplePackage()
         {
             var calibration = new DrawingCalibration(1d, 1d, "m");
