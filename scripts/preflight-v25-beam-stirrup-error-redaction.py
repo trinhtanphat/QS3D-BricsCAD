@@ -24,7 +24,7 @@ def main() -> None:
     health = method_block(source, "public void BeamStirrupHealth()", "private static List<ProjectElement> ResolveBeamTargets")
     finalize = method_block(
         source,
-        "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)",
+        "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)",
         "private static IntPtr GetNativeDatabaseIdentity(Document document)",
     )
 

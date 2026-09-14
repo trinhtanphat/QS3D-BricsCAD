@@ -14,8 +14,16 @@ namespace QS3D.BricsCAD.V25.Cad
 {
     internal sealed class BeamStirrupBuildResult
     {
-        public int Elements { get; set; }
-        public int Stirrups { get; set; }
+        public BeamStirrupBuildResult(int elements, int stirrups, bool postCommitCleanupWarning)
+        {
+            Elements = elements;
+            Stirrups = stirrups;
+            PostCommitCleanupWarning = postCommitCleanupWarning;
+        }
+
+        public int Elements { get; }
+        public int Stirrups { get; }
+        public bool PostCommitCleanupWarning { get; }
     }
 
     internal static class BeamStirrupSolidBuilder
@@ -56,7 +64,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var selectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var id in selectedIds)
                 try { selectedHandles.Add(id.Handle.ToString()); } catch { }
-            if (selectedHandles.Count == 0) return new BeamStirrupBuildResult();
+            if (selectedHandles.Count == 0) return new BeamStirrupBuildResult(0, 0, postCommitCleanupWarning: false);
 
             var elements = project.Elements
                 .Where(x => x.Category == ElementCategory.Beam && x.SourceHandles.Any(selectedHandles.Contains))
@@ -64,7 +72,7 @@ namespace QS3D.BricsCAD.V25.Cad
                 .ToList();
             if (!expectedTargetIds.SetEquals(elements.Select(x => x.Id)))
                 throw new InvalidOperationException("Beam Stirrup 3D: semantic Beam target set đã thay đổi trước native mutation; hãy chọn lại target.");
-            if (elements.Count == 0) return new BeamStirrupBuildResult();
+            if (elements.Count == 0) return new BeamStirrupBuildResult(0, 0, postCommitCleanupWarning: false);
 
             var duplicateSelectedSource = elements
                 .SelectMany(element => element.SourceHandles
@@ -81,6 +89,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var batchCount = 0;
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
+            var cleanupWarning = false;
 
             try
             {
@@ -210,9 +219,13 @@ namespace QS3D.BricsCAD.V25.Cad
                     cadCommitted = true;
                 }
             }
-            catch (Exception operationError)
+            catch (ObjectDisposedException operationError)
             {
-                if (!cadCommitted)
+                if (cadCommitted)
+                {
+                    cleanupWarning = true;
+                }
+                else
                 {
                     try { rollback.Restore(project); }
                     catch (Exception restoreError)
@@ -221,12 +234,30 @@ namespace QS3D.BricsCAD.V25.Cad
                             "Beam stirrup replacement failed before CAD commit and project rollback also failed.",
                             new AggregateException(operationError, restoreError));
                     }
+                    throw;
                 }
-                throw;
+            }
+            catch (Exception operationError)
+            {
+                if (cadCommitted)
+                {
+                    cleanupWarning = true;
+                }
+                else
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Beam stirrup replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                    throw;
+                }
             }
 
             var count = pending.Sum(x => x.Handles.Count);
-            return new BeamStirrupBuildResult { Elements = pending.Count, Stirrups = count };
+            return new BeamStirrupBuildResult(pending.Count, count, cleanupWarning);
         }
 
         private static void CommitSemanticUpdate(ProjectState project, PendingUpdate update)
