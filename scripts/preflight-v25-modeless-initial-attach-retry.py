@@ -41,9 +41,11 @@ source = SOURCE.read_text(encoding="utf-8")
 attach = method_block(source, "public static void Attach(Window window, Document document)")
 registration_attach = method_block(source, "public void Attach(Document document)")
 recovery = method_block(source, "public void TryCompleteFailedInitialAttachCleanup()")
+quiescence_aborted = method_block(source, "private void OnHostQuiescenceAborted(object? sender, EventArgs e)")
 require(bool(attach), "top-level DocumentBoundWindowLifetime.Attach is missing", errors)
 require(bool(registration_attach), "Registration.Attach is missing", errors)
 require(bool(recovery), "failed-initial-attach cleanup recovery method is missing", errors)
+require(bool(quiescence_aborted), "host-quiescence-aborted handler is missing", errors)
 
 for token in (
     "private sealed class AttachGate",
@@ -94,6 +96,23 @@ for token in (
 ):
     require(token in recovery, "deferred failed-initial cleanup contract missing token: " + token, errors)
 
+for token in (
+    "if (_initialAttachFailed)",
+    "TryCompleteFailedInitialAttachCleanup();",
+    "return;",
+):
+    require(token in quiescence_aborted, "quit-abort must eagerly discharge failed initial Attach cleanup: " + token, errors)
+if quiescence_aborted:
+    failed_index = quiescence_aborted.find("if (_initialAttachFailed)")
+    cleanup_index = quiescence_aborted.find("TryCompleteFailedInitialAttachCleanup();", failed_index)
+    return_index = quiescence_aborted.find("return;", cleanup_index)
+    existing_recovery_index = quiescence_aborted.find("if (Volatile.Read(ref _windowClosedDuringQuiescence)", return_index)
+    require(
+        0 <= failed_index < cleanup_index < return_index < existing_recovery_index,
+        "failed initial Attach cleanup must run before ordinary modeless quit-abort recovery",
+        errors,
+    )
+
 if attach:
     get_index = attach.find("Registrations.GetValue(window")
     failed_index = attach.find("if (registration.HasFailedInitialAttach)", get_index)
@@ -122,4 +141,4 @@ if errors:
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
 
-print("PASS: failed initial modeless Attach retains cleanup ownership through quiescence, recreates only after cleanup is complete, rejects reentrancy, and preserves successful rebind ownership.")
+print("PASS: failed initial modeless Attach retains cleanup ownership through quiescence, cleans eagerly after quit abort, recreates only after cleanup is complete, rejects reentrancy, and preserves successful rebind ownership.")
