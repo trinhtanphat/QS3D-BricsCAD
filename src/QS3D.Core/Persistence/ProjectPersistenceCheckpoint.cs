@@ -44,6 +44,16 @@ namespace QS3D.Core.Persistence
         public DateTime ProjectUpdatedUtc => _projectUpdatedUtc;
         public long ProjectChangeVersion => _projectChangeVersion;
 
+        public sealed class TransitionRestoreGuard
+        {
+            internal TransitionRestoreGuard(ProjectPersistenceCheckpoint source)
+            {
+                Source = source ?? throw new ArgumentNullException(nameof(source));
+            }
+
+            internal ProjectPersistenceCheckpoint Source { get; }
+        }
+
         public static ProjectPersistenceCheckpoint Capture(ProjectState project, IEnumerable<string> elementIds)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -136,6 +146,43 @@ namespace QS3D.Core.Persistence
             return true;
         }
 
+        public TransitionRestoreGuard PrepareTransitionRestore(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!Matches(project))
+                throw new InvalidOperationException(
+                    "Cannot prepare a persistence transition from a checkpoint that does not exactly match the current project state.");
+            return new TransitionRestoreGuard(this);
+        }
+
+        public void RestoreTransition(ProjectState project, TransitionRestoreGuard guard)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (guard == null) throw new ArgumentNullException(nameof(guard));
+            var source = guard.Source;
+            if (!ReferenceEquals(project, _projectOwner) || !ReferenceEquals(project, source._projectOwner) ||
+                !string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal) ||
+                !string.Equals(project.ProjectId, source._projectId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Cannot restore a persistence transition across project generations.");
+            if (project.ChangeVersion != source._projectChangeVersion ||
+                project.UpdatedUtc != source._projectUpdatedUtc)
+                throw new InvalidOperationException("Cannot restore a persistence transition because the current project revision changed after the transition guard was prepared.");
+            if (!HasSameElementGenerationSet(source))
+                throw new InvalidOperationException("Cannot restore a persistence transition across a different captured element generation set.");
+
+            var targets = ResolveCapturedTargets(project);
+            foreach (var pair in _elements)
+            {
+                if (!pair.Value.SemanticMatches(targets[pair.Key]))
+                    throw new InvalidOperationException(
+                        "Cannot restore a persistence transition because the target semantic state has not been restored: " + pair.Key + ".");
+            }
+
+            foreach (var pair in _elements)
+                pair.Value.Restore(targets[pair.Key]);
+            project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
+        }
+
         public void Restore(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -176,6 +223,31 @@ namespace QS3D.Core.Persistence
             foreach (var pair in _elements)
                 pair.Value.Restore(targets[pair.Key]);
             project.RestorePersistenceState(_projectUpdatedUtc, _projectChangeVersion);
+        }
+
+        private bool HasSameElementGenerationSet(ProjectPersistenceCheckpoint other)
+        {
+            if (other == null || other._elements.Count != _elements.Count) return false;
+            foreach (var pair in _elements)
+            {
+                if (!other._elements.TryGetValue(pair.Key, out var otherState) ||
+                    !ReferenceEquals(pair.Value.Owner, otherState.Owner)) return false;
+            }
+            return true;
+        }
+
+        private Dictionary<string, ProjectElement> ResolveCapturedTargets(ProjectState project)
+        {
+            var targets = new Dictionary<string, ProjectElement>(StringComparer.OrdinalIgnoreCase);
+            foreach (var id in _elementIds)
+            {
+                var element = project.FindElement(id)
+                    ?? throw new InvalidOperationException("Cannot restore missing persistence checkpoint element: " + id + ".");
+                if (!ReferenceEquals(element, _elements[id].Owner))
+                    throw new InvalidOperationException("Cannot restore persistence checkpoint because captured element generation changed: " + id + ".");
+                targets.Add(id, element);
+            }
+            return targets;
         }
 
         private static void RequireStableKnownCount(IEnumerable<string> elementIds, int expectedKnownCount)

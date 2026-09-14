@@ -221,19 +221,17 @@ namespace QS3D.Core.SmokeTests
         private static ProjectState BuildProject(string id, int count)
         {
             var project = new ProjectState(id, "Audit bound smoke");
-            var item = CanonicalEvent();
-            var admittedCount = Math.Min(count, MaxStoredEvents);
-            for (var index = 0; index < admittedCount; index++) project.AuditEvents.Add(item);
-
-            if (count > admittedCount)
+            var utc = new DateTime(2026, 8, 18, 0, 0, 0, DateTimeKind.Utc);
+            for (var index = 0; index < count; index++)
             {
-                var innerField = project.AuditEvents.GetType().GetField("_items", BindingFlags.Instance | BindingFlags.NonPublic)
-                    ?? throw new Exception("AuditTrailHistoryBoundSmoke could not resolve corruption-injection storage.");
-                var inner = innerField.GetValue(project.AuditEvents) as List<AuditEvent>
-                    ?? throw new Exception("AuditTrailHistoryBoundSmoke corruption-injection storage has an unexpected shape.");
-                for (var index = admittedCount; index < count; index++) inner.Add(item);
+                project.AuditEvents.Add(new AuditEvent
+                {
+                    Utc = utc,
+                    Action = "history.event",
+                    ElementId = "E" + index,
+                    Detail = "canonical"
+                });
             }
-
             return project;
         }
 

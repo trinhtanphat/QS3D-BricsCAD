@@ -104,6 +104,30 @@ namespace QS3D.BricsCAD.V25.UI
             return CloseForManagedWrapperDrift();
         }
 
+        private bool EnsureBoundDocumentGeneration(string operation)
+        {
+            if (_wrapperDriftCloseRequested || !_wrapperDriftNativeIdentityCaptured)
+                return CloseForManagedWrapperDrift();
+
+            try
+            {
+                var activeDocument = Application.DocumentManager.MdiActiveDocument;
+                if (!ReferenceEquals(activeDocument, _document))
+                    return false;
+
+                var database = activeDocument.Database;
+                if (database == null ||
+                    database.UnmanagedObject == IntPtr.Zero ||
+                    database.UnmanagedObject != _wrapperDriftNativeDatabaseIdentity)
+                    return CloseForManagedWrapperDrift();
+
+                return true;
+            }
+            catch
+            {
+                return CloseForManagedWrapperDrift();
+            }
+        }
         private bool CloseForManagedWrapperDrift()
         {
             if (_wrapperDriftCloseRequested) return false;

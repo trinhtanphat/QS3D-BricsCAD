@@ -20,6 +20,7 @@ namespace QS3D.BricsCAD.V25.UI
                 var elevation = ParseElevation(FloorElevationBox.Text);
                 var project = RequireProjectForFirstSave(creatingNewFloor, out var bootstrappedProject);
                 var rollback = ProjectStateSnapshot.Capture(project);
+                EnsureBoundDrawingIsActive("save Floor/Level");
                 FloorDefinition floor;
                 try
                 {
@@ -59,9 +60,9 @@ namespace QS3D.BricsCAD.V25.UI
                     "Đã lưu tầng “" + floor.Name + "” • " + floor.ElevationM.ToString("0.###", CultureInfo.InvariantCulture) + " m.",
                     "Floor/Level save");
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                SetStatus("Lưu tầng lỗi: " + ex.Message);
+                ReportFailure("save Floor/Level");
             }
         }
     }
