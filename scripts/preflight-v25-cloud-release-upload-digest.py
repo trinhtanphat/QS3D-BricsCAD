@@ -42,9 +42,6 @@ for token in required_workflow:
     if token not in workflow:
         raise SystemExit(f"cloud preview workflow lost held upload identity binding: {token}")
 
-print("V25 cloud release upload digest preflight: PASS")
-
-
 required_draft_cleanup = [
     "$releaseCreatedByThisRun = $false",
     "$createdReleaseId = 0L",
@@ -76,3 +73,5 @@ if cleanup_positions != sorted(cleanup_positions) or len(set(cleanup_positions))
     raise SystemExit(
         "run-created draft rollback ordering must remain initialize -> create -> own -> prove exact draft -> delete exact id"
     )
+
+print("V25 cloud release upload digest preflight: PASS")
