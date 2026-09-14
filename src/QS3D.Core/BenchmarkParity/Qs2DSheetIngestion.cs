@@ -111,10 +111,11 @@ namespace QS3D.Core.BenchmarkParity
 
         private static void ValidatePdfPayload(byte[] payload)
         {
-            if (payload.Length < 8 ||
+            if (payload.Length < 9 ||
                 payload[0] != (byte)'%' || payload[1] != (byte)'P' || payload[2] != (byte)'D' || payload[3] != (byte)'F' || payload[4] != (byte)'-' ||
-                !IsAsciiDigit(payload[5]) || payload[6] != (byte)'.' || !IsAsciiDigit(payload[7]))
-                throw new InvalidOperationException("PDF payload header is invalid.");
+                !IsAsciiDigit(payload[5]) || payload[6] != (byte)'.' || !IsAsciiDigit(payload[7]) ||
+                !IsPdfLineTerminator(payload[8]))
+                throw new InvalidOperationException("PDF payload header is invalid or not terminated by an end-of-line marker.");
 
             var end = payload.Length - 1;
             while (end >= 0 && IsPdfWhitespace(payload[end])) end--;
@@ -132,6 +133,11 @@ namespace QS3D.Core.BenchmarkParity
         private static bool IsAsciiDigit(byte value)
         {
             return value >= (byte)'0' && value <= (byte)'9';
+        }
+
+        private static bool IsPdfLineTerminator(byte value)
+        {
+            return value == 10 || value == 13;
         }
 
         private static bool IsPdfWhitespace(byte value)
