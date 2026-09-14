@@ -18,7 +18,7 @@ required_smoke = (
     "stale revision",
     "foreign path",
     "unknown selection guid",
-    "ambiguous selection guid",
+    "duplicate IFC GlobalId parser invariant",
 )
 for marker in required_source:
     if marker not in source:
