@@ -93,8 +93,9 @@ namespace QS3D.Core.SmokeTests
             var inventory = new[]
             {
                 new TakeoffWorkflowLine("A", "", "ea", 1d, 1e16, 1d, 1),
-                new TakeoffWorkflowLine("B", "", "ea", 1d, 1d, 1d, 1),
-                new TakeoffWorkflowLine("C", "", "ea", 1d, 1d, 1d, 1)
+                new TakeoffWorkflowLine("B", "", "ea", 1d, 3d, 1d, 1),
+                new TakeoffWorkflowLine("C", "", "ea", 1d, 2d, 1d, 1),
+                new TakeoffWorkflowLine("D", "", "ea", 1d, 1e-16, 1d, 1)
             };
             var result = new TakeoffPackageBuildResult(
                 package,
@@ -103,8 +104,8 @@ namespace QS3D.Core.SmokeTests
                 Enumerable.Empty<TakeoffPackageValidationIssue>(),
                 inventory);
 
-            Near(10000000000000002d, result.EstimatedCost, 0d, "high dynamic range estimated cost");
-            Equal(3, result.Inventory.Sum(x => x.EvidenceCount), "estimated cost evidence count invariant");
+            Near(10000000000000004d, result.EstimatedCost, 0d, "high dynamic range estimated cost");
+            Equal(4, result.Inventory.Sum(x => x.EvidenceCount), "estimated cost evidence count invariant");
         }
 
         private static void CanonicalizesSignedZeroEstimatedCost()
