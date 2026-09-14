@@ -16,6 +16,15 @@ namespace QS3D.BricsCAD.V25.UI
                 throw new InvalidOperationException("QS3D project đã xuất hiện hoặc thay đổi từ lần Refresh gần nhất. Hãy Refresh Level Picker trước khi lưu tầng.");
 
             var project = ProjectContextCoordinator.GetOrCreate(_document);
+            try
+            {
+                EnsureBoundDrawingIsActive("save Floor/Level");
+            }
+            catch
+            {
+                ProjectContextCoordinator.Forget(_document);
+                throw;
+            }
             bootstrappedProject = true;
             return project;
         }
