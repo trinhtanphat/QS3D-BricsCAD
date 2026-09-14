@@ -67,15 +67,19 @@ if "new-v25-update-manifest-validation-core.ps1" not in transformer:
     raise SystemExit("ERROR: V26 transformer no longer declares the split validation core as a transform input")
 require(
     v26_manifest,
-    "Source = 'new-v25-update-manifest-validation-core.ps1'",
+    "$tempValidation = Join-Path $tempRoot 'new-v26-update-manifest-validation-core.ps1'",
+    "V26 manifest orchestrator no longer binds the transformed validation-core output path",
+)
+require(
+    v26_manifest,
+    "@{ Source = 'new-v25-update-manifest-validation-core.ps1'; Output = $tempValidation;",
     "V26 manifest orchestrator no longer declares the V25 validation core as a transform input",
 )
 require(
     v26_manifest,
-    "Generated = 'new-v26-update-manifest-validation-core.ps1'",
-    "V26 manifest orchestrator no longer binds the transformed validation-core output",
+    "& $generator -SourceScript $entry.Source -OutputPath $entry.Output -PassThruHeldGeneration",
+    "V26 manifest orchestrator does not route generation through the held-generation transformer contract",
 )
-require(v26_manifest, "& $transformer -TemplateScript", "V26 manifest orchestrator does not route generation through the transformer")
 for label, text in (
     ("V26 transformer", transformer),
     ("V26 manifest orchestrator", v26_manifest),
