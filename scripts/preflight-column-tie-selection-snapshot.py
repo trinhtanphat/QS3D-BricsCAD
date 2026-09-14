@@ -45,7 +45,7 @@ if not errors:
     required_builder = [
         'BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)',
         'if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));',
-        'if (selectedIds.Length == 0) return 0;',
+        'if (selectedIds.Length == 0) return new ColumnTieBuildResult(0, postCommitCleanupWarning: false);',
         'var ids = (ObjectId[])selectedIds.Clone();',
         'ProjectStateSnapshot.Capture(project)',
         'using (document.LockDocument())',
@@ -53,6 +53,7 @@ if not errors:
         'MaxTiesPerElement',
         'MaxTiesPerBatch',
         'transaction.Commit()',
+        'return new ColumnTieBuildResult(totalTies, cleanupWarning);',
     ]
     for token in required_builder:
         if token not in builder:
