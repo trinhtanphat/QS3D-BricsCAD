@@ -120,8 +120,9 @@ namespace QS3D.Core.BenchmarkParity
             var result = new Dictionary<string, RecognizedQsComponent>(StringComparer.OrdinalIgnoreCase);
             foreach (var component in components)
             {
-                if (!result.TryAdd(component.Id, component))
+                if (result.ContainsKey(component.Id))
                     throw new InvalidOperationException("Duplicate reconstructed component id: " + component.Id + ".");
+                result.Add(component.Id, component);
             }
             return result;
         }
@@ -131,8 +132,9 @@ namespace QS3D.Core.BenchmarkParity
             var result = new Dictionary<string, ComponentReviewDecision>(StringComparer.OrdinalIgnoreCase);
             foreach (var review in reviews)
             {
-                if (!result.TryAdd(review.ComponentId, review))
+                if (result.ContainsKey(review.ComponentId))
                     throw new InvalidOperationException("Duplicate component review decision: " + review.ComponentId + ".");
+                result.Add(review.ComponentId, review);
             }
             return result;
         }
