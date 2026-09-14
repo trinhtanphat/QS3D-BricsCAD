@@ -327,8 +327,8 @@ function Restore-Qs3dV26ProfileSandbox {
     }
 }
 
-$expectedProductSourceSha = '17b09685478960299453bdb5dd00fdfbd4145a47'
-$expectedPackageSha256 = 'c90d88327b6b635c08e7aee4988989a121c9e4d069191207a4e09eab75fa9f20'
+$expectedProductSourceSha = '4112bb11f86bab3e80ae73c631f9e7b81b13bb84'
+$expectedPackageSha256 = '1ebc68cf66d9cf916ded572a65ee4442558de96effdd6cee71a638df17a0ee99'
 
 function Assert-Qs3dV26InstalledDesktopRuntime {
     param([AllowNull()][string]$ExpectedRuntimeVersion)
@@ -420,7 +420,7 @@ function Assert-Qs3dV26DotNetRoot {
     }
     Assert-Qs3dV26InstalledDesktopRuntime -ExpectedRuntimeVersion $selectedRuntime.Name
 }
-$expectedProductVersion = '0.2.0-preview.20'
+$expectedProductVersion = '0.2.0-preview.23'
 $candidateKind = 'LOCAL_PR_CANDIDATE'
 
 function Get-Hash([string]$Path) {
@@ -780,12 +780,34 @@ if ((Get-Hash $PackageZip) -ine $PackageSha256) { throw 'Candidate package hash 
 $ProvenancePath = Assert-OrdinaryFile $ProvenancePath 'Candidate provenance'
 $provenanceHash = Get-Hash $ProvenancePath
 $provenance = Get-Content -LiteralPath $ProvenancePath -Raw | ConvertFrom-Json
-Assert-JsonPropertySet $provenance @('product', 'target', 'releaseTag', 'productVersion', 'sourceCommit', 'packageSha256') 'Candidate provenance'
+Assert-JsonPropertySet $provenance @('product', 'target', 'releaseTag', 'productVersion', 'sourceCommit', 'packageSha256', 'installerSha256', 'hostReferences') 'Candidate provenance'
+$expectedInstallerSha256 = '9330806cf29e1e6b01758191aa3d9e8d301d9d3125470b6d139f78c7772f9740'
 if ($provenance.product -cne 'QS3D' -or $provenance.target -cne 'BricsCAD V26 x64' -or
     $provenance.sourceCommit -cne $expectedProductSourceSha -or
     $provenance.productVersion -cne $expectedProductVersion -or
     $provenance.releaseTag -cne ('v' + $expectedProductVersion) -or
-    $provenance.packageSha256 -ine $expectedPackageSha256) { throw 'Candidate provenance identity mismatch.' }
+    $provenance.packageSha256 -ine $expectedPackageSha256 -or
+    $provenance.installerSha256 -ine $expectedInstallerSha256) { throw 'Candidate provenance identity mismatch.' }
+$expectedHostReferenceNames = @('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')
+if (@($provenance.hostReferences).Count -ne 4) { throw 'Candidate provenance must bind exactly four V26 host references.' }
+$seenHostReferences = @{}
+foreach ($record in @($provenance.hostReferences)) {
+    Assert-JsonPropertySet $record @('name', 'length', 'sha256') 'Candidate provenance host reference'
+    $name = [string]$record.name
+    if ($expectedHostReferenceNames -cnotcontains $name -or $seenHostReferences.ContainsKey($name)) {
+        throw 'Candidate provenance host-reference identity mismatch.'
+    }
+    $hostPath = Assert-OrdinaryFile (Join-Path $BricsCadDir $name) ('Installed V26 host reference ' + $name)
+    $hostItem = Get-Item -LiteralPath $hostPath -Force
+    if ([Int64]$record.length -ne [Int64]$hostItem.Length -or
+        ([string]$record.sha256).ToLowerInvariant() -cne (Get-Hash $hostPath)) {
+        throw 'Candidate provenance host-reference bytes differ from the installed V26 host.'
+    }
+    $seenHostReferences[$name] = $true
+}
+foreach ($name in $expectedHostReferenceNames) {
+    if (-not $seenHostReferences.ContainsKey($name)) { throw 'Candidate provenance is missing a required V26 host reference.' }
+}
 $metadata = Get-Content -LiteralPath (Join-Path $ProductDir 'PACKAGE-METADATA.json') -Raw | ConvertFrom-Json
 if ($metadata.product -cne 'QS3D' -or $metadata.framework -cne 'net8.0-windows' -or
     $metadata.productVersion -cne $expectedProductVersion -or

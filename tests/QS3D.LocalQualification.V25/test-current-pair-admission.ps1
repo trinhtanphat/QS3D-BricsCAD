@@ -1,9 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$source = '17b09685478960299453bdb5dd00fdfbd4145a47'
-$v25Hash = '536a71a0c630ef6b1dcd9f3327efd177827853832cc8ff4d161a17cf56c44f65'
-$v26Hash = 'c90d88327b6b635c08e7aee4988989a121c9e4d069191207a4e09eab75fa9f20'
-$version = '0.2.0-preview.20'
+$source = '4112bb11f86bab3e80ae73c631f9e7b81b13bb84'
+$v25Hash = 'f9395c0df502088d9622fd54441347a1e060e5e6e509e9325bee9e5ef5c906ce'
+$v26Hash = '1ebc68cf66d9cf916ded572a65ee4442558de96effdd6cee71a638df17a0ee99'
+$version = '0.2.0-preview.23'
 
 function Read-Script([string]$RelativePath) {
     return [IO.File]::ReadAllText((Join-Path $repo $RelativePath))
@@ -34,6 +34,10 @@ Assert-ContainsLiteral $v25 $version 'V25 runner'
 Assert-ContainsLiteral $v26 $source 'V26 runner'
 Assert-ContainsLiteral $v26 $v26Hash 'V26 runner'
 Assert-ContainsLiteral $v26 $version 'V26 runner'
+Assert-ContainsLiteral $v26 "Assert-JsonPropertySet `$provenance @('product', 'target', 'releaseTag', 'productVersion', 'sourceCommit', 'packageSha256', 'installerSha256', 'hostReferences')" 'V26 provenance schema gate'
+Assert-ContainsLiteral $v26 '9330806cf29e1e6b01758191aa3d9e8d301d9d3125470b6d139f78c7772f9740' 'V26 provenance installer gate'
+Assert-ContainsLiteral $v26 'if (@($provenance.hostReferences).Count -ne 4)' 'V26 provenance host-reference count gate'
+Assert-ContainsLiteral $v26 "Assert-JsonPropertySet `$record @('name', 'length', 'sha256')" 'V26 provenance host-reference schema gate'
 Assert-ContainsLiteral $wrapper $source 'LOCAL-022 wrapper'
 Assert-ContainsLiteral $wrapper $v25Hash 'LOCAL-022 wrapper'
 Assert-ContainsLiteral $wrapper $v26Hash 'LOCAL-022 wrapper'

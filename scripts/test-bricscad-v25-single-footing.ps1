@@ -88,9 +88,9 @@ $candidates = @{
         PackageSha256 = '4d9869e38682674772196a3e238f115624ff357a276bb0b976000b63c9a833b5'
         ProductVersion = '0.1.0-preview.10307'; Kind = 'LOCAL_PR_CANDIDATE'
     }
-    '17b09685478960299453bdb5dd00fdfbd4145a47' = @{
-        PackageSha256 = '536a71a0c630ef6b1dcd9f3327efd177827853832cc8ff4d161a17cf56c44f65'
-        ProductVersion = '0.2.0-preview.20'; Kind = 'LOCAL_PR_CANDIDATE'
+    '4112bb11f86bab3e80ae73c631f9e7b81b13bb84' = @{
+        PackageSha256 = 'f9395c0df502088d9622fd54441347a1e060e5e6e509e9325bee9e5ef5c906ce'
+        ProductVersion = '0.2.0-preview.23'; Kind = 'LOCAL_PR_CANDIDATE'
     }
 }
 if (-not $candidates.ContainsKey($ProductSourceSha)) { throw 'Unallocated LOCAL-022 product source.' }
