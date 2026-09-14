@@ -29,7 +29,8 @@ namespace QS3D.Core.SmokeTests
             Equal(encoded, QuantBimSelectionInterchangeV2Codec.Encode(package), "deterministic V2 re-encode");
 
             var lines = encoded.Split(new[] { '\n' }, StringSplitOptions.None);
-            var payloadBytes = Convert.FromBase64String(lines[2].Substring("Payload=".Length));
+            var payloadText = lines[2].Substring("Payload=".Length);
+            var payloadBytes = Convert.FromBase64String(payloadText);
             var v1 = Encoding.UTF8.GetString(payloadBytes);
             var revisionField = "Revision=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(bundle.Revision));
             var tamperedRevisionField = "Revision=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(bundle.Revision + "-tampered"));
@@ -45,6 +46,12 @@ namespace QS3D.Core.SmokeTests
             Expect<InvalidOperationException>(() => QuantBimSelectionInterchangeV2Codec.Decode(digestTampered), "whole-envelope digest tamper");
             Expect<InvalidOperationException>(() => QuantBimSelectionInterchangeV2Codec.Decode(encoded.Replace("\n", "\r\n")), "non-canonical line endings");
             Expect<InvalidOperationException>(() => QuantBimSelectionInterchangeV2Codec.Decode(encoded.TrimEnd('\n')), "missing terminal newline");
+
+            var nonCanonicalBase64 = lines[0] + "\n" + lines[1] + "\nPayload=" + payloadText + " \n";
+            Expect<InvalidOperationException>(() => QuantBimSelectionInterchangeV2Codec.Decode(nonCanonicalBase64), "non-canonical base64 payload");
+
+            var oversizedEnvelope = new string('X', QuantBimSelectionInterchangeV2Codec.MaxEnvelopeCharacters + 1);
+            Expect<InvalidOperationException>(() => QuantBimSelectionInterchangeV2Codec.Decode(oversizedEnvelope), "bounded envelope admission");
         }
 
         private static string Ifc()
