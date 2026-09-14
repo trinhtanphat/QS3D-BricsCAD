@@ -220,7 +220,7 @@ namespace QS3D.Core.BenchmarkParity
                 if (length < 2 || offset + length > payload.Length) throw new InvalidOperationException("JPEG segment length is invalid.");
                 if (IsStartOfFrame(marker))
                 {
-                    if (length < 7) throw new InvalidOperationException("JPEG frame header is invalid.");
+                    ValidateJpegFrameHeader(payload, offset, length);
                     height = (payload[offset + 3] << 8) | payload[offset + 4];
                     width = (payload[offset + 5] << 8) | payload[offset + 6];
                     if (width <= 0 || height <= 0) throw new InvalidOperationException("JPEG dimensions are invalid.");
@@ -229,6 +229,18 @@ namespace QS3D.Core.BenchmarkParity
                 offset += length;
             }
             throw new InvalidOperationException("JPEG payload has no supported frame dimensions.");
+        }
+
+        private static void ValidateJpegFrameHeader(byte[] payload, int offset, int length)
+        {
+            if (length < 8) throw new InvalidOperationException("JPEG frame header is invalid.");
+            if (payload[offset + 2] == 0) throw new InvalidOperationException("JPEG frame sample precision is invalid.");
+
+            var componentCount = payload[offset + 7];
+            if (componentCount == 0) throw new InvalidOperationException("JPEG frame must declare at least one component.");
+            var expectedLength = 8 + (3 * componentCount);
+            if (length != expectedLength)
+                throw new InvalidOperationException("JPEG frame length does not match its component count.");
         }
 
         private static void ValidateJpegTerminator(byte[] payload)
