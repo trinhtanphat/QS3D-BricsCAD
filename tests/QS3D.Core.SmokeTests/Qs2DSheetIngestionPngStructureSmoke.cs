@@ -16,6 +16,8 @@ namespace QS3D.Core.SmokeTests
             RejectsWrongFirstChunkType();
             RejectsWrongIhdrLength();
             RejectsTruncatedIhdr();
+            RejectsCorruptedIhdrData();
+            RejectsCorruptedIhdrCrc();
         }
 
         private static void AcceptsCanonicalIhdr()
@@ -42,6 +44,20 @@ namespace QS3D.Core.SmokeTests
             ThrowsInvalidOperation(() => Ingest(payload), "truncated IHDR");
         }
 
+        private static void RejectsCorruptedIhdrData()
+        {
+            var payload = Png(13, 'I', 'H', 'D', 'R', true);
+            payload[19] ^= 1;
+            ThrowsInvalidOperation(() => Ingest(payload), "corrupted IHDR data");
+        }
+
+        private static void RejectsCorruptedIhdrCrc()
+        {
+            var payload = Png(13, 'I', 'H', 'D', 'R', true);
+            payload[32] ^= 1;
+            ThrowsInvalidOperation(() => Ingest(payload), "corrupted IHDR CRC");
+        }
+
         private static IngestedDrawingSheet2D Ingest(byte[] payload)
         {
             return new Qs2DSheetIngestor().IngestRaster(
@@ -56,9 +72,27 @@ namespace QS3D.Core.SmokeTests
                 0, 0, 2, 128, 0, 0, 1, 224,
                 8, 2, 0, 0, 0,
                 0, 0, 0, 0 };
+            if (ihdrLength == 13 && c0 == 'I' && c1 == 'H' && c2 == 'D' && c3 == 'R')
+                WriteCrc(bytes, 12, 13, 29);
             if (includeIend)
                 bytes.AddRange(new byte[] { 0, 0, 0, 0, 73, 69, 78, 68, 0, 0, 0, 0 });
             return bytes.ToArray();
+        }
+
+        private static void WriteCrc(List<byte> bytes, int typeOffset, int dataLength, int crcOffset)
+        {
+            uint crc = 0xffffffffu;
+            for (var i = typeOffset; i < typeOffset + 4 + dataLength; i++)
+            {
+                crc ^= bytes[i];
+                for (var bit = 0; bit < 8; bit++)
+                    crc = (crc >> 1) ^ ((crc & 1u) != 0u ? 0xedb88320u : 0u);
+            }
+            crc ^= 0xffffffffu;
+            bytes[crcOffset] = (byte)(crc >> 24);
+            bytes[crcOffset + 1] = (byte)(crc >> 16);
+            bytes[crcOffset + 2] = (byte)(crc >> 8);
+            bytes[crcOffset + 3] = (byte)crc;
         }
 
         private static void ThrowsInvalidOperation(Action action, string label)
