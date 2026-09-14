@@ -12,7 +12,7 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class SlabMeshCommands
     {
-        private const string UiSyncWarning = "Native update đã hoàn tất; một phần UI không thể đồng bộ.";
+        private const string UiSyncWarning = "native update đã hoàn tất; một phần UI không thể đồng bộ.";
         private const string CleanupWarning = "Native update đã commit; cleanup host phát sinh cảnh báo.";
 
         [CommandMethod("QS3DSLABREBAR3D", CommandFlags.UsePickSet)]
