@@ -43,3 +43,36 @@ for token in required_workflow:
         raise SystemExit(f"cloud preview workflow lost held upload identity binding: {token}")
 
 print("V25 cloud release upload digest preflight: PASS")
+
+
+required_draft_cleanup = [
+    "$releaseCreatedByThisRun = $false",
+    "$createdReleaseId = 0L",
+    "[Int64]::TryParse(([string]$release.id), [ref]$createdReleaseId)",
+    "$releaseCreatedByThisRun = $true",
+    "if ($releaseCreatedByThisRun)",
+    "$authoritativeDraftBeforeDelete = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
+    "$authoritativeDraftBeforeDelete.draft -ne $true",
+    "$authoritativeDraftBeforeDelete.prerelease -ne $true",
+    "$authoritativeDraftBeforeDelete.tag_name",
+    "$authoritativeDraftBeforeDelete.target_commitish",
+    "Invoke-WebRequest -Method Delete -Uri $releaseUri -Headers $headers",
+    "V25 run-created draft cleanup failed",
+]
+for token in required_draft_cleanup:
+    if token not in workflow:
+        raise SystemExit(f"cloud preview workflow lost exact run-created draft rollback token: {token}")
+
+cleanup_order = [
+    "$releaseCreatedByThisRun = $false",
+    "$release = Invoke-RestMethod -Method Post",
+    "$releaseCreatedByThisRun = $true",
+    "if ($releaseCreatedByThisRun)",
+    "$authoritativeDraftBeforeDelete = Invoke-RestMethod -Method Get -Uri $releaseUri -Headers $headers",
+    "Invoke-WebRequest -Method Delete -Uri $releaseUri -Headers $headers",
+]
+cleanup_positions = [workflow.index(token) for token in cleanup_order]
+if cleanup_positions != sorted(cleanup_positions) or len(set(cleanup_positions)) != len(cleanup_positions):
+    raise SystemExit(
+        "run-created draft rollback ordering must remain initialize -> create -> own -> prove exact draft -> delete exact id"
+    )
