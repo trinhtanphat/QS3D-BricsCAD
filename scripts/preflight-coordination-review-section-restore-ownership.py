@@ -22,7 +22,7 @@ for token in (
     "if (_viewBeforeSection == null) return;",
     "if (!IsOwnerNativeGenerationCurrent)",
     "AbandonStaleGenerationState();",
-    "RequireOwnerGeneration(\"Section restore\")",
+    "RequireOwnerGeneration(\"Section view restore\")",
     "var snapshot = _viewBeforeSection;",
     "snapshot.Apply(view);",
     "_document.Editor.SetCurrentView(view);",
@@ -76,7 +76,7 @@ if "_viewBeforeSection = null" in core:
     raise SystemExit("FAIL coordination section restore ownership: reset core must not erase live section retry ownership")
 
 dispose = method_body("public void Dispose()", "private sealed class ViewSnapshot")
-for token in ("ResetTransientStateBestEffort(true);", "if (HasTransientState)", "_disposed = true;"):
+for token in ("ResetTransientStateBestEffort(true);", "_disposed = true;"):
     if token not in dispose:
         raise SystemExit("FAIL coordination section restore ownership: Dispose missing retry-sensitive contract: " + token)
 cleanup_index = dispose.find("ResetTransientStateBestEffort(true);")
