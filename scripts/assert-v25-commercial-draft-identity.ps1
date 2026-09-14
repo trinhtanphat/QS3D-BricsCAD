@@ -252,6 +252,7 @@ function Test-HeldZipPayloadSignatures {
     $workspace = Join-Path $runnerTemp ('qs3d-v25-held-signature-' + [Guid]::NewGuid().ToString('N'))
     if (Test-Path -LiteralPath $workspace) { throw 'Held V25 signature verification workspace unexpectedly already exists.' }
     $workspaceItem = New-Item -ItemType Directory -Path $workspace -ErrorAction Stop
+    $heldPayloads = New-Object System.Collections.Generic.List[object]
     try {
         if (($workspaceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw 'Held V25 signature verification workspace must not be a reparse point.'
@@ -286,18 +287,59 @@ function Test-HeldZipPayloadSignatures {
                 }
 
                 $entryStream = $entry.Open()
+                $output = $null
+                $transition = $null
+                $heldStream = $null
                 try {
-                    $output = [IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-                    try { $entryStream.CopyTo($output) }
-                    finally { $output.Dispose() }
-                }
-                finally { $entryStream.Dispose() }
+                    $output = [IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)
+                    $entryStream.CopyTo($output)
+                    $output.Flush($true)
+                    if ([int64]$output.Length -ne [int64]$entry.Length) {
+                        throw "Extracted signed payload generation has the wrong length for $requiredName."
+                    }
 
-                $written = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop
-                if ($written.PSIsContainer -or (($written.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or [int64]$written.Length -ne [int64]$entry.Length) {
-                    throw "Extracted signed payload generation is invalid for $requiredName."
+                    $outputHeld = [pscustomobject]@{ Stream = $output; Path = $destinationFull; Length = [int64]$entry.Length }
+                    $outputDigest = Get-HeldSha256 -Held $outputHeld
+
+                    # Keep delete/rename denied while releasing the write-capable handle.
+                    # The transition handle permits the existing writer, but no delete.
+                    $transition = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+                    if ([int64]$transition.Length -ne [int64]$entry.Length) {
+                        throw "Extracted signed payload transition generation has the wrong length for $requiredName."
+                    }
+
+                    $output.Dispose()
+                    $output = $null
+
+                    # Acquire the long-lived strict read hold while the transition handle
+                    # still prevents delete/recreate. If a writer races this short handoff,
+                    # the strict open either conflicts or the digest comparison fails.
+                    $heldStream = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+                    $heldPayload = [pscustomobject]@{ Stream = $heldStream; Path = $destinationFull; Length = [int64]$entry.Length }
+                    $heldDigest = Get-HeldSha256 -Held $heldPayload
+                    if (-not [string]::Equals($heldDigest, $outputDigest, [StringComparison]::OrdinalIgnoreCase)) {
+                        throw "Extracted signed payload bytes changed during held-generation handoff for $requiredName."
+                    }
+
+                    $rebound = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop
+                    if ($rebound.PSIsContainer -or (($rebound.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+                        -not [string]::Equals((Get-CanonicalFullPath -LiteralPath $rebound.FullName), $destinationFull, [StringComparison]::OrdinalIgnoreCase) -or
+                        [int64]$rebound.Length -ne [int64]$entry.Length -or [int64]$heldStream.Length -ne [int64]$entry.Length) {
+                        throw "Extracted signed payload strict held generation is invalid for $requiredName."
+                    }
+
+                    $transition.Dispose()
+                    $transition = $null
+                    $heldPayloads.Add($heldPayload)
+                    $heldStream = $null
+                    $extracted.Add($destinationFull)
                 }
-                $extracted.Add($destinationFull)
+                finally {
+                    if ($null -ne $heldStream) { $heldStream.Dispose() }
+                    if ($null -ne $transition) { $transition.Dispose() }
+                    if ($null -ne $output) { $output.Dispose() }
+                    $entryStream.Dispose()
+                }
             }
         }
         finally { $archive.Dispose() }
@@ -316,6 +358,9 @@ function Test-HeldZipPayloadSignatures {
         }
     }
     finally {
+        foreach ($heldPayload in $heldPayloads) {
+            if ($null -ne $heldPayload -and $null -ne $heldPayload.Stream) { $heldPayload.Stream.Dispose() }
+        }
         Remove-Item -LiteralPath $workspace -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
