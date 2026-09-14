@@ -94,6 +94,16 @@ for token in ("if (ReferenceEquals(lifecycleDocument, destroyingDocument)) retur
 forget_destroyed = method_block(coordinator, "public void ForgetPendingNativeDetachAfterDestroy(Document destroyedDocument)")
 require("ForgetPendingNativeDetach(destroyedDocument);" in forget_destroyed, "destroyed stale wrapper must release pending managed ownership")
 
+destroy = method_block(coordinator, "private static void OnDocumentToBeDestroyed(")
+for token in ("entry.ReleasePendingNativeDetachOwnershipAfterDestroy(document);", "Entries.Remove(entry.NativeDatabaseIdentity);", "entry.ClearCallbacks();"):
+    require(token in destroy, "terminal destroy cleanup contract missing: " + token)
+if all(token in destroy for token in ("entry.ReleasePendingNativeDetachOwnershipAfterDestroy(document);", "Entries.Remove(entry.NativeDatabaseIdentity);")):
+    require(destroy.index("entry.ReleasePendingNativeDetachOwnershipAfterDestroy(document);") < destroy.index("Entries.Remove(entry.NativeDatabaseIdentity);"),
+            "pending stale-wrapper native ownership must be released before terminal dictionary ownership is removed")
+release_after_destroy = method_block(coordinator, "public void ReleasePendingNativeDetachOwnershipAfterDestroy(Document destroyedDocument)")
+for token in ("ForgetPendingNativeDetach(destroyedDocument);", "_pendingNativeDetachDocuments.ToArray()", "TryDetachNativeHandlers(pending);", "_pendingNativeDetachDocuments.Clear();"):
+    require(token in release_after_destroy, "terminal pending-detach release must be best-effort and drop managed roots: " + token)
+
 if errors:
     print("ERROR: V25 modeless native-lifecycle wrapper-drift preflight failed:", file=sys.stderr)
     for error in errors: print(" - " + error, file=sys.stderr)
