@@ -15,6 +15,7 @@ namespace QS3D.BricsCAD.V25
         private const string OperationFailure = "QS3DREBARSTIRRUP3D lỗi: không thể tạo/cập nhật đai dầm. Kiểm tra selection, project semantic và dữ liệu stirrup rồi thử lại.";
         private const string HealthFailure = "QS3DREBARSTIRRUPHEALTH lỗi: không thể hoàn tất kiểm tra đai dầm. Kiểm tra project/drawing hiện hành rồi thử lại.";
         private const string UiSyncWarning = "UI sync warning: đã cập nhật đai dầm nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
+        private const string CleanupWarning = "Cleanup warning: đai dầm đã được commit nhưng giải phóng tài nguyên native chưa hoàn tất; không chạy lại lệnh để tránh tạo trùng.";
 
         [CommandMethod("QS3DBEAMSTIRRUP3D", CommandFlags.UsePickSet)]
         public void BuildBeamStirrupsWorkspaceAlias() => BuildBeamStirrups();
@@ -78,7 +79,7 @@ namespace QS3D.BricsCAD.V25
                 var message = result.Stirrups == 0
                     ? "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8)."
                     : "Beam Stirrup 3D: đã tạo/cập nhật " + result.Stirrups + " đai trên " + result.Elements + " dầm.";
-                FinalizeUi(document, nativeDatabaseIdentity, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);
             }
             catch (Exception)
             {
@@ -130,23 +131,24 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)
         {
             if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            var publishedMessage = postCommitCleanupWarning ? message + " " + CleanupWarning : message;
             try
             {
                 RefreshModelTree(document, nativeDatabaseIdentity);
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.Regen();
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                SetPaletteStatusForDocument(document, nativeDatabaseIdentity, message);
+                SetPaletteStatusForDocument(document, nativeDatabaseIdentity, publishedMessage);
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                document.Editor.WriteMessage("\nQS3D " + message);
+                document.Editor.WriteMessage("\nQS3D " + publishedMessage);
             }
             catch (Exception ex)
             {
                 if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
-                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message + " " + UiSyncWarning + " (" + ex.GetType().Name + ").");
+                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + publishedMessage + " " + UiSyncWarning + " (" + ex.GetType().Name + ").");
             }
         }
 

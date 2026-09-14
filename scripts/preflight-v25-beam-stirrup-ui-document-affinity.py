@@ -32,7 +32,7 @@ health_status = method_body(
     "private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)",
 )
 finalize = method_body(
-    "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)",
+    "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)",
     "private static IntPtr GetNativeDatabaseIdentity(Document document)",
 )
 report = method_body(
@@ -62,8 +62,8 @@ for name, body, mutation in [
 ordered = [
     "RefreshModelTree(document, nativeDatabaseIdentity);",
     "document.Editor.Regen();",
-    "SetPaletteStatusForDocument(document, nativeDatabaseIdentity, message);",
-    'document.Editor.WriteMessage("\\nQS3D " + message);',
+    "SetPaletteStatusForDocument(document, nativeDatabaseIdentity, publishedMessage);",
+    'document.Editor.WriteMessage("\\nQS3D " + publishedMessage);',
 ]
 pos = [finalize.find(token) for token in ordered]
 if min(pos) < 0 or pos != sorted(pos):

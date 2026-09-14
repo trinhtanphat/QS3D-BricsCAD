@@ -12,8 +12,12 @@ for source in SOURCES:
     text = source.read_text(encoding="utf-8")
     label = source.name
     beam_rebar = label == "BeamRebarCommands.cs"
-    finalize_call = "FinalizeUi(document, nativeDatabaseIdentity, message, outcome.PostCommitCleanupWarning);" if beam_rebar else "FinalizeUi(document, nativeDatabaseIdentity, message);"
-    finalize_signature = "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)" if beam_rebar else "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message)"
+    finalize_call = (
+        "FinalizeUi(document, nativeDatabaseIdentity, message, outcome.PostCommitCleanupWarning);"
+        if beam_rebar
+        else "FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);"
+    )
+    finalize_signature = "private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)"
     required = [
         "var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);",
         "RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);",
