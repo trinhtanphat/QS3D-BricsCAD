@@ -84,13 +84,17 @@ namespace QS3D.Core.SmokeTests
 
         private static AuditTrail CreateTrail(IList<AuditEvent> source, ProjectState? project)
         {
+            // ProjectState ownership moved to the AuditEvents collection boundary. Keep the
+            // optional project only for the caller's no-revision assertion; the private trail
+            // fixture itself now mirrors the production ownerless backing-list constructor.
+            _ = project;
             var constructor = typeof(AuditTrail).GetConstructor(
                 BindingFlags.Instance | BindingFlags.NonPublic,
                 binder: null,
-                types: new[] { typeof(IList<AuditEvent>), typeof(ProjectState) },
+                types: new[] { typeof(IList<AuditEvent>) },
                 modifiers: null);
             if (constructor == null) throw new Exception("AuditTrail private backing-list constructor was not found.");
-            return (AuditTrail)constructor.Invoke(new object?[] { source, project });
+            return (AuditTrail)constructor.Invoke(new object?[] { source });
         }
 
         private static AuditEvent Event(string action)

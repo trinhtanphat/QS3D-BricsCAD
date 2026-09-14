@@ -26,7 +26,16 @@ namespace QS3D.Core.SmokeTests
 
         private static void AssertRejected(string elementId, string correlationId, string label)
         {
-            var project = CreateProject(elementId, correlationId, "detail");
+            var project = new ProjectState("AUDIT-PERSISTENCE", "Audit persistence identity");
+            LegacyAuditHistoryFixture.AppendRaw(project, new AuditEvent
+            {
+                Utc = new DateTime(2026, 8, 18, 0, 0, 0, DateTimeKind.Utc),
+                Action = "audit.persistence",
+                ElementId = elementId,
+                Detail = "detail",
+                Actor = "agent",
+                CorrelationId = correlationId
+            });
             var beforeVersion = project.ChangeVersion;
             var beforeUpdatedUtc = project.UpdatedUtc;
             var path = TemporaryPath(label);

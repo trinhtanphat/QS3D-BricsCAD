@@ -54,7 +54,7 @@ namespace QS3D.Core.SmokeTests
             SeedLegacyPersistedProperty(element, "NullProperty", null);
             project.Elements.Add(element);
 
-            project.AuditEvents.Add(new AuditEvent
+            LegacyAuditHistoryFixture.AppendRaw(project, new AuditEvent
             {
                 Utc = DateTime.UtcNow,
                 Action = null!,

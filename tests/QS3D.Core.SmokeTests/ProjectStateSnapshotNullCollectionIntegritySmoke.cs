@@ -47,7 +47,7 @@ namespace QS3D.Core.SmokeTests
         {
             var project = new ProjectState("SNAP-NULL-AUDIT", "Snapshot null Audit");
             project.AuditEvents.Add(new AuditEvent { Utc = DateTime.UtcNow, Action = "test" });
-            project.AuditEvents.Add(null!);
+            LegacyAuditHistoryFixture.AppendRaw(project, null);
             ThrowsExact(
                 () => ProjectStateSnapshot.CreateDetachedCopy(project),
                 "Cannot snapshot a project containing a null audit event entry at index 1.");

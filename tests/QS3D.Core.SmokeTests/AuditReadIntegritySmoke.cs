@@ -19,7 +19,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNullActionOnRead()
         {
             var project = new ProjectState("AUDIT-READ-NULL", "Audit read null action");
-            project.AuditEvents.Add(new AuditEvent
+            LegacyAuditHistoryFixture.AppendRaw(project, new AuditEvent
             {
                 Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Utc),
                 Action = null!
@@ -36,7 +36,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsNonUtcTimestampOnRead()
         {
             var project = new ProjectState("AUDIT-READ-UTC", "Audit read UTC");
-            project.AuditEvents.Add(new AuditEvent
+            LegacyAuditHistoryFixture.AppendRaw(project, new AuditEvent
             {
                 Utc = new DateTime(2026, 8, 12, 0, 0, 0, DateTimeKind.Unspecified),
                 Action = "existing.action"

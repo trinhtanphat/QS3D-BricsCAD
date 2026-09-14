@@ -402,7 +402,7 @@ namespace QS3D.Core.Persistence
             target.AuditEvents.Clear();
             foreach (var audit in source.AuditEvents)
             {
-                target.AuditEvents.Add(new AuditEvent
+                target.RestoreAuditEvent(new AuditEvent
                 {
                     Utc = audit.Utc,
                     Action = audit.Action,

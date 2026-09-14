@@ -105,7 +105,7 @@ namespace QS3D.Core.SmokeTests
         private static void RejectsMalformedExistingPayloadOnReadAndRecord()
         {
             var project = new ProjectState("AUDIT-XML-EXISTING", "Audit XML existing");
-            project.AuditEvents.Add(new AuditEvent
+            LegacyAuditHistoryFixture.AppendRaw(project, new AuditEvent
             {
                 Utc = DateTime.UtcNow,
                 Action = "EXISTING",
