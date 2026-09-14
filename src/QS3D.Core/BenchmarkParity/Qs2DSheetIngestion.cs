@@ -154,8 +154,16 @@ namespace QS3D.Core.BenchmarkParity
         {
             width = 0;
             height = 0;
-            if (payload.Length < 24) return false;
+            if (payload.Length < PngSignature.Length) return false;
             for (var i = 0; i < PngSignature.Length; i++) if (payload[i] != PngSignature[i]) return false;
+
+            if (payload.Length < 33)
+                throw new InvalidOperationException("PNG payload is truncated before the complete IHDR chunk.");
+            if (ReadInt32BigEndian(payload, 8) != 13)
+                throw new InvalidOperationException("PNG first chunk must be an IHDR chunk with length 13.");
+            if (payload[12] != (byte)'I' || payload[13] != (byte)'H' || payload[14] != (byte)'D' || payload[15] != (byte)'R')
+                throw new InvalidOperationException("PNG first chunk must be IHDR.");
+
             width = ReadInt32BigEndian(payload, 16);
             height = ReadInt32BigEndian(payload, 20);
             if (width <= 0 || height <= 0) throw new InvalidOperationException("PNG dimensions are invalid.");
