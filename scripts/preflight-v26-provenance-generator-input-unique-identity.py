@@ -29,8 +29,8 @@ required_tokens = (
     "SetFileInformationByHandleBuffer",
     "SetFilePointerEx",
     "Marshal.AllocHGlobal(1)",
-    "Marshal.WriteByte(disposition, 1)",
-    "FileDispositionInfo, disposition, 1",
+    "Marshal.WriteByte(buffer, 0, 1)",
+    "FileDispositionInfo, buffer, 1",
 )
 for token in required_tokens:
     if token not in source:
@@ -64,9 +64,9 @@ if "FileShareRead," not in create_block or "FileShareWrite" in create_block or "
     raise SystemExit("ERROR: owned V26 provenance staging handle must deny write/delete sharing")
 
 remove_start = source.index("public static void RemoveOwnedProvenanceGeneration", native_start)
-remove_end = source.index("}", remove_start)
+remove_end = source.index("\n    }", remove_start)
 remove_block = source[remove_start:remove_end]
-for token in ("Marshal.AllocHGlobal(1)", "Marshal.WriteByte(disposition, 1)", "FileDispositionInfo, disposition, 1"):
+for token in ("Marshal.AllocHGlobal(1)", "Marshal.WriteByte(buffer, 0, 1)", "FileDispositionInfo, buffer, 1"):
     if token not in remove_block:
         raise SystemExit("ERROR: V26 provenance FILE_DISPOSITION_INFO must use the native one-byte BOOLEAN layout")
 if "MarshalAs(UnmanagedType.Bool)" in remove_block or "Marshal.SizeOf" in remove_block:
@@ -108,32 +108,21 @@ $rootCases = @(
 foreach ($case in $rootCases) {
     $json = $case.Json.Replace('\"', '"')
     $actual = Get-JsonPropertyOccurrenceCount -JsonText $json -PropertyName $case.Name
-    if ($actual -ne $case.Expected) {
-        throw "provenance-generator root/path probe failed for $($case.Name): expected $($case.Expected), got $actual"
-    }
+    if ($actual -ne $case.Expected) { throw "root/path probe failed for $($case.Name): expected $($case.Expected), got $actual" }
 }
 
 $validHost = '{"Version":1,"Files":[{"Name":"a","Path":"p1","Sha256":"s1","Length":1,"extension":{"Name":"nested"}},{"Name":"b","Path":"p2","Sha256":"s2","Length":2}],"extension":{"Files":[]}}'.Replace('\"', '"')
 $recordCounts = @{ Name=1; Path=1; Sha256=1; Length=1 }
-$objects = @(Get-JsonTopLevelArrayObjectTexts -JsonText $validHost -ArrayPropertyName 'Files' -Label 'probe')
-if ($objects.Count -ne 2) { throw "provenance-generator Files[] probe expected 2 direct objects, got $($objects.Count)" }
 Assert-JsonArrayObjectPropertyCounts -JsonText $validHost -ArrayPropertyName 'Files' -ExpectedObjectCount 2 -ExpectedPropertyCounts $recordCounts -Label 'probe'
-
-$duplicateRecord = '{"Version":1,"Files":[{"Name":"a","NAME":"evil","Path":"p","Sha256":"s","Length":1}]}'.Replace('\"', '"')
-$rejected = $false
-try {
-    Assert-JsonArrayObjectPropertyCounts -JsonText $duplicateRecord -ArrayPropertyName 'Files' -ExpectedObjectCount 1 -ExpectedPropertyCounts $recordCounts -Label 'probe'
+foreach ($bad in @(
+    '{"Version":1,"Files":[{"Name":"a","NAME":"evil","Path":"p","Sha256":"s","Length":1}]}',
+    '{"Version":1,"Files":[{"Name":"a","Na\u006de":"evil","Path":"p","Sha256":"s","Length":1}]}'
+)) {
+    $rejected = $false
+    try { Assert-JsonArrayObjectPropertyCounts -JsonText $bad.Replace('\"','"') -ArrayPropertyName 'Files' -ExpectedObjectCount 1 -ExpectedPropertyCounts $recordCounts -Label 'probe' }
+    catch { $rejected = $true }
+    if (-not $rejected) { throw 'Files[] duplicate record identity was not rejected' }
 }
-catch { $rejected = $true }
-if (-not $rejected) { throw 'provenance-generator Files[] duplicate record identity was not rejected' }
-
-$escapedDuplicateRecord = '{"Version":1,"Files":[{"Name":"a","Na\u006de":"evil","Path":"p","Sha256":"s","Length":1}]}'.Replace('\"', '"')
-$rejected = $false
-try {
-    Assert-JsonArrayObjectPropertyCounts -JsonText $escapedDuplicateRecord -ArrayPropertyName 'Files' -ExpectedObjectCount 1 -ExpectedPropertyCounts $recordCounts -Label 'probe'
-}
-catch { $rejected = $true }
-if (-not $rejected) { throw 'provenance-generator Files[] escaped-equivalent duplicate record identity was not rejected' }
 
 function Assert-OwnedPublication([string]$SourcePath, [string]$DestinationPath, [byte[]]$Payload, [bool]$ReplaceExisting) {
     $owned = $null
@@ -143,33 +132,20 @@ function Assert-OwnedPublication([string]$SourcePath, [string]$DestinationPath, 
         [Qs3dProvenanceGenerationNative]::RenameOwnedProvenanceGeneration($owned, $DestinationPath, $ReplaceExisting)
         $after = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
         if (-not [string]::Equals($before, $after, [StringComparison]::Ordinal)) { throw 'owned provenance identity changed across handle rename' }
-        if (Test-Path -LiteralPath $SourcePath) { throw 'owned provenance source pathname still exists after handle rename' }
-        if (-not (Test-Path -LiteralPath $DestinationPath -PathType Leaf)) { throw 'owned provenance destination missing after handle rename' }
-
+        if (Test-Path -LiteralPath $SourcePath) { throw 'source pathname still exists after handle rename' }
+        if (-not (Test-Path -LiteralPath $DestinationPath -PathType Leaf)) { throw 'destination missing after handle rename' }
         $writerBlocked = $false
-        try {
-            $other = [IO.File]::Open($DestinationPath, [IO.FileMode]::Open, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
-            $other.Dispose()
-        }
+        try { $other = [IO.File]::Open($DestinationPath,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite); $other.Dispose() }
         catch [IO.IOException] { $writerBlocked = $true }
-        if (-not $writerBlocked) { throw 'owned provenance handle did not block a concurrent writer during publication verification' }
-
+        if (-not $writerBlocked) { throw 'owned handle did not block concurrent writer' }
         $actualBytes = [Qs3dProvenanceGenerationNative]::ReadPinnedPublishedProvenanceBytes($owned, $Payload.Length)
-        if ($actualBytes.Length -ne $Payload.Length) { throw 'owned provenance payload length changed after handle rename' }
-        for ($i = 0; $i -lt $Payload.Length; $i++) {
-            if ($actualBytes[$i] -ne $Payload[$i]) { throw 'owned provenance payload changed after handle rename' }
-        }
-
+        if ($actualBytes.Length -ne $Payload.Length) { throw 'payload length changed after handle rename' }
+        for ($i=0; $i -lt $Payload.Length; $i++) { if ($actualBytes[$i] -ne $Payload[$i]) { throw 'payload changed after handle rename' } }
         [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned)
-        $owned.Dispose()
-        $owned = $null
-        if (Test-Path -LiteralPath $DestinationPath) { throw 'owned provenance destination remained after delete-on-close handle disposal' }
-    }
-    finally {
-        if ($null -ne $owned) {
-            try { [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned) }
-            finally { $owned.Dispose() }
-        }
+        $owned.Dispose(); $owned = $null
+        if (Test-Path -LiteralPath $DestinationPath) { throw 'destination remained after delete-on-close disposal' }
+    } finally {
+        if ($null -ne $owned) { try { [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned) } finally { $owned.Dispose() } }
     }
 }
 
@@ -177,38 +153,20 @@ $probeDir = Join-Path ([IO.Path]::GetTempPath()) ('qs3d-v26-provenance-' + [Guid
 [IO.Directory]::CreateDirectory($probeDir) | Out-Null
 try {
     $destinationPath = Join-Path $probeDir 'published.json'
-    $firstSource = Join-Path $probeDir 'owned-first.tmp'
-    $firstPayload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":"first"}'.Replace('\"', '"'))
-    Assert-OwnedPublication -SourcePath $firstSource -DestinationPath $destinationPath -Payload $firstPayload -ReplaceExisting $false
-    if (Test-Path -LiteralPath $destinationPath) { throw 'first owned provenance generation remained after handle-owned cleanup' }
-
-    [IO.File]::WriteAllText($destinationPath, '{"old":true}'.Replace('\"', '"'), [Text.UTF8Encoding]::new($false))
-    $secondSource = Join-Path $probeDir 'owned-replacement.tmp'
-    $secondPayload = [Text.UTF8Encoding]::new($false, $true).GetBytes('{"probe":"replacement"}'.Replace('\"', '"'))
-    Assert-OwnedPublication -SourcePath $secondSource -DestinationPath $destinationPath -Payload $secondPayload -ReplaceExisting $true
-    if (Test-Path -LiteralPath $destinationPath) { throw 'replacement owned provenance generation remained after handle-owned cleanup' }
-}
-finally {
-    if (Test-Path -LiteralPath $probeDir) { Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue }
-}
+    Assert-OwnedPublication -SourcePath (Join-Path $probeDir 'first.tmp') -DestinationPath $destinationPath -Payload ([Text.UTF8Encoding]::new($false,$true).GetBytes('{"probe":"first"}'.Replace('\"','"'))) -ReplaceExisting $false
+    [IO.File]::WriteAllText($destinationPath,'{"old":true}'.Replace('\"','"'),[Text.UTF8Encoding]::new($false))
+    Assert-OwnedPublication -SourcePath (Join-Path $probeDir 'replacement.tmp') -DestinationPath $destinationPath -Payload ([Text.UTF8Encoding]::new($false,$true).GetBytes('{"probe":"replacement"}'.Replace('\"','"'))) -ReplaceExisting $true
+} finally { if (Test-Path -LiteralPath $probeDir) { Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue } }
 '''
 
 with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=False) as tmp:
     tmp.write(probe)
     probe_path = Path(tmp.name)
 try:
-    completed = subprocess.run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(probe_path)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    completed = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(probe_path)], capture_output=True, text=True, timeout=30)
 finally:
     probe_path.unlink(missing_ok=True)
 if completed.returncode != 0:
-    raise SystemExit(
-        "ERROR: behavioral V26 provenance-generator identity/publication probe failed: "
-        + (completed.stderr or completed.stdout).strip()
-    )
+    raise SystemExit("ERROR: behavioral V26 provenance-generator identity/publication probe failed: " + (completed.stderr or completed.stdout).strip())
 
 print("PASS: V26 provenance generator proves path-scoped input identity and handle-owned rollback-safe publication behavior")
