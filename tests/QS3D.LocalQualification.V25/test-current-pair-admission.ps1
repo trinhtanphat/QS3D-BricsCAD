@@ -1,8 +1,8 @@
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$source = '99c6dd4a91fcbb0bb911b2593ca2f84246df451e'
-$v25Hash = '3ef6d526f60815b123b35fe239e404c1a9c47ff2e8053f9985c8edc7069a5474'
-$v26Hash = 'c738c1ae1da5569a61bd58f2776d8715e3850d1bf0e27d3f219cbcf31cff2bd4'
+$source = '01c06ffe6ca94b984eed06210ac13adf5f2689af'
+$v25Hash = '149f58eec4bb0a43ab557fdb279dbb175e106d022127f90a442ff54e5d7f1828'
+$v26Hash = '4782a94079f6aa4f1cf8462901b9988a2e236d738f484d86c21b6d669e780128'
 $version = '0.2.0-preview.23'
 
 function Read-Script([string]$RelativePath) {
@@ -25,18 +25,6 @@ function Assert-NativeV25PredecessorGate([string]$Text) {
     )) { Assert-ContainsLiteral $Text $required 'LOCAL-022 V25 predecessor gate' }
 }
 
-
-function Assert-ScriptStageWitnessContract([string]$Text) {
-    foreach ($required in @(
-        'function New-Local022ScriptStageWitnessLine',
-        'function Get-Local022HighestScriptStage',
-        'script_start', 'before_product_netload', 'after_product_netload',
-        'before_probe_netload', 'after_probe_netload',
-        'before_phase_command', 'after_phase_command',
-        'highest_script_stage='
-    )) { Assert-ContainsLiteral $Text $required 'V25 script-stage witness contract' }
-}
-
 $v25 = Read-Script 'scripts\test-bricscad-v25-single-footing.ps1'
 $v26 = Read-Script 'scripts\test-bricscad-v26-single-footing.ps1'
 $wrapper = Read-Script 'scripts\run-local022-ui-qualification.ps1'
@@ -53,11 +41,6 @@ if ($wrapper.Contains('Current-source V26 package unavailable')) {
     throw 'LOCAL-022 wrapper still hard-blocks V26 despite a frozen matched package.'
 }
 Assert-NativeV25PredecessorGate $wrapper
-Assert-ScriptStageWitnessContract $v25
-$witnessMutated = $v25.Replace('after_phase_command', 'after_phase_commanX')
-$witnessNegativeRejected = $false
-try { Assert-ScriptStageWitnessContract $witnessMutated } catch { $witnessNegativeRejected = $true }
-if (-not $witnessNegativeRejected) { throw 'negative script-stage witness mutation was not rejected' }
 $mutated = $wrapper.Replace(
     "        Assert-Local022NativeV25Phases (Join-Path `$PSScriptRoot 'test-bricscad-v25-single-footing.ps1') `$v25Root `$v25.run_id",
     '')

@@ -88,8 +88,8 @@ $candidates = @{
         PackageSha256 = '4d9869e38682674772196a3e238f115624ff357a276bb0b976000b63c9a833b5'
         ProductVersion = '0.1.0-preview.10307'; Kind = 'LOCAL_PR_CANDIDATE'
     }
-    '99c6dd4a91fcbb0bb911b2593ca2f84246df451e' = @{
-        PackageSha256 = '3ef6d526f60815b123b35fe239e404c1a9c47ff2e8053f9985c8edc7069a5474'
+    '01c06ffe6ca94b984eed06210ac13adf5f2689af' = @{
+        PackageSha256 = '149f58eec4bb0a43ab557fdb279dbb175e106d022127f90a442ff54e5d7f1828'
         ProductVersion = '0.2.0-preview.23'; Kind = 'LOCAL_PR_CANDIDATE'
     }
 }
@@ -108,30 +108,6 @@ function Get-StringHash([string]$Value) {
     try {
         return ([BitConverter]::ToString($hasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($Value)))).Replace('-', '').ToLowerInvariant()
     } finally { $hasher.Dispose() }
-}
-
-function New-Local022ScriptStageWitnessLine([string]$WitnessPath, [string]$Stage) {
-    $allowed = @('script_start','before_product_netload','after_product_netload','before_probe_netload','after_probe_netload','before_phase_command','after_phase_command')
-    if ($allowed -cnotcontains $Stage) { throw 'Invalid LOCAL-022 script-stage witness value.' }
-    $full = [IO.Path]::GetFullPath($WitnessPath)
-    if ($full -match '["\r\n]') { throw 'Unsafe LOCAL-022 script-stage witness path.' }
-    $lispPath = $full.Replace('\','/')
-    return ('(progn (setq qs3d_stage_f (open "' + $lispPath + '" "a")) (if qs3d_stage_f (progn (write-line "' + $Stage + '" qs3d_stage_f) (close qs3d_stage_f))))')
-}
-
-function Get-Local022HighestScriptStage([string]$WitnessPath) {
-    if (-not (Test-Path -LiteralPath $WitnessPath -PathType Leaf)) { return 'NONE' }
-    $item = Get-Item -LiteralPath $WitnessPath -Force
-    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw 'LOCAL-022 script-stage witness must be an ordinary file.'
-    }
-    $allowed = @('script_start','before_product_netload','after_product_netload','before_probe_netload','after_probe_netload','before_phase_command','after_phase_command')
-    $lines = @([IO.File]::ReadAllLines($WitnessPath, [Text.Encoding]::ASCII) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-    if ($lines.Count -eq 0) { return 'EMPTY' }
-    foreach ($line in $lines) {
-        if ($allowed -cnotcontains $line) { throw 'Invalid LOCAL-022 script-stage witness content.' }
-    }
-    return [string]$lines[$lines.Count - 1]
 }
 
 function Get-Qs3dActiveTunnelProcessCount {
@@ -323,17 +299,8 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
     }
     $env:QS3D_LOCAL022_PHASE = $Phase
     $scriptPath = Join-Path $privateRoot ($Phase + '.scr')
-    $witnessPath = Join-Path $ArtifactDir ('script-stage-' + $Phase + '.txt')
     $lines = @('FILEDIA', '0', 'CMDECHO', '1', 'TILEMODE', '1', 'INSUNITS', '6', '_.UCS', '_W',
-        (New-Local022ScriptStageWitnessLine $witnessPath 'script_start'),
-        (New-Local022ScriptStageWitnessLine $witnessPath 'before_product_netload'),
-        'NETLOAD', ('"' + $pluginDll + '"'),
-        (New-Local022ScriptStageWitnessLine $witnessPath 'after_product_netload'),
-        (New-Local022ScriptStageWitnessLine $witnessPath 'before_probe_netload'),
-        'NETLOAD', ('"' + $ProbeDll + '"'),
-        (New-Local022ScriptStageWitnessLine $witnessPath 'after_probe_netload'),
-        (New-Local022ScriptStageWitnessLine $witnessPath 'before_phase_command')) + $Commands + @(
-        (New-Local022ScriptStageWitnessLine $witnessPath 'after_phase_command'))
+        'NETLOAD', ('"' + $pluginDll + '"'), 'NETLOAD', ('"' + $ProbeDll + '"')) + $Commands
     [IO.File]::WriteAllLines($scriptPath, $lines, [Text.Encoding]::ASCII)
     $arguments = '"' + $drawing + '" /P "' + $sandbox.NonceProfile + '" /B "' + $scriptPath + '"'
     $windowStyle = if ($InteractiveUi -or $QuantityUi) { 'Maximized' } else { 'Hidden' }
@@ -377,7 +344,7 @@ function Invoke-NativePhase([string]$Phase, [string[]]$Commands) {
                 $handoff = $true
             } elseif ($children.Count -gt 1) { throw 'Ambiguous native host handoff.' }
             elseif ($children.Count -eq 0) {
-                throw ("Native host exited without marker or exact child; exit_code=" + $process.ExitCode + "; phase=" + $Phase + "; highest_script_stage=" + (Get-Local022HighestScriptStage $witnessPath) + "; begin owned cleanup.")
+                throw ("Native host exited without marker or exact child; exit_code=" + $process.ExitCode + "; phase=" + $Phase + "; begin owned cleanup.")
             }
         }
         Start-Sleep -Milliseconds 500

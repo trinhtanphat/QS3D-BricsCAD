@@ -124,14 +124,11 @@ foreach ($major in @(25,26)) {
     if (-not $exitGuard) { throw 'FAIL: exited owned host waits whole phase without child or marker.' }
     $exitGuard = [scriptblock]::Create(($exitGuard -replace 'elseif', 'if'))
     & {
-        $children = @(); $Phase = 'ui'; $witnessPath = 'C:\host-free-stage.txt'
-        function Get-Local022HighestScriptStage([string]$WitnessPath) { return 'before_phase_command' }
+        $children = @(); $Phase = 'ui'
         foreach ($exitCode in @(0, -1073741819)) {
             $process = [pscustomobject]@{ ExitCode = $exitCode }
             $rejected = $false
-            $expected = if ($major -eq 25) {
-                "Native host exited without marker or exact child; exit_code=$exitCode; phase=ui; highest_script_stage=before_phase_command; begin owned cleanup."
-            } else { "Native host exited without marker or exact child; exit_code=$exitCode; phase=ui; begin owned cleanup." }
+            $expected = "Native host exited without marker or exact child; exit_code=$exitCode; phase=ui; begin owned cleanup."
             try { & $exitGuard } catch { $rejected = $_.Exception.Message -ceq $expected }
             if (-not $rejected) { throw "FAIL: V$major missing host did not preserve exit code $exitCode and phase before cleanup." }
         }

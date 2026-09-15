@@ -11,24 +11,18 @@ update_required = (
     "packageUri", "sha256", "signerThumbprint",
 )
 
-def extract_uniqueness_set(text: str, set_variable: str, json_variable: str, anchor: str):
+def extract_uniqueness_set(text: str, anchor: str):
     pos = text.index(anchor)
-    pattern = re.compile(re.escape(set_variable) + r"\s*=\s*@\{([^}]*)\}")
-    matches = list(pattern.finditer(text[:pos]))
+    matches = list(re.finditer(r"foreach \(\$propertyName in @\(([^)]*)\)\)", text[:pos]))
     if not matches:
-        raise SystemExit(f"ERROR: no property-count set {set_variable} before {anchor}")
+        raise SystemExit(f"ERROR: no uniqueness loop before {anchor}")
     match = matches[-1]
-    keys = tuple(re.findall(r"([A-Za-z][A-Za-z0-9]*)\s*=\s*1\b", match.group(1)))
-    assert_token = f"Assert-JsonPropertyCounts -JsonText {json_variable} -ExpectedPropertyCounts {set_variable}"
-    assert_at = text.find(assert_token, match.start(), pos)
-    if assert_at < 0:
-        raise SystemExit(f"ERROR: {set_variable} is not enforced before {anchor}")
-    return keys, match.start()
+    return tuple(re.findall(r"'([^']+)'", match.group(1))), match.start()
 
 metadata_parse = "try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }"
 update_parse = "try { $update = $updateText | ConvertFrom-Json -ErrorAction Stop }"
-metadata_set, metadata_pos = extract_uniqueness_set(source, "$metadataExpectedPropertyCounts", "$metadataText", metadata_parse)
-update_set, update_pos = extract_uniqueness_set(source, "$updateExpectedPropertyCounts", "$updateText", update_parse)
+metadata_set, metadata_pos = extract_uniqueness_set(source, metadata_parse)
+update_set, update_pos = extract_uniqueness_set(source, update_parse)
 if metadata_set != metadata_required:
     raise SystemExit(f"ERROR: PACKAGE-METADATA uniqueness set drifted: {metadata_set!r}")
 if update_set != update_required:
