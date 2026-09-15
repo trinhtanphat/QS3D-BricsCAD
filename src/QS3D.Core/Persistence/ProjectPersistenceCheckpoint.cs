@@ -128,6 +128,58 @@ namespace QS3D.Core.Persistence
                 elements);
         }
 
+        public ProjectPersistenceCheckpoint RebindSemanticState(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!ReferenceEquals(project, _projectOwner) ||
+                !string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Cannot rebind a persistence checkpoint across project generations.");
+
+            var currentUpdatedUtc = project.UpdatedUtc;
+            var currentChangeVersion = project.ChangeVersion;
+            var elements = new Dictionary<string, ElementPersistenceState>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in _elements)
+            {
+                var element = project.FindElement(pair.Key)
+                    ?? throw new InvalidOperationException("Cannot rebind missing persistence checkpoint element: " + pair.Key + ".");
+                if (!ReferenceEquals(element, pair.Value.Owner))
+                    throw new InvalidOperationException("Cannot rebind persistence checkpoint because captured element generation changed: " + pair.Key + ".");
+                elements.Add(pair.Key, pair.Value.RebindSemanticState(element));
+            }
+
+            if (project.ChangeVersion != currentChangeVersion || project.UpdatedUtc != currentUpdatedUtc)
+                throw new InvalidOperationException("Cannot rebind a persistence checkpoint while the project revision is changing.");
+            foreach (var pair in elements)
+            {
+                var element = project.FindElement(pair.Key);
+                if (element == null || !ReferenceEquals(element, pair.Value.Owner) || !pair.Value.SemanticMatches(element))
+                    throw new InvalidOperationException("Cannot rebind a persistence checkpoint while captured semantic state is changing: " + pair.Key + ".");
+            }
+
+            return new ProjectPersistenceCheckpoint(
+                project,
+                _projectId,
+                _projectUpdatedUtc,
+                _projectChangeVersion,
+                elements);
+        }
+
+        public bool SemanticMatches(ProjectState project)
+        {
+            if (project == null) throw new ArgumentNullException(nameof(project));
+            if (!ReferenceEquals(project, _projectOwner) ||
+                !string.Equals(project.ProjectId, _projectId, StringComparison.Ordinal))
+                return false;
+
+            foreach (var pair in _elements)
+            {
+                var element = project.FindElement(pair.Key);
+                if (element == null || !ReferenceEquals(element, pair.Value.Owner) || !pair.Value.SemanticMatches(element))
+                    return false;
+            }
+            return true;
+        }
+
         public bool Matches(ProjectState project)
         {
             if (project == null) throw new ArgumentNullException(nameof(project));
@@ -284,11 +336,27 @@ namespace QS3D.Core.Persistence
             private readonly ElementSemanticState _semanticState;
 
             public ElementPersistenceState(ProjectElement owner, ElementDirtyFlags dirty, DateTime updatedUtc)
+                : this(owner, dirty, updatedUtc, ElementSemanticState.Capture(owner))
+            {
+            }
+
+            private ElementPersistenceState(
+                ProjectElement owner,
+                ElementDirtyFlags dirty,
+                DateTime updatedUtc,
+                ElementSemanticState semanticState)
             {
                 Owner = owner ?? throw new ArgumentNullException(nameof(owner));
                 Dirty = dirty;
                 UpdatedUtc = updatedUtc;
-                _semanticState = ElementSemanticState.Capture(owner);
+                _semanticState = semanticState ?? throw new ArgumentNullException(nameof(semanticState));
+            }
+
+            public ElementPersistenceState RebindSemanticState(ProjectElement element)
+            {
+                if (!ReferenceEquals(element, Owner))
+                    throw new InvalidOperationException("Cannot rebind persistence state across element generations.");
+                return new ElementPersistenceState(Owner, Dirty, UpdatedUtc, ElementSemanticState.Capture(element));
             }
 
             public ProjectElement Owner { get; }
