@@ -39,7 +39,8 @@ else:
 for token in (
     'RejectsCorruptedIendCrc()',
     'corrupted IEND CRC',
-    '0xAE, 0x42, 0x60, 0x82',
+    'AddChunk(bytes, "IEND", new byte[0]);',
+    'WriteCrc(bytes, start + 4, length, start + 8 + length);',
 ):
     if token not in smoke:
         raise SystemExit(f"2D takeoff PNG IEND CRC preflight: missing smoke token: {token}")
