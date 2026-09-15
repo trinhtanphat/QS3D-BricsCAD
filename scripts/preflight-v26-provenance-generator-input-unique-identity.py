@@ -6,6 +6,7 @@ import tempfile
 source = Path("scripts/new-v26-candidate-provenance.ps1").read_text(encoding="utf-8")
 
 required_tokens = (
+    "function Normalize-JsonIdentityText",
     "function Get-JsonPropertyOccurrenceCount",
     "function Get-JsonTopLevelArrayObjectTexts",
     "function Assert-JsonPropertyCounts",
@@ -36,7 +37,7 @@ for token in required_tokens:
     if token not in source:
         raise SystemExit(f"ERROR: V26 provenance-generator input uniqueness contract missing: {token}")
 
-helper_start = source.index("function Get-JsonPropertyOccurrenceCount")
+helper_start = source.index("function Normalize-JsonIdentityText")
 reader_start = source.index("function Read-StrictUtf8Json")
 host_parse = source.index("return $text | ConvertFrom-Json -ErrorAction Stop", reader_start)
 host_root_assert = source.index("Assert-JsonPropertyCounts -JsonText $text", reader_start)
@@ -158,6 +159,15 @@ foreach ($case in $rootCases) {
     if ($actual -ne $case.Expected) { throw "root/path probe failed for $($case.Name): expected $($case.Expected), got $actual" }
 }
 
+$bomJson = ([string][char]0xFEFF) + '{"product":"QS3D"}'.Replace('\"','"')
+if ((Get-JsonPropertyOccurrenceCount -JsonText $bomJson -PropertyName 'product') -ne 1) { throw 'single leading UTF-8 BOM JSON identity was not admitted' }
+$normalizedBomJson = Normalize-JsonIdentityText -JsonText $bomJson
+try { $bomParsed = $normalizedBomJson | ConvertFrom-Json -ErrorAction Stop } catch { throw ('single leading UTF-8 BOM JSON failed ConvertFrom-Json after normalization: ' + $_.Exception.Message) }
+if ([string]$bomParsed.product -cne 'QS3D') { throw 'normalized single-BOM JSON parsed to the wrong product identity' }
+$doubleBomRejected = $false
+try { $null = Get-JsonPropertyOccurrenceCount -JsonText (([string][char]0xFEFF) + ([string][char]0xFEFF) + '{"product":"QS3D"}'.Replace('\"','"')) -PropertyName 'product' }
+catch { $doubleBomRejected = $true }
+if (-not $doubleBomRejected) { throw 'multiple leading BOM markers were admitted' }
 $validHost = '{"Version":1,"Files":[{"Name":"a","Path":"p1","Sha256":"s1","Length":1,"extension":{"Name":"nested"}},{"Name":"b","Path":"p2","Sha256":"s2","Length":2}],"extension":{"Files":[]}}'.Replace('\"', '"')
 $recordCounts = @{ Name=1; Path=1; Sha256=1; Length=1 }
 Assert-JsonArrayObjectPropertyCounts -JsonText $validHost -ArrayPropertyName 'Files' -ExpectedObjectCount 2 -ExpectedPropertyCounts $recordCounts -Label 'probe'
