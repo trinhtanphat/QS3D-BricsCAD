@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
-using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
@@ -18,6 +17,7 @@ namespace QS3D.BricsCAD.V25.Cad
     {
         public int Elements { get; set; }
         public int Bars { get; set; }
+        public bool PostCommitCleanupWarning { get; set; }
     }
 
     internal static class FoundationMeshSolidBuilder
@@ -43,20 +43,15 @@ namespace QS3D.BricsCAD.V25.Cad
             public string FootprintMode { get; set; } = string.Empty;
         }
 
-        public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project)
+        public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var selection = document.Editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null)
-            {
-                selection = document.Editor.GetSelection();
-                if (selection.Status != PromptStatus.OK || selection.Value == null) return new FoundationMeshBuildResult();
-                document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
-            }
+            if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
+            var ids = (ObjectId[])selectedIds.Clone();
 
             var selectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var id in selection.Value.GetObjectIds())
+            foreach (var id in ids)
                 try { selectedHandles.Add(id.Handle.ToString()); } catch { }
 
             var elements = project.Elements
@@ -80,6 +75,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var batchBars = 0;
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
+            var cleanupWarning = false;
             try
             {
                 using (document.LockDocument())
@@ -167,9 +163,13 @@ namespace QS3D.BricsCAD.V25.Cad
                     cadCommitted = true;
                 }
             }
-            catch (Exception operationError)
+            catch (ObjectDisposedException operationError)
             {
-                if (!cadCommitted)
+                if (cadCommitted)
+                {
+                    cleanupWarning = true;
+                }
+                else
                 {
                     try { rollback.Restore(project); }
                     catch (Exception restoreError)
@@ -178,11 +178,34 @@ namespace QS3D.BricsCAD.V25.Cad
                             "Foundation mesh replacement failed before CAD commit and project rollback also failed.",
                             new AggregateException(operationError, restoreError));
                     }
+                    throw;
                 }
-                throw;
+            }
+            catch (Exception operationError)
+            {
+                if (cadCommitted)
+                {
+                    cleanupWarning = true;
+                }
+                else
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException(
+                            "Foundation mesh replacement failed before CAD commit and project rollback also failed.",
+                            new AggregateException(operationError, restoreError));
+                    }
+                    throw;
+                }
             }
 
-            return new FoundationMeshBuildResult { Elements = pending.Count, Bars = pending.Sum(x => x.Handles.Count) };
+            return new FoundationMeshBuildResult
+            {
+                Elements = pending.Count,
+                Bars = pending.Sum(x => x.Handles.Count),
+                PostCommitCleanupWarning = cleanupWarning
+            };
         }
 
         private static PendingUpdate CreateUpdate(
