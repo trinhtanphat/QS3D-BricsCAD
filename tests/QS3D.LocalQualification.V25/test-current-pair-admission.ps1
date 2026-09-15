@@ -1,9 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$source = '17b09685478960299453bdb5dd00fdfbd4145a47'
-$v25Hash = '536a71a0c630ef6b1dcd9f3327efd177827853832cc8ff4d161a17cf56c44f65'
-$v26Hash = 'c90d88327b6b635c08e7aee4988989a121c9e4d069191207a4e09eab75fa9f20'
-$version = '0.2.0-preview.20'
+$source = '01c06ffe6ca94b984eed06210ac13adf5f2689af'
+$v25Hash = '149f58eec4bb0a43ab557fdb279dbb175e106d022127f90a442ff54e5d7f1828'
+$v26Hash = '4782a94079f6aa4f1cf8462901b9988a2e236d738f484d86c21b6d669e780128'
+$version = '0.2.0-preview.23'
 
 function Read-Script([string]$RelativePath) {
     return [IO.File]::ReadAllText((Join-Path $repo $RelativePath))
