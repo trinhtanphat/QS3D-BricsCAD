@@ -202,6 +202,9 @@ namespace QS3D.BricsCAD.V25
             public bool Matches(ProjectState project) =>
                 CoreMatches(project) && _persistence.Matches(project);
 
+            public bool MatchesRegistrationSource(ProjectState project) =>
+                CoreMatches(project) && _persistence.SemanticMatches(project);
+
             public ProjectPersistenceCheckpoint.TransitionRestoreGuard PrepareTransitionRestore(ProjectState project)
             {
                 if (project == null) throw new ArgumentNullException(nameof(project));
@@ -502,8 +505,8 @@ namespace QS3D.BricsCAD.V25
             if (before.Count == 0) throw new InvalidOperationException("Curtain Undo transition requires at least one semantic owner.");
 
             ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Curtain Undo registration");
-            if (!before.Matches(project))
-                throw new InvalidOperationException("Curtain Undo before-state changed before registration.");
+            if (!before.MatchesRegistrationSource(project))
+                throw new InvalidOperationException("Curtain Undo before-state semantic source changed before registration.");
             Attach(document);
 
             var previousRevision = ReadRevision(document);
