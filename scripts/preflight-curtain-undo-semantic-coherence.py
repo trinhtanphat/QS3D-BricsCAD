@@ -53,45 +53,40 @@ if old_sync not in source:
     raise SystemExit("Curtain Undo base guard sync-body contract drifted")
 source = source.replace(old_sync, new_sync, 1)
 
+old_begin_token = '    "CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore)",\n'
+new_begin_token = '    "CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore, undoAdmission)",\n'
+if old_begin_token not in source:
+    raise SystemExit("Curtain Undo base guard BeginTransition token drifted")
+source = source.replace(old_begin_token, new_begin_token, 1)
+
+old_begin_find = 'begin = build.find("CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore)")'
+new_begin_find = 'begin = build.find("CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore, undoAdmission)")'
+if old_begin_find not in source:
+    raise SystemExit("Curtain Undo base guard BeginTransition finder drifted")
+source = source.replace(old_begin_find, new_begin_find, 1)
+
+old_regen_find = 'regen = build.find("RegenerateDirty(project)")'
+new_regen_find = old_regen_find + '\nadmission = build.find("var undoAdmission = CurtainWallUndoCoordinator.OwnerStateSnapshot.Capture(project, undoBefore.OwnerIds);")'
+if old_regen_find not in source:
+    raise SystemExit("Curtain Undo base guard regeneration finder drifted")
+source = source.replace(old_regen_find, new_regen_find, 1)
+
+old_min = 'if min(capture, begin, regen, line_host, line_frame, line_panel, stage, commit, post, refresh) < 0:'
+new_min = 'if min(capture, regen, admission, begin, line_host, line_frame, line_panel, stage, commit, post, refresh) < 0:'
+if old_min not in source:
+    raise SystemExit("Curtain Undo base guard ordering minimum drifted")
+source = source.replace(old_min, new_min, 1)
+
 old_order = 'elif not (capture < begin < regen < line_host < line_frame < line_panel < stage < commit < post < refresh):'
-new_order = 'elif not (capture < regen < begin < line_host < line_frame < line_panel < stage < commit < post < refresh):'
+new_order = 'elif not (capture < regen < admission < begin < line_host < line_frame < line_panel < stage < commit < post < refresh):'
 if old_order not in source:
     raise SystemExit("Curtain Undo base guard ordering contract drifted")
 source = source.replace(old_order, new_order, 1)
 old_order_message = 'Curtain Undo must capture/register before mutation, stage after all builders, commit marker with CAD, then finalize the exact post-fingerprint state'
-new_order_message = 'Curtain Undo must capture the pre-command owner/persistence target before semantic regeneration, rebind semantic state before registration, then stage/commit/finalize with the native transaction'
+new_order_message = 'Curtain Undo must capture exact command-entry owner state before regeneration, capture current admission after regeneration, then register before native mutation and preserve symmetric full-state Undo/Redo'
 if old_order_message not in source:
     raise SystemExit("Curtain Undo base guard ordering message drifted")
 source = source.replace(old_order_message, new_order_message, 1)
-
-extra_order = r'''
-pre_capture = build.find("var undoBefore = CurtainWallUndoCoordinator.OwnerStateSnapshot.CaptureSelectedOwners(")
-regen = build.find("RegenerateDirty(project)")
-rebind = build.find("undoBefore = undoBefore.RebindPersistenceSemanticState(project);")
-begin = build.find("CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore)")
-line_host = build.find("WallSolidBuilder.BuildSelectedLineWalls")
-if min(pre_capture, regen, rebind, begin, line_host) < 0:
-    errors.append("Curtain Undo composite pre-persistence/rebound semantic boundary is incomplete")
-elif not (pre_capture < regen < rebind < begin < line_host):
-    errors.append("Curtain Undo must capture pre-command owner/persistence state, regenerate semantics, rebind only the persistence semantic signature, then register before native mutation")
-
-for token in (
-    "public ProjectPersistenceCheckpoint RebindSemanticState(ProjectState project)",
-    "public bool SemanticMatches(ProjectState project)",
-):
-    if token not in checkpoint:
-        errors.append("Core composite persistence target contract missing: " + token)
-
-for token in (
-    "public OwnerStateSnapshot RebindPersistenceSemanticState(ProjectState project)",
-    "_persistence.RebindSemanticState(project)",
-):
-    if token not in coord:
-        errors.append("Curtain Undo composite target contract missing: " + token)
-'''
-if "\nif errors:\n" not in source:
-    raise SystemExit("Curtain Undo composite guard error boundary drifted")
-source = source.replace("\nif errors:\n", "\n" + extra_order + "\nif errors:\n", 1)
 
 extra = r'''
 for token in (
@@ -102,6 +97,13 @@ for token in (
         errors.append("Core persistence transition contract missing: " + token)
 
 for token in (
+    "ProjectElementStateSnapshot.Capture(project, element.Id)",
+    "FullState.Restore(project)",
+    "FullState.Matches(project)",
+    "HasSameOwnerGenerationSet",
+    "OwnerStateSnapshot admission)",
+    "before.HasSameOwnerGenerationSet(admission)",
+    "if (!admission.Matches(project))",
     "public ProjectPersistenceCheckpoint.TransitionRestoreGuard PrepareTransitionRestore(ProjectState project)",
     "return _persistence.PrepareTransitionRestore(project);",
     "public void Restore(ProjectState project, ProjectPersistenceCheckpoint.TransitionRestoreGuard transitionGuard)",
