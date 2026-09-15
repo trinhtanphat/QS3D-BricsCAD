@@ -327,8 +327,8 @@ function Restore-Qs3dV26ProfileSandbox {
     }
 }
 
-$expectedProductSourceSha = '17b09685478960299453bdb5dd00fdfbd4145a47'
-$expectedPackageSha256 = 'c90d88327b6b635c08e7aee4988989a121c9e4d069191207a4e09eab75fa9f20'
+$expectedProductSourceSha = '01c06ffe6ca94b984eed06210ac13adf5f2689af'
+$expectedPackageSha256 = '4782a94079f6aa4f1cf8462901b9988a2e236d738f484d86c21b6d669e780128'
 
 function Assert-Qs3dV26InstalledDesktopRuntime {
     param([AllowNull()][string]$ExpectedRuntimeVersion)
@@ -420,7 +420,7 @@ function Assert-Qs3dV26DotNetRoot {
     }
     Assert-Qs3dV26InstalledDesktopRuntime -ExpectedRuntimeVersion $selectedRuntime.Name
 }
-$expectedProductVersion = '0.2.0-preview.20'
+$expectedProductVersion = '0.2.0-preview.23'
 $candidateKind = 'LOCAL_PR_CANDIDATE'
 
 function Get-Hash([string]$Path) {
