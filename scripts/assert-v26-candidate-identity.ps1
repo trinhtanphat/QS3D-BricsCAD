@@ -115,6 +115,15 @@ function Read-HeldText([pscustomobject]$Held, [string]$Label, [int64]$MaxBytes =
     catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
 }
 
+function Normalize-JsonIdentityText([string]$JsonText) {
+    if ($null -eq $JsonText) { throw 'V26 admitted JSON identity document is null.' }
+    if ($JsonText.Length -gt 0 -and [int][char]$JsonText[0] -eq 0xFEFF) {
+        if ($JsonText.Length -gt 1 -and [int][char]$JsonText[1] -eq 0xFEFF) { throw 'V26 admitted JSON identity document contains multiple leading BOM markers.' }
+        return $JsonText.Substring(1)
+    }
+    return $JsonText
+}
+
 function Get-JsonPropertyOccurrenceCount([string]$JsonText, [string]$PropertyName) {
     $firstNonWhitespace = 0
     while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
@@ -262,6 +271,7 @@ try {
     if (-not [string]::Equals($Matches[1], $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'V26 candidate checksum does not bind the held ZIP generation.' }
 
     $provenanceText = Read-HeldText -Held $provenanceHeld -Label 'V26 candidate provenance'
+    $provenanceText = Normalize-JsonIdentityText -JsonText $provenanceText
     $provenanceExpectedPropertyCounts = @{ product=1; target=1; releaseTag=1; sourceCommit=1; productVersion=1; packageSha256=1; installerSha256=1; hostReferences=1 }
     Assert-JsonPropertyCounts -JsonText $provenanceText -ExpectedPropertyCounts $provenanceExpectedPropertyCounts -Label 'V26 candidate provenance'
     $hostReferenceExpectedPropertyCounts = @{ name=1; sha256=1; length=1 }
@@ -295,6 +305,7 @@ try {
         try { $reader = [IO.StreamReader]::new($entryStream, $strictUtf8, $false, 4096, $true); try { $metadataText = $reader.ReadToEnd() } finally { $reader.Dispose() } }
         finally { $entryStream.Dispose() }
     } finally { $archive.Dispose(); $zipHeld.Stream.Position = 0 }
+    $metadataText = Normalize-JsonIdentityText -JsonText $metadataText
     $metadataExpectedPropertyCounts = @{ product=1; target=1; framework=1; productVersion=1 }
     Assert-JsonPropertyCounts -JsonText $metadataText -ExpectedPropertyCounts $metadataExpectedPropertyCounts -Label 'V26 PACKAGE-METADATA.json'
     try { $metadata = $metadataText | ConvertFrom-Json -ErrorAction Stop }
@@ -312,6 +323,7 @@ try {
         if (-not [Uri]::TryCreate($ExpectedPackageUri, [UriKind]::Absolute, [ref]$expectedUri) -or $expectedUri.Scheme -ne [Uri]::UriSchemeHttps -or [string]::IsNullOrWhiteSpace($expectedUri.Host) -or -not [string]::IsNullOrEmpty($expectedUri.UserInfo)) { throw 'ExpectedPackageUri must be an absolute HTTPS URI without embedded credentials.' }
         $expectedSigner = $ExpectedSignerThumbprint.ToUpperInvariant()
         $updateText = Read-HeldText -Held $updateHeld -Label 'V26 update manifest'
+        $updateText = Normalize-JsonIdentityText -JsonText $updateText
         $updateExpectedPropertyCounts = @{ product=1; target=1; productVersion=1; schemaVersion=1; packageUri=1; sha256=1; signerThumbprint=1 }
         Assert-JsonPropertyCounts -JsonText $updateText -ExpectedPropertyCounts $updateExpectedPropertyCounts -Label 'V26 update manifest'
         try { $update = $updateText | ConvertFrom-Json -ErrorAction Stop }
