@@ -96,6 +96,19 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $head -ne $env:GITHUB_SHA.ToLowerInvariant()) {
             throw 'Checked-out V26 qualification HEAD does not match the workflow SHA.'
           }
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not refresh protected main for V26 release qualification.'
+          }
+          $currentMain = ([string](& git rev-parse --verify origin/main)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $currentMain -notmatch '^[0-9a-f]{40}$') {
+            throw 'Could not resolve protected main for V26 release qualification.'
+          }
+          git merge-base --is-ancestor $env:GITHUB_SHA $currentMain
+          if ($LASTEXITCODE -ne 0) {
+            throw "V26 release workflow SHA is no longer an ancestor of protected main: $env:GITHUB_SHA"
+          }
+          .\scripts\assert-v26-release-main-drift.ps1 -SourceSha $env:GITHUB_SHA -CurrentMainSha $currentMain | Out-Null
           $localTag = @(git tag --list --format='%(objecttype) %(objectname)' $env:RELEASE_TAG)
           if ($LASTEXITCODE -ne 0 -or $localTag.Count -gt 1) { throw "Unable to classify local V26 tag identity for $env:RELEASE_TAG." }
           if ($localTag.Count -eq 1) {
@@ -293,6 +306,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not refresh protected main before V26 publication.'
+          }
+          $currentMain = ([string](& git rev-parse --verify origin/main)).Trim().ToLowerInvariant()
+          if ($LASTEXITCODE -ne 0 -or $currentMain -notmatch '^[0-9a-f]{40}$') {
+            throw 'Could not resolve protected main before V26 publication.'
+          }
+          git merge-base --is-ancestor $env:GITHUB_SHA $currentMain
+          if ($LASTEXITCODE -ne 0) {
+            throw "V26 release workflow SHA is no longer an ancestor of protected main before publication: $env:GITHUB_SHA"
+          }
+          .\scripts\assert-v26-release-main-drift.ps1 -SourceSha $env:GITHUB_SHA -CurrentMainSha $currentMain | Out-Null
           $zip = 'dist\QS3D-BricsCAD-V26.zip'
           $checksum = 'dist\QS3D-BricsCAD-V26.zip.sha256'
           $provenance = 'dist\QS3D-BricsCAD-V26.provenance.json'
