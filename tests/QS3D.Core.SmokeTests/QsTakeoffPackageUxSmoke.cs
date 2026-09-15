@@ -201,6 +201,7 @@ namespace QS3D.Core.SmokeTests
                 0,0,0,13, 73,72,68,82,
                 0,0,0,32, 0,0,0,16, 8,2,0,0,0,
                 248,98,234,14,
+                0,0,0,0, 73,68,65,84, 53,175,6,30,
                 0,0,0,0, 73,69,78,68, 174,66,96,130
             };
             var raster = ingestor.IngestRaster("A402", "Detail", "A402.png", "R1", calibration, png);

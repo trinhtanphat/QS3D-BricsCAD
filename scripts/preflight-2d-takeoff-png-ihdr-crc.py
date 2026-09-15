@@ -16,7 +16,8 @@ for token in (
 for token in (
     'RejectsCorruptedIhdrData()',
     'RejectsCorruptedIhdrCrc()',
-    'WriteCrc(bytes, 12, 13, 29)',
+    'AddChunk(bytes, "IHDR", new byte[]',
+    'WriteCrc(bytes, start + 4, length, start + 8 + length);',
     'corrupted IHDR data',
     'corrupted IHDR CRC',
 ):
