@@ -147,4 +147,24 @@ if "foreach (var auditEvent in AuditEvents)" in project_text:
         "incremental accounting rather than rescanning the full audit history."
     )
 
+# Normal CatalogOwnershipList reference multiplicity must stay O(1) by reference identity.
+required_o1 = [
+    "private sealed class ReferenceComparer : IEqualityComparer<T>",
+    "new Dictionary<T, int>(ReferenceComparer.Instance)",
+    "public bool Equals(T? x, T? y) => ReferenceEquals(x, y);",
+    "public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);",
+    "private int GetReferenceCount(T item)",
+    "private bool ContainsReference(T item) => GetReferenceCount(item) > 0;",
+    "private int CountReferences(T item) => GetReferenceCount(item);",
+    "IncrementReference(item);",
+    "DecrementReference(item);",
+    "ValidateReferenceIndex();",
+]
+missing_o1 = [token for token in required_o1 if token not in project_text]
+if missing_o1:
+    raise SystemExit(
+        "ERROR: project audit-history budget preflight failed: CatalogOwnershipList reference multiplicity must use "
+        "a maintained O(1) reference-identity index; missing token(s): " + ", ".join(repr(token) for token in missing_o1)
+    )
+
 print("PASS ProjectState audit-history count/text/reference budget admission source guard")
