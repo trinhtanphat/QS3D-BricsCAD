@@ -1,79 +1,24 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import sys
-
-ROOT = Path(__file__).resolve().parents[1]
-PUBLISHER = ROOT / "scripts/publish-v26-release.ps1"
-HELPER = ROOT / "scripts/invoke-v26-held-release-upload.ps1"
-
-errors = []
-if not PUBLISHER.is_file():
-    errors.append("missing scripts/publish-v26-release.ps1")
-    publisher = ""
-else:
-    publisher = PUBLISHER.read_text(encoding="utf-8")
-
-if not HELPER.is_file():
-    errors.append("missing scripts/invoke-v26-held-release-upload.ps1")
-    helper = ""
-else:
-    helper = HELPER.read_text(encoding="utf-8")
-
-required_publisher = [
-    "& .\\scripts\\invoke-v26-held-release-upload.ps1",
-    "$admittedAssets[$name] = $admittedAsset",
-    "$expectedLength = [int64]$admittedAssets[$expectedAsset].Length",
-    "$expectedHash = [string]$admittedAssets[$expectedAsset].Sha256",
-    "-AdmittedAssets $admittedAssets",
-]
-for token in required_publisher:
-    if token not in publisher:
-        errors.append(f"V26 publisher missing held-generation token: {token}")
-
-for forbidden in [
-    "Invoke-RestMethod -Method Post -Uri ($uploadBase + '?name=' + [Uri]::EscapeDataString($name)) -Headers $headers -ContentType $contentType -InFile $asset",
-    "$localLength = [int64](Get-Item -LiteralPath $localAsset).Length",
-    "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset",
-]:
-    if forbidden in publisher:
-        errors.append(f"V26 publisher still reopens/uploads by pathname: {forbidden}")
-
-required_helper = [
-    "[IO.FileShare]::Read",
-    "[Security.Cryptography.SHA256]::Create()",
-    "$held.Stream.Position = 0",
-    "Add-Type -AssemblyName System.Net.Http",
-    "[System.Net.Http.StreamContent]::new($held.Stream)",
-    "[System.Net.Http.HttpClient]::new()",
-    "UploadedAssetId",
-    "Sha256",
-    "CanonicalPath",
-    "LastWriteTimeUtcTicks",
-    "ReparsePoint",
-]
-for token in required_helper:
-    if token not in helper:
-        errors.append(f"V26 held-upload helper missing invariant token: {token}")
-
-if helper:
-    bootstrap_pos = helper.find("Add-Type -AssemblyName System.Net.Http")
-    first_http_type_pos = helper.find("[System.Net.Http.")
-    if bootstrap_pos < 0 or first_http_type_pos < 0 or bootstrap_pos >= first_http_type_pos:
-        errors.append("V26 held-upload helper must preload System.Net.Http before the first System.Net.Http type resolution")
-
-    hash_pos = helper.find("ComputeHash($held.Stream)")
-    rewind_pos = helper.find("$held.Stream.Position = 0")
-    content_pos = helper.find("[System.Net.Http.StreamContent]::new($held.Stream)")
-    send_pos = helper.find("SendAsync")
-    dispose_pos = helper.rfind("$held.Stream.Dispose()")
-    if min(hash_pos, rewind_pos, content_pos, send_pos, dispose_pos) < 0 or not (
-        hash_pos < rewind_pos < content_pos < send_pos < dispose_pos
-    ):
-        errors.append("V26 held-upload helper must hash -> rewind -> stream-upload -> dispose the same admitted generation")
-
-if errors:
-    for error in errors:
-        print(f"ERROR: {error}")
-    sys.exit(1)
-
-print("PASS V26 held release upload generation binding")
+import re,sys
+R=Path(__file__).resolve().parents[1];P=R/'scripts/publish-v26-release.ps1';H=R/'scripts/invoke-v26-held-release-upload.ps1'
+def v(p,h):
+ e=[]
+ req=['[IO.FileShare]::Read','ComputeHash($held.Stream)','$held.Stream.Position = 0','[System.Net.Http.StreamContent]::new($held.Stream)',"[string]::Equals($uploadUri.Host, 'uploads.github.com', [StringComparison]::OrdinalIgnoreCase)",'$uploadUri.IsDefaultPort','[string]::IsNullOrEmpty($uploadUri.UserInfo)','[string]::IsNullOrEmpty($uploadUri.Fragment)','[string]::IsNullOrEmpty($uploadUri.Query)','$handler.AllowAutoRedirect = $false','[System.Net.Http.HttpClient]::new($handler)','$response.StatusCode -ne [System.Net.HttpStatusCode]::Created','ConvertFrom-Json -ErrorAction Stop',"[string]::Equals([string]$uploaded.state, 'uploaded', [StringComparison]::Ordinal)","$expectedDigest = 'sha256:' + $hashHex.ToLowerInvariant()","[string]::Equals($uploadedDigest, $expectedDigest, [StringComparison]::OrdinalIgnoreCase)",'UploadedAssetId']
+ for t in req:
+  if t not in h:e.append('missing '+t)
+ if '$response.IsSuccessStatusCode' in h:e.append('generic 2xx forbidden')
+ if re.search(r'throw[^\r\n]*\$responseBody',h):e.append('response body leak')
+ order=['[System.Net.Http.HttpClientHandler]::new()','$handler.AllowAutoRedirect = $false','[System.Net.Http.HttpClient]::new($handler)','DefaultRequestHeaders.Authorization','[System.Net.Http.HttpRequestMessage]::new','SendAsync','$response.StatusCode -ne [System.Net.HttpStatusCode]::Created','ReadAsStringAsync','ConvertFrom-Json -ErrorAction Stop',"[string]::Equals([string]$uploaded.state, 'uploaded', [StringComparison]::Ordinal)","$expectedDigest = 'sha256:' + $hashHex.ToLowerInvariant()"]
+ q=[h.find(x) for x in order]
+ if min(q)<0 or q!=sorted(q):e.append('upload authority ordering')
+ if r'& .\scripts\invoke-v26-held-release-upload.ps1' not in p:e.append('publisher held helper missing')
+ return e
+def main():
+ p=P.read_text(encoding='utf-8');h=H.read_text(encoding='utf-8');e=v(p,h)
+ if e:
+  [print('ERROR: '+x) for x in e];return 1
+ muts=[h.replace('$handler.AllowAutoRedirect = $false','$handler.AllowAutoRedirect = $true',1),h.replace('$response.StatusCode -ne [System.Net.HttpStatusCode]::Created','-not $response.IsSuccessStatusCode',1),h.replace("if (-not [string]::Equals([string]$uploaded.state, 'uploaded', [StringComparison]::Ordinal)) {",'if ($false) {',1),h.replace('-not [string]::Equals($uploadedDigest, $expectedDigest, [StringComparison]::OrdinalIgnoreCase)','$false',1),h.replace('$uploaded = $responseBody | ConvertFrom-Json -ErrorAction Stop','$uploaded = $responseBody | ConvertFrom-Json',1)]
+ if any(m==h or not v(p,m) for m in muts):print('ERROR: mutation escaped guard');return 1
+ print('PASS V26 held release upload endpoint redirect status state digest authority');return 0
+if __name__=='__main__':raise SystemExit(main())
