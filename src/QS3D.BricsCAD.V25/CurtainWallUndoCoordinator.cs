@@ -164,27 +164,25 @@ namespace QS3D.BricsCAD.V25
                     var element = project.FindElement(id);
                     if (element == null || element.Category != ElementCategory.GlassWall)
                         throw new InvalidOperationException("Curtain Undo owner is missing or is no longer a GlassWall: " + id + ".");
-                    owners.Add(id, OwnerState.Capture(element));
+                    owners.Add(id, OwnerState.Capture(project, element));
                 }
                 return new OwnerStateSnapshot(
                     owners,
                     ProjectPersistenceCheckpoint.Capture(project, owners.Keys));
             }
 
-            public OwnerStateSnapshot RebindPersistenceSemanticState(ProjectState project)
-            {
-                if (project == null) throw new ArgumentNullException(nameof(project));
-                if (!CoreMatches(project))
-                    throw new InvalidOperationException("Curtain Undo owner state changed before persistence semantic rebind.");
-                return new OwnerStateSnapshot(
-                    new Dictionary<string, OwnerState>(_owners, StringComparer.OrdinalIgnoreCase),
-                    _persistence.RebindSemanticState(project));
-            }
-
             public bool HasSameOwnerSet(OwnerStateSnapshot other)
             {
                 if (other == null || other._owners.Count != _owners.Count) return false;
                 return _owners.Keys.All(other._owners.ContainsKey);
+            }
+
+            public bool HasSameOwnerGenerationSet(OwnerStateSnapshot other)
+            {
+                if (!HasSameOwnerSet(other)) return false;
+                foreach (var pair in _owners)
+                    if (!pair.Value.SameGeneration(other._owners[pair.Key])) return false;
+                return true;
             }
 
             public bool CoreMatches(ProjectState project)
@@ -194,16 +192,13 @@ namespace QS3D.BricsCAD.V25
                 {
                     var element = project.FindElement(pair.Key);
                     if (element == null || element.Category != ElementCategory.GlassWall) return false;
-                    if (!pair.Value.CoreMatches(element)) return false;
+                    if (!pair.Value.CoreMatches(project, element)) return false;
                 }
                 return true;
             }
 
             public bool Matches(ProjectState project) =>
                 CoreMatches(project) && _persistence.Matches(project);
-
-            public bool MatchesRegistrationSource(ProjectState project) =>
-                CoreMatches(project) && _persistence.SemanticMatches(project);
 
             public ProjectPersistenceCheckpoint.TransitionRestoreGuard PrepareTransitionRestore(ProjectState project)
             {
@@ -227,59 +222,43 @@ namespace QS3D.BricsCAD.V25
                 }
 
                 foreach (var pair in _owners)
-                    pair.Value.Restore(targets[pair.Key]);
+                    pair.Value.Restore(project, targets[pair.Key]);
                 _persistence.RestoreTransition(project, transitionGuard);
             }
         }
 
         private sealed class OwnerState
         {
-            private OwnerState(IReadOnlyList<string> sourceHandles, Dictionary<string, string> properties)
+            private readonly ProjectState _projectOwner;
+            private readonly ProjectElement _owner;
+
+            private OwnerState(ProjectState projectOwner, ProjectElement owner, ProjectElementStateSnapshot fullState)
             {
-                SourceHandles = sourceHandles;
-                Properties = properties;
+                _projectOwner = projectOwner ?? throw new ArgumentNullException(nameof(projectOwner));
+                _owner = owner ?? throw new ArgumentNullException(nameof(owner));
+                FullState = fullState ?? throw new ArgumentNullException(nameof(fullState));
             }
 
-            public IReadOnlyList<string> SourceHandles { get; }
-            public Dictionary<string, string> Properties { get; }
+            private ProjectElementStateSnapshot FullState { get; }
 
-            public static OwnerState Capture(ProjectElement element)
+            public static OwnerState Capture(ProjectState project, ProjectElement element)
             {
-                var handles = element.SourceHandles.Select(x => x ?? string.Empty).ToList().AsReadOnly();
-                var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var pair in element.Properties)
-                    if (IsTrackedProperty(pair.Key)) properties.Add(pair.Key, pair.Value ?? string.Empty);
-                return new OwnerState(handles, properties);
+                if (project == null) throw new ArgumentNullException(nameof(project));
+                if (element == null) throw new ArgumentNullException(nameof(element));
+                return new OwnerState(project, element, ProjectElementStateSnapshot.Capture(project, element.Id));
             }
 
-            public bool CoreMatches(ProjectElement element)
+            public bool SameGeneration(OwnerState other) =>
+                other != null && ReferenceEquals(_projectOwner, other._projectOwner) && ReferenceEquals(_owner, other._owner);
+
+            public bool CoreMatches(ProjectState project, ProjectElement element) =>
+                ReferenceEquals(project, _projectOwner) && ReferenceEquals(element, _owner) && FullState.Matches(project);
+
+            public void Restore(ProjectState project, ProjectElement element)
             {
-                if (element.SourceHandles.Count != SourceHandles.Count) return false;
-                for (var index = 0; index < SourceHandles.Count; index++)
-                    if (!string.Equals(SourceHandles[index], element.SourceHandles[index], StringComparison.OrdinalIgnoreCase))
-                        return false;
-
-                var current = element.Properties
-                    .Where(x => IsTrackedCoreProperty(x.Key))
-                    .ToDictionary(x => x.Key, x => x.Value ?? string.Empty, StringComparer.OrdinalIgnoreCase);
-                var expected = Properties
-                    .Where(x => IsTrackedCoreProperty(x.Key))
-                    .ToDictionary(x => x.Key, x => x.Value ?? string.Empty, StringComparer.OrdinalIgnoreCase);
-                if (current.Count != expected.Count) return false;
-                foreach (var pair in expected)
-                    if (!current.TryGetValue(pair.Key, out var value) || !string.Equals(value, pair.Value, StringComparison.Ordinal))
-                        return false;
-                return true;
-            }
-
-            public void Restore(ProjectElement element)
-            {
-                element.SourceHandles.Clear();
-                foreach (var handle in SourceHandles) element.SourceHandles.Add(handle);
-
-                foreach (var key in element.Properties.Keys.Where(IsTrackedProperty).ToList())
-                    element.Properties.Remove(key);
-                foreach (var pair in Properties) element.Properties[pair.Key] = pair.Value;
+                if (!ReferenceEquals(project, _projectOwner) || !ReferenceEquals(element, _owner))
+                    throw new InvalidOperationException("Curtain Undo cannot restore across project/element generations.");
+                FullState.Restore(project);
             }
         }
 
@@ -362,8 +341,8 @@ namespace QS3D.BricsCAD.V25
                     ThrowIfDisposed();
                     if (_staged != null) throw new InvalidOperationException("Curtain Undo transition is already staged.");
                     RequireCurrentHistory(_document, _history, project, _previousRevision);
-                    if (!_before.HasSameOwnerSet(after))
-                        throw new InvalidOperationException("Curtain Undo before/after owner sets differ.");
+                    if (!_before.HasSameOwnerGenerationSet(after))
+                        throw new InvalidOperationException("Curtain Undo before/after owner generations differ.");
                     if (!after.Matches(project))
                         throw new InvalidOperationException("Curtain Undo after-state no longer matches the canonical project before native commit.");
                     if (_history.Transitions.Count >= MaxTransitionsPerDocument)
@@ -412,8 +391,8 @@ namespace QS3D.BricsCAD.V25
                     if (!_committed || _staged == null)
                         throw new InvalidOperationException("Curtain Undo committed state cannot refresh before native commit publication.");
                     RequireCurrentHistory(_document, _history, project, _nextRevision);
-                    if (!_before.HasSameOwnerSet(after) || !after.Matches(project))
-                        throw new InvalidOperationException("Curtain Undo post-commit state no longer matches the canonical project.");
+                    if (!_before.HasSameOwnerGenerationSet(after) || !after.Matches(project))
+                        throw new InvalidOperationException("Curtain Undo post-commit owner generation/state no longer matches the canonical project.");
                     _staged.After = after;
                 }
             }
@@ -497,16 +476,20 @@ namespace QS3D.BricsCAD.V25
         public static PendingTransition BeginTransition(
             Document document,
             ProjectState project,
-            OwnerStateSnapshot before)
+            OwnerStateSnapshot before,
+            OwnerStateSnapshot admission)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
             if (before == null) throw new ArgumentNullException(nameof(before));
+            if (admission == null) throw new ArgumentNullException(nameof(admission));
             if (before.Count == 0) throw new InvalidOperationException("Curtain Undo transition requires at least one semantic owner.");
+            if (!before.HasSameOwnerGenerationSet(admission))
+                throw new InvalidOperationException("Curtain Undo command-entry target and current admission owner generations differ.");
 
             ProjectContextCoordinator.RequireBackingStoreUnchanged(document, project, "Curtain Undo registration");
-            if (!before.MatchesRegistrationSource(project))
-                throw new InvalidOperationException("Curtain Undo before-state semantic source changed before registration.");
+            if (!admission.Matches(project))
+                throw new InvalidOperationException("Curtain Undo admission state changed before registration.");
             Attach(document);
 
             var previousRevision = ReadRevision(document);
