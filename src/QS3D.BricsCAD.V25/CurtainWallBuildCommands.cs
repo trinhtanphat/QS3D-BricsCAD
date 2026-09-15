@@ -58,10 +58,10 @@ namespace QS3D.BricsCAD.V25
 
                 if (undoBefore.Count > 0)
                 {
-                    // Keep the pre-command revision/Dirty stamps while binding the checkpoint's semantic
-                    // signature to the deterministic post-regeneration, pre-native state.
-                    undoBefore = undoBefore.RebindPersistenceSemanticState(project);
-                    undoTransition = CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore);
+                    // Admission is the exact post-regeneration/pre-native state. Keep it separate from
+                    // the older Undo target so registration can fail closed without rebinding history.
+                    var undoAdmission = CurtainWallUndoCoordinator.OwnerStateSnapshot.Capture(project, undoBefore.OwnerIds);
+                    undoTransition = CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore, undoAdmission);
                 }
 
                 var hostSolids = 0;
