@@ -29,6 +29,7 @@ required_tokens = (
     "RenameOwnedProvenanceGeneration",
     "SetFileInformationByHandleBuffer",
     "SetFilePointerEx",
+    "var bufferSize = checked(nameOffset + nameBytes.Length + 4);",
     "Marshal.AllocHGlobal(1)",
     "Marshal.WriteByte(buffer, 0, 1)",
     "FileDispositionInfo, buffer, 1",
@@ -189,6 +190,7 @@ function Assert-OwnedPublication([string]$SourcePath, [string]$DestinationPath, 
         $owned = [Qs3dProvenanceGenerationNative]::CreateOwnedProvenanceGeneration($SourcePath, $Payload)
         $before = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
         [Qs3dProvenanceGenerationNative]::RenameOwnedProvenanceGeneration($owned, $DestinationPath, $ReplaceExisting)
+        if (-not (Test-Path -LiteralPath $DestinationPath -PathType Leaf)) { throw 'owned provenance rename did not publish the exact destination pathname' }
         $after = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
         if (-not [string]::Equals($before, $after, [StringComparison]::Ordinal)) { throw 'owned provenance identity changed across handle rename' }
         $writer = [Qs3dProvenanceShareProbeNative]::OpenConcurrentWriter($DestinationPath)
