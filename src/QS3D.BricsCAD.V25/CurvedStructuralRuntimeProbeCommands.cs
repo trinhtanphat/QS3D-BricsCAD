@@ -23,7 +23,7 @@ namespace QS3D.BricsCAD.V25
     /// StructuralSolidBuilder. Marker output is intentionally sanitized: no handles, paths,
     /// project ids, source coordinates, or exception messages are emitted.
     /// </summary>
-    public sealed class CurvedStructuralRuntimeProbeCommands
+    public sealed partial class CurvedStructuralRuntimeProbeCommands
     {
         private const string ResultVariable = "QS3D_CURVED_STRUCTURAL_RESULT";
         private const string NonceVariable = "QS3D_CURVED_STRUCTURAL_NONCE";
