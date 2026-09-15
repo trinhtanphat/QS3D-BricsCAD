@@ -88,6 +88,16 @@ for token in (
 ):
     if token not in coord:
         errors.append("Curtain Undo composite target contract missing: " + token)
+
+for token in (
+    "public bool MatchesRegistrationSource(ProjectState project)",
+    "CoreMatches(project) && _persistence.SemanticMatches(project)",
+    "if (!before.MatchesRegistrationSource(project))",
+):
+    if token not in coord:
+        errors.append("Curtain Undo rebound registration admission contract missing: " + token)
+if "if (!before.Matches(project))" in coord:
+    errors.append("Curtain Undo registration must not require pre-command persistence stamps to equal the post-regeneration source")
 '''
 if "\nif errors:\n" not in source:
     raise SystemExit("Curtain Undo composite guard error boundary drifted")
