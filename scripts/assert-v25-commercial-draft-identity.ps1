@@ -29,6 +29,7 @@ $ErrorActionPreference = 'Stop'
 
 $MaxMetadataBytes = 65536
 $MaxProvenanceBytes = 65536
+$MaxUpdateManifestBytes = 65536
 $MaxChecksumBytes = 4096
 $MaxVerifierScriptBytes = 262144
 $MaxSignedPayloadEntryBytes = 268435456
@@ -227,6 +228,7 @@ function Read-ZipMetadataIdentity {
             product = 1
             target = 1
             productVersion = 1
+            version = 1
             gitCommit = 1
         }
         Assert-JsonPropertyCounts -JsonText $text -ExpectedPropertyCounts $metadataExpectedPropertyCounts
@@ -250,6 +252,7 @@ function Test-HeldZipPayloadSignatures {
     $workspace = Join-Path $runnerTemp ('qs3d-v25-held-signature-' + [Guid]::NewGuid().ToString('N'))
     if (Test-Path -LiteralPath $workspace) { throw 'Held V25 signature verification workspace unexpectedly already exists.' }
     $workspaceItem = New-Item -ItemType Directory -Path $workspace -ErrorAction Stop
+    $heldPayloads = New-Object System.Collections.Generic.List[object]
     try {
         if (($workspaceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
             throw 'Held V25 signature verification workspace must not be a reparse point.'
@@ -284,18 +287,59 @@ function Test-HeldZipPayloadSignatures {
                 }
 
                 $entryStream = $entry.Open()
+                $output = $null
+                $transition = $null
+                $heldStream = $null
                 try {
-                    $output = [IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-                    try { $entryStream.CopyTo($output) }
-                    finally { $output.Dispose() }
-                }
-                finally { $entryStream.Dispose() }
+                    $output = [IO.File]::Open($destinationFull, [IO.FileMode]::CreateNew, [IO.FileAccess]::ReadWrite, [IO.FileShare]::Read)
+                    $entryStream.CopyTo($output)
+                    $output.Flush($true)
+                    if ([int64]$output.Length -ne [int64]$entry.Length) {
+                        throw "Extracted signed payload generation has the wrong length for $requiredName."
+                    }
 
-                $written = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop
-                if ($written.PSIsContainer -or (($written.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or [int64]$written.Length -ne [int64]$entry.Length) {
-                    throw "Extracted signed payload generation is invalid for $requiredName."
+                    $outputHeld = [pscustomobject]@{ Stream = $output; Path = $destinationFull; Length = [int64]$entry.Length }
+                    $outputDigest = Get-HeldSha256 -Held $outputHeld
+
+                    # Keep delete/rename denied while releasing the write-capable handle.
+                    # The transition handle permits the existing writer, but no delete.
+                    $transition = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+                    if ([int64]$transition.Length -ne [int64]$entry.Length) {
+                        throw "Extracted signed payload transition generation has the wrong length for $requiredName."
+                    }
+
+                    $output.Dispose()
+                    $output = $null
+
+                    # Acquire the long-lived strict read hold while the transition handle
+                    # still prevents delete/recreate. If a writer races this short handoff,
+                    # the strict open either conflicts or the digest comparison fails.
+                    $heldStream = [IO.File]::Open($destinationFull, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+                    $heldPayload = [pscustomobject]@{ Stream = $heldStream; Path = $destinationFull; Length = [int64]$entry.Length }
+                    $heldDigest = Get-HeldSha256 -Held $heldPayload
+                    if (-not [string]::Equals($heldDigest, $outputDigest, [StringComparison]::OrdinalIgnoreCase)) {
+                        throw "Extracted signed payload bytes changed during held-generation handoff for $requiredName."
+                    }
+
+                    $rebound = Get-Item -LiteralPath $destinationFull -Force -ErrorAction Stop
+                    if ($rebound.PSIsContainer -or (($rebound.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) -or
+                        -not [string]::Equals((Get-CanonicalFullPath -LiteralPath $rebound.FullName), $destinationFull, [StringComparison]::OrdinalIgnoreCase) -or
+                        [int64]$rebound.Length -ne [int64]$entry.Length -or [int64]$heldStream.Length -ne [int64]$entry.Length) {
+                        throw "Extracted signed payload strict held generation is invalid for $requiredName."
+                    }
+
+                    $transition.Dispose()
+                    $transition = $null
+                    $heldPayloads.Add($heldPayload)
+                    $heldStream = $null
+                    $extracted.Add($destinationFull)
                 }
-                $extracted.Add($destinationFull)
+                finally {
+                    if ($null -ne $heldStream) { $heldStream.Dispose() }
+                    if ($null -ne $transition) { $transition.Dispose() }
+                    if ($null -ne $output) { $output.Dispose() }
+                    $entryStream.Dispose()
+                }
             }
         }
         finally { $archive.Dispose() }
@@ -314,6 +358,9 @@ function Test-HeldZipPayloadSignatures {
         }
     }
     finally {
+        foreach ($heldPayload in $heldPayloads) {
+            if ($null -ne $heldPayload -and $null -ne $heldPayload.Stream) { $heldPayload.Stream.Dispose() }
+        }
         Remove-Item -LiteralPath $workspace -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
@@ -322,6 +369,7 @@ if ($ExpectedReleaseTag -notmatch $StrictReleaseTagPattern) { throw "ExpectedRel
 $expectedSource = $ExpectedSourceCommit.ToLowerInvariant()
 $expectedSigner = $ExpectedSignerThumbprint.Replace(' ', '').ToUpperInvariant()
 $expectedProductVersion = $ExpectedReleaseTag.Substring(1)
+$expectedPackageUri = "https://github.com/trinhtanphat/QS3D-BricsCAD/releases/download/$ExpectedReleaseTag/QS3D-BricsCAD-V25.zip"
 
 $zipHeld = $null
 $checksumHeld = $null
@@ -339,6 +387,51 @@ try {
     $checksumText = (Read-HeldStrictUtf8 -Held $checksumHeld -MaxBytes $MaxChecksumBytes -Label 'downloaded V25 draft checksum').Trim()
     if ($checksumText -notmatch '^([0-9a-fA-F]{64})  QS3D-BricsCAD-V25\.zip$') { throw 'Downloaded V25 draft checksum is malformed.' }
     if (-not [string]::Equals($Matches[1], $zipHash, [StringComparison]::OrdinalIgnoreCase)) { throw 'Downloaded V25 draft ZIP fails its SHA-256 checksum.' }
+
+    $updateManifestText = Read-HeldStrictUtf8 -Held $updateHeld -MaxBytes $MaxUpdateManifestBytes -Label 'downloaded V25 draft update manifest'
+    $updateManifestExpectedPropertyCounts = @{
+        schemaVersion = 1
+        product = 1
+        target = 1
+        productVersion = 1
+        version = 1
+        packageUri = 1
+        sha256 = 1
+        signerThumbprint = 1
+        generatedUtc = 1
+    }
+    Assert-JsonPropertyCounts -JsonText $updateManifestText -ExpectedPropertyCounts $updateManifestExpectedPropertyCounts
+    try { $updateManifest = $updateManifestText | ConvertFrom-Json -ErrorAction Stop }
+    catch { throw "Downloaded V25 draft update manifest is invalid JSON: $($_.Exception.Message)" }
+
+    $updateProductVersionRaw = [string]$updateManifest.productVersion
+    $updateVersionRaw = [string]$updateManifest.version
+    $updatePackageUriRaw = [string]$updateManifest.packageUri
+    $updateSignerRaw = [string]$updateManifest.signerThumbprint
+    if (-not [string]::Equals($updateProductVersionRaw, $updateProductVersionRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updateVersionRaw, $updateVersionRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updatePackageUriRaw, $updatePackageUriRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updateSignerRaw, $updateSignerRaw.Trim(), [StringComparison]::Ordinal)) {
+        throw 'Downloaded V25 draft update manifest identity is non-canonical: leading or trailing whitespace is not allowed.'
+    }
+
+    $updatePackageUri = $null
+    if (-not [Uri]::TryCreate($updatePackageUriRaw, [UriKind]::Absolute, [ref]$updatePackageUri) -or
+        -not [string]::Equals($updatePackageUri.Scheme, [Uri]::UriSchemeHttps, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::IsNullOrEmpty($updatePackageUri.UserInfo) -or
+        -not [string]::Equals([IO.Path]::GetFileName($updatePackageUri.AbsolutePath), 'QS3D-BricsCAD-V25.zip', [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updatePackageUriRaw, $expectedPackageUri, [StringComparison]::Ordinal) -or
+        -not [string]::Equals($updatePackageUri.AbsoluteUri, $expectedPackageUri, [StringComparison]::Ordinal)) {
+        throw "Downloaded V25 draft update manifest packageUri must exactly match the trusted release asset URI: $expectedPackageUri"
+    }
+
+    if ([int]$updateManifest.schemaVersion -ne 2 -or [string]$updateManifest.product -ne 'QS3D' -or [string]$updateManifest.target -ne 'BricsCAD V25 x64' -or
+        -not [string]::Equals($updateProductVersionRaw, $expectedProductVersion, [StringComparison]::Ordinal) -or
+        [string]::IsNullOrWhiteSpace($updateVersionRaw) -or
+        -not [string]::Equals([string]$updateManifest.sha256, $zipHash, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals($updateSignerRaw.Replace(' ', ''), $expectedSigner, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Downloaded V25 draft update manifest does not exactly bind product, target, release version, package digest and signer.'
+    }
 
     $provenanceText = Read-HeldStrictUtf8 -Held $provenanceHeld -MaxBytes $MaxProvenanceBytes -Label 'downloaded V25 draft provenance'
     $provenanceExpectedPropertyCounts = @{
@@ -377,16 +470,20 @@ try {
 
     $metadata = Read-ZipMetadataIdentity -ZipHeld $zipHeld
     $metadataProductVersionRaw = [string]$metadata.productVersion
+    $metadataVersionRaw = [string]$metadata.version
     $metadataGitCommitRaw = [string]$metadata.gitCommit
     if (-not [string]::Equals($metadataProductVersionRaw, $metadataProductVersionRaw.Trim(), [StringComparison]::Ordinal) -or
+        -not [string]::Equals($metadataVersionRaw, $metadataVersionRaw.Trim(), [StringComparison]::Ordinal) -or
         -not [string]::Equals($metadataGitCommitRaw, $metadataGitCommitRaw.Trim(), [StringComparison]::Ordinal)) {
         throw 'Downloaded V25 draft ZIP metadata identity is non-canonical: leading or trailing whitespace is not allowed.'
     }
 
     if ([string]$metadata.product -ne 'QS3D' -or [string]$metadata.target -ne 'BricsCAD V25 x64' -or
-        -not [string]::Equals(([string]$metadata.productVersion).Trim(), $expectedProductVersion, [StringComparison]::Ordinal) -or
-        -not [string]::Equals(([string]$metadata.gitCommit).Trim(), $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'Downloaded V25 draft ZIP metadata does not exactly bind product, tag and source commit.'
+        -not [string]::Equals($metadataProductVersionRaw, $expectedProductVersion, [StringComparison]::Ordinal) -or
+        [string]::IsNullOrWhiteSpace($metadataVersionRaw) -or
+        -not [string]::Equals($metadataVersionRaw, $updateVersionRaw, [StringComparison]::Ordinal) -or
+        -not [string]::Equals($metadataGitCommitRaw, $expectedSource, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Downloaded V25 draft ZIP metadata does not exactly bind product, tag, source commit and update-manifest assembly version.'
     }
 
     Test-HeldZipPayloadSignatures -ZipHeld $zipHeld -ExpectedThumbprint $expectedSigner
