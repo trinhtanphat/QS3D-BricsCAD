@@ -61,7 +61,17 @@ function Get-OrdinaryFileIdentity([string]$Path, [string]$Label) {
     finally { $stream.Dispose() }
 }
 
+function Normalize-JsonIdentityText([string]$JsonText) {
+    if ($null -eq $JsonText) { throw 'V26 admitted JSON identity document is null.' }
+    if ($JsonText.Length -gt 0 -and [int][char]$JsonText[0] -eq 0xFEFF) {
+        if ($JsonText.Length -gt 1 -and [int][char]$JsonText[1] -eq 0xFEFF) { throw 'V26 admitted JSON identity document contains multiple leading BOM markers.' }
+        return $JsonText.Substring(1)
+    }
+    return $JsonText
+}
+
 function Get-JsonPropertyOccurrenceCount([string]$JsonText, [string]$PropertyName) {
+    $JsonText = Normalize-JsonIdentityText -JsonText $JsonText
     $firstNonWhitespace = 0
     while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
     if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') {
@@ -110,6 +120,7 @@ function Get-JsonPropertyOccurrenceCount([string]$JsonText, [string]$PropertyNam
 }
 
 function Get-JsonTopLevelArrayObjectTexts([string]$JsonText, [string]$ArrayPropertyName, [string]$Label) {
+    $JsonText = Normalize-JsonIdentityText -JsonText $JsonText
     $firstNonWhitespace = 0
     while ($firstNonWhitespace -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$firstNonWhitespace])) { $firstNonWhitespace++ }
     if ($firstNonWhitespace -ge $JsonText.Length -or $JsonText[$firstNonWhitespace] -ne '{') { throw "$Label must have a top-level object." }
@@ -234,6 +245,7 @@ function Read-StrictUtf8Json([string]$Path, [string]$Label, [hashtable]$Expected
         if ($current.Length -ne $stream.Length -or $current.LastWriteTimeUtc.Ticks -ne $item.LastWriteTimeUtc.Ticks) { throw "$Label changed while its generation was being admitted." }
         try { $text = $strictUtf8.GetString($bytes) }
         catch [Text.DecoderFallbackException] { throw "$Label is not strict UTF-8." }
+        $text = Normalize-JsonIdentityText -JsonText $text
         Assert-JsonPropertyCounts -JsonText $text -ExpectedPropertyCounts $ExpectedPropertyCounts -Label $Label
         if (-not [string]::IsNullOrWhiteSpace($ArrayPropertyName)) {
             Assert-JsonArrayObjectPropertyCounts -JsonText $text -ArrayPropertyName $ArrayPropertyName -ExpectedObjectCount $ExpectedArrayObjectCount -ExpectedPropertyCounts $ExpectedArrayObjectPropertyCounts -Label $Label
@@ -555,6 +567,8 @@ try {
         finally { $entryStream.Dispose() }
     }
     finally { $archive.Dispose() }
+
+    $metadataText = Normalize-JsonIdentityText -JsonText $metadataText
 
     $metadataExpectedPropertyCounts = @{
         product = 1
