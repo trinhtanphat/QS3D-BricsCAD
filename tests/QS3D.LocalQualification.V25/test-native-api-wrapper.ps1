@@ -291,4 +291,20 @@ try {
     if(-not $rejected) { throw 'FAIL: Cloudflare flag disappearance after admission was ignored.' }
 }
 finally { Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue }
+# HOST-FREE V25 absent DemandLoad regression: exact NETLOAD qualification must
+# preserve an absent registration instead of requiring an installed user plugin.
+$v25ProtectedState=$runnerAst.Find({ param($node)
+    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-ProtectedState'
+},$true)
+if($null -eq $v25ProtectedState) { throw 'FAIL: V25 protected-state helper is unavailable.' }
+$v25ProtectedText=$v25ProtectedState.Extent.Text
+foreach($token in @("-ErrorAction SilentlyContinue",'$registrationExists','registration_exists = $registrationExists')) {
+    if(-not $v25ProtectedText.Contains($token)) { throw ('FAIL: V25 protected-state helper does not preserve absent DemandLoad: '+$token) }
+}
+$v25AbsentGate=@($runnerAst.EndBlock.Statements | Where-Object {
+    $_ -is [Management.Automation.Language.IfStatementAst] -and
+    $_.Extent.Text.Contains('$protectedBefore.registration_exists -and $protectedBefore.load_controls -ne 4')
+})
+if($v25AbsentGate.Count -ne 1) { throw 'FAIL: V25 admission still requires DemandLoad when registration is absent.' }
+Write-Output 'PASS: V25 protected-state admission preserves absent DemandLoad and only enforces OnCommand when registration exists.'
 Write-Output 'PASS: actual wrapper native mode/forwarding and V26 predecessor admission reject UI, stale source/package, incomplete phases and cleanup; defaults preserved, no host/registry/preferences changed.'
