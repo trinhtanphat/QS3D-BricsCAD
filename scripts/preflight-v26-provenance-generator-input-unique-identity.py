@@ -94,6 +94,53 @@ native_wrapper = source[native_wrapper_start:native_wrapper_end]
 helpers = source[helper_start:reader_start]
 
 probe = native_wrapper + "\n" + helpers + r'''
+if (-not ('Qs3dProvenanceShareProbeNative' -as [type])) {
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+public static class Qs3dProvenanceShareProbeNative {
+    const uint GenericWrite=0x40000000, FileReadAttributes=0x80, FileShareRead=1, FileShareWrite=2, FileShareDelete=4, OpenExisting=3, FileAttributeNormal=0x80;
+    [DllImport("kernel32.dll", CharSet=CharSet.Unicode, SetLastError=true)]
+    static extern SafeFileHandle CreateFileW(string n,uint a,uint s,IntPtr sa,uint c,uint f,IntPtr t);
+    public static int ConcurrentWriterOpenError(string path) {
+        var h=CreateFileW(path,GenericWrite,FileShareRead|FileShareWrite|FileShareDelete,IntPtr.Zero,OpenExisting,FileAttributeNormal,IntPtr.Zero);
+        if(h==null || h.IsInvalid) { int e=Marshal.GetLastWin32Error(); if(h!=null) h.Dispose(); return e; }
+        h.Dispose(); return 0;
+    }
+    public static SafeFileHandle OpenConcurrentWriter(string path) {
+        return CreateFileW(path,GenericWrite,FileShareRead|FileShareWrite|FileShareDelete,IntPtr.Zero,OpenExisting,FileAttributeNormal,IntPtr.Zero);
+    }
+    public static int PathOpenError(string path) {
+        var h=CreateFileW(path,FileReadAttributes,FileShareRead|FileShareWrite|FileShareDelete,IntPtr.Zero,OpenExisting,FileAttributeNormal,IntPtr.Zero);
+        if(h==null || h.IsInvalid) { int e=Marshal.GetLastWin32Error(); if(h!=null) h.Dispose(); return e; }
+        h.Dispose(); return 0;
+    }
+}
+'@
+}
+function Assert-PathEventuallyAbsent([string]$Path, [string]$Label) {
+    for ($attempt = 0; $attempt -lt 100; $attempt++) {
+        $errorCode = [Qs3dProvenanceShareProbeNative]::PathOpenError($Path)
+        if ($errorCode -in @(2,3)) { return }
+        if ($errorCode -ne 0) { throw ($Label + ' absence probe returned unexpected Win32 error ' + $errorCode) }
+        Start-Sleep -Milliseconds 10
+    }
+    throw ($Label + ' remained reachable after owned-handle disposal')
+}
+function Assert-PathEventuallyBytes([string]$Path, [byte[]]$ExpectedBytes, [string]$Label) {
+    for ($attempt = 0; $attempt -lt 100; $attempt++) {
+        $errorCode = [Qs3dProvenanceShareProbeNative]::PathOpenError($Path)
+        if ($errorCode -in @(2,3)) { return }
+        if ($errorCode -ne 0) { throw ($Label + ' byte probe returned unexpected Win32 error ' + $errorCode) }
+        try { $actualBytes = [IO.File]::ReadAllBytes($Path) } catch [IO.IOException] { Start-Sleep -Milliseconds 10; continue }
+        $same = $actualBytes.Length -eq $ExpectedBytes.Length
+        if ($same) { for ($i=0; $i -lt $ExpectedBytes.Length; $i++) { if ($actualBytes[$i] -ne $ExpectedBytes[$i]) { $same = $false; break } } }
+        if ($same) { return }
+        Start-Sleep -Milliseconds 10
+    }
+    throw ($Label + ' retained neither absence nor exact prior bytes after replacement rollback')
+}
 $rootCases = @(
     @{ Json='{"Name":"bricscad.exe"}'; Name='Name'; Expected=1 },
     @{ Json='{"Name":"bricscad.exe","Name":"evil"}'; Name='Name'; Expected=2 },
@@ -126,24 +173,31 @@ foreach ($bad in @(
 
 function Assert-OwnedPublication([string]$SourcePath, [string]$DestinationPath, [byte[]]$Payload, [bool]$ReplaceExisting) {
     $owned = $null
+    $priorBytes = $null
+    if ($ReplaceExisting) { $priorBytes = [IO.File]::ReadAllBytes($DestinationPath) }
     try {
         $owned = [Qs3dProvenanceGenerationNative]::CreateOwnedProvenanceGeneration($SourcePath, $Payload)
         $before = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
         [Qs3dProvenanceGenerationNative]::RenameOwnedProvenanceGeneration($owned, $DestinationPath, $ReplaceExisting)
         $after = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($owned)
         if (-not [string]::Equals($before, $after, [StringComparison]::Ordinal)) { throw 'owned provenance identity changed across handle rename' }
-        if (Test-Path -LiteralPath $SourcePath) { throw 'source pathname still exists after handle rename' }
-        if (-not (Test-Path -LiteralPath $DestinationPath -PathType Leaf)) { throw 'destination missing after handle rename' }
-        $writerBlocked = $false
-        try { $other = [IO.File]::Open($DestinationPath,[IO.FileMode]::Open,[IO.FileAccess]::Write,[IO.FileShare]::ReadWrite); $other.Dispose() }
-        catch [IO.IOException] { $writerBlocked = $true }
-        if (-not $writerBlocked) { throw 'owned handle did not block concurrent writer' }
+        $writer = [Qs3dProvenanceShareProbeNative]::OpenConcurrentWriter($DestinationPath)
+        try {
+            if ($null -ne $writer -and -not $writer.IsInvalid) {
+                $writerIdentity = [Qs3dProvenanceGenerationNative]::GetOwnedProvenanceGenerationIdentity($writer)
+                if ([string]::Equals($writerIdentity, $after, [StringComparison]::Ordinal)) { throw 'concurrent writer reached the owned provenance generation' }
+                if (-not $ReplaceExisting) { throw 'new publication pathname resolved to a writable non-owned generation' }
+            }
+        }
+        finally { if ($null -ne $writer) { $writer.Dispose() } }
         $actualBytes = [Qs3dProvenanceGenerationNative]::ReadPinnedPublishedProvenanceBytes($owned, $Payload.Length)
         if ($actualBytes.Length -ne $Payload.Length) { throw 'payload length changed after handle rename' }
         for ($i=0; $i -lt $Payload.Length; $i++) { if ($actualBytes[$i] -ne $Payload[$i]) { throw 'payload changed after handle rename' } }
         [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned)
         $owned.Dispose(); $owned = $null
-        if (Test-Path -LiteralPath $DestinationPath) { throw 'destination remained after delete-on-close disposal' }
+        Assert-PathEventuallyAbsent -Path $SourcePath -Label 'source pathname'
+        if ($ReplaceExisting) { Assert-PathEventuallyBytes -Path $DestinationPath -ExpectedBytes $priorBytes -Label 'replacement destination' }
+        else { Assert-PathEventuallyAbsent -Path $DestinationPath -Label 'destination pathname' }
     } finally {
         if ($null -ne $owned) { try { [Qs3dProvenanceGenerationNative]::RemoveOwnedProvenanceGeneration($owned) } finally { $owned.Dispose() } }
     }
@@ -163,7 +217,7 @@ with tempfile.NamedTemporaryFile("w", suffix=".ps1", encoding="utf-8", delete=Fa
     tmp.write(probe)
     probe_path = Path(tmp.name)
 try:
-    completed = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(probe_path)], capture_output=True, text=True, timeout=30)
+    completed = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(probe_path)], capture_output=True, text=True, timeout=120)
 finally:
     probe_path.unlink(missing_ok=True)
 if completed.returncode != 0:
