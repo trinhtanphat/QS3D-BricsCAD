@@ -442,7 +442,7 @@ public static class Qs3dProvenanceGenerationNative
         var rootOffset = IntPtr.Size == 8 ? 8 : 4;
         var lengthOffset = rootOffset + IntPtr.Size;
         var nameOffset = lengthOffset + sizeof(uint);
-        var bufferSize = checked(nameOffset + nameBytes.Length);
+        var bufferSize = checked(nameOffset + nameBytes.Length + sizeof(char));
         var buffer = Marshal.AllocHGlobal(bufferSize);
         try
         {

@@ -28,6 +28,7 @@ required_tokens = (
     "Assert-JsonPropertyCounts -JsonText $metadataText -ExpectedPropertyCounts $metadataExpectedPropertyCounts",
     "RenameOwnedProvenanceGeneration",
     "SetFileInformationByHandleBuffer",
+    "var bufferSize = checked(nameOffset + nameBytes.Length + sizeof(char));",
     "SetFilePointerEx",
     "Marshal.AllocHGlobal(1)",
     "Marshal.WriteByte(buffer, 0, 1)",
@@ -220,6 +221,21 @@ try {
     Assert-OwnedPublication -SourcePath (Join-Path $probeDir 'first.tmp') -DestinationPath $destinationPath -Payload ([Text.UTF8Encoding]::new($false,$true).GetBytes('{"probe":"first"}'.Replace('\"','"'))) -ReplaceExisting $false
     [IO.File]::WriteAllText($destinationPath,'{"old":true}'.Replace('\"','"'),[Text.UTF8Encoding]::new($false))
     Assert-OwnedPublication -SourcePath (Join-Path $probeDir 'replacement.tmp') -DestinationPath $destinationPath -Payload ([Text.UTF8Encoding]::new($false,$true).GetBytes('{"probe":"replacement"}'.Replace('\"','"'))) -ReplaceExisting $true
+
+    $canonicalName = 'QS3D-BricsCAD-V26.provenance.json'
+    $tempRoot = [IO.Path]::GetTempPath().TrimEnd([IO.Path]::DirectorySeparatorChar)
+    $targetFullPathLength = 106
+    $segmentLength = $targetFullPathLength - $tempRoot.Length - 2 - $canonicalName.Length
+    if ($segmentLength -lt 1) { throw 'native canonical-path probe cannot construct the required path length' }
+    $seed = [Guid]::NewGuid().ToString('N')
+    $segment = if ($segmentLength -le $seed.Length) { $seed.Substring(0, $segmentLength) } else { $seed + ('x' * ($segmentLength - $seed.Length)) }
+    $canonicalProbeDir = Join-Path $tempRoot $segment
+    [IO.Directory]::CreateDirectory($canonicalProbeDir) | Out-Null
+    try {
+        $canonicalDestination = Join-Path $canonicalProbeDir $canonicalName
+        if ($canonicalDestination.Length -ne $targetFullPathLength) { throw 'native canonical-path probe constructed the wrong path length' }
+        Assert-OwnedPublication -SourcePath (Join-Path $canonicalProbeDir 'canonical.tmp') -DestinationPath $canonicalDestination -Payload ([Text.UTF8Encoding]::new($false,$true).GetBytes('{"probe":"canonical"}'.Replace('\"','"'))) -ReplaceExisting $false
+    } finally { if (Test-Path -LiteralPath $canonicalProbeDir) { Remove-Item -LiteralPath $canonicalProbeDir -Recurse -Force -ErrorAction SilentlyContinue } }
 } finally { if (Test-Path -LiteralPath $probeDir) { Remove-Item -LiteralPath $probeDir -Recurse -Force -ErrorAction SilentlyContinue } }
 '''
 
