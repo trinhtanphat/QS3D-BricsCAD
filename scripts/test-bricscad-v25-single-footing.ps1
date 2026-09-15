@@ -218,8 +218,10 @@ function Assert-ChildPath([string]$Root, [string]$Path) {
 
 function Get-ProtectedState {
     # Capture hashes only: never emit machine registration paths or credentials.
-    $registry = Get-ItemProperty -LiteralPath 'HKCU:\Software\Bricsys\BricsCAD\V25x64\en_US\Applications\QS3D' -ErrorAction Stop
-    $loader = [string]$registry.LOADER
+    $registrationPath = 'HKCU:\Software\Bricsys\BricsCAD\V25x64\en_US\Applications\QS3D'
+    $registry = Get-ItemProperty -LiteralPath $registrationPath -ErrorAction SilentlyContinue
+    $registrationExists = $null -ne $registry
+    $loader = if ($registrationExists) { [string]$registry.LOADER } else { $null }
     $flags = @()
     foreach ($provider in @('OpenAiSecureTunnel', 'CloudflareAccount')) {
         $flag = Join-Path ([Environment]::GetFolderPath('ApplicationData')) ('QS3D\MCP\' + $provider + '\autostart.txt')
@@ -229,10 +231,11 @@ function Get-ProtectedState {
         } else { $flags += 'ABSENT' }
     }
     return [ordered]@{
-        loader_value_sha256 = Get-StringHash ([IO.Path]::GetFullPath($loader).ToLowerInvariant())
-        loader_exists = Test-Path -LiteralPath $loader -PathType Leaf
-        loader_sha256 = if (Test-Path -LiteralPath $loader -PathType Leaf) { Get-Hash $loader } else { 'ABSENT' }
-        load_controls = [int]$registry.LOADCTRLS
+        registration_exists = $registrationExists
+        loader_value_sha256 = if ($registrationExists -and -not [string]::IsNullOrWhiteSpace($loader)) { Get-StringHash ([IO.Path]::GetFullPath($loader).ToLowerInvariant()) } else { 'ABSENT' }
+        loader_exists = $registrationExists -and -not [string]::IsNullOrWhiteSpace($loader) -and (Test-Path -LiteralPath $loader -PathType Leaf)
+        loader_sha256 = if ($registrationExists -and -not [string]::IsNullOrWhiteSpace($loader) -and (Test-Path -LiteralPath $loader -PathType Leaf)) { Get-Hash $loader } else { 'ABSENT' }
+        load_controls = if ($registrationExists) { [int]$registry.LOADCTRLS } else { $null }
         tunnel_flags = $flags
         active_tunnel_process_count = Get-Qs3dActiveTunnelProcessCount
     }
@@ -433,7 +436,7 @@ if ((Get-Item -LiteralPath $bricscadExe).VersionInfo.FileMajorPart -ne 25) { thr
 Assert-Qs3dNoBricsCadProcess
 if ((Get-Qs3dActiveTunnelProcessCount) -ne 0) { throw 'Tunnels must remain stopped.' }
 $protectedBefore = Get-ProtectedState
-if ($protectedBefore.load_controls -ne 4) { throw 'An OnCommand loader is required for exact NETLOAD qualification.' }
+if ($protectedBefore.registration_exists -and $protectedBefore.load_controls -ne 4) { throw 'An existing loader must use OnCommand for exact NETLOAD qualification.' }
 $probeSource = Join-Path $repoRoot 'tests\QS3D.LocalQualification.V25\Local022NativeFootingProbeCommands.cs'
 $probeProject = Join-Path $repoRoot 'tests\QS3D.LocalQualification.V25\QS3D.LocalQualification.V25.csproj'
 $probePdb = [IO.Path]::ChangeExtension($ProbeDll, '.pdb')
