@@ -286,7 +286,8 @@ namespace QS3D.BricsCAD.V25
         private static LifeSessionOne LifeRequireSessionOne(LifeContextState context)
         {
             var state = _lifeSessionOne ?? throw new InvalidOperationException("Curved lifecycle session one is missing.");
-            LifeRequire(ReferenceEquals(state.Document, context.Document) && ReferenceEquals(state.Project, context.Project) && state.Nonce == context.Nonce,
+            LifeRequire(ReferenceEquals(state.Document, context.Document) &&
+                string.Equals(state.ProjectId, context.Project.ProjectId, StringComparison.Ordinal) && state.Nonce == context.Nonce,
                 "curved lifecycle session one context changed");
             return state;
         }
@@ -294,7 +295,8 @@ namespace QS3D.BricsCAD.V25
         private static LifeSessionTwo LifeRequireSessionTwo(LifeContextState context)
         {
             var state = _lifeSessionTwo ?? throw new InvalidOperationException("Curved lifecycle session two is missing.");
-            LifeRequire(ReferenceEquals(state.Document, context.Document) && ReferenceEquals(state.Project, context.Project) && state.Nonce == context.Nonce,
+            LifeRequire(ReferenceEquals(state.Document, context.Document) &&
+                string.Equals(state.ProjectId, context.Project.ProjectId, StringComparison.Ordinal) && state.Nonce == context.Nonce,
                 "curved lifecycle session two context changed");
             return state;
         }
@@ -460,8 +462,8 @@ namespace QS3D.BricsCAD.V25
         private sealed class LifeSessionOne
         {
             public LifeSessionOne(Document document, ProjectState project, string nonce, IReadOnlyList<string> ids, ProjectPersistenceCheckpoint before)
-            { Document = document; Project = project; Nonce = nonce; ElementIds = ids; Before = before; }
-            public Document Document { get; } public ProjectState Project { get; } public string Nonce { get; } public IReadOnlyList<string> ElementIds { get; }
+            { Document = document; Project = project; ProjectId = project.ProjectId; Nonce = nonce; ElementIds = ids; Before = before; }
+            public Document Document { get; } public ProjectState Project { get; } public string ProjectId { get; } public string Nonce { get; } public IReadOnlyList<string> ElementIds { get; }
             public ProjectPersistenceCheckpoint Before { get; } public ProjectPersistenceCheckpoint? After { get; set; }
             public List<string> AfterHandles { get; set; } = new List<string>(); public List<string> RedoHandles { get; set; } = new List<string>();
             public bool UndoGeneratedAbsent { get; set; } public bool UndoCoherent { get; set; } public bool RedoCoherent { get; set; }
@@ -470,8 +472,8 @@ namespace QS3D.BricsCAD.V25
         private sealed class LifeSessionTwo
         {
             public LifeSessionTwo(Document document, ProjectState project, string nonce, IReadOnlyList<string> ids, List<string> reopened, ProjectPersistenceCheckpoint checkpoint, bool reopenCoherent)
-            { Document = document; Project = project; Nonce = nonce; ElementIds = ids; ReopenedHandles = reopened; Reopened = checkpoint; ReopenCoherent = reopenCoherent; }
-            public Document Document { get; } public ProjectState Project { get; } public string Nonce { get; } public IReadOnlyList<string> ElementIds { get; }
+            { Document = document; Project = project; ProjectId = project.ProjectId; Nonce = nonce; ElementIds = ids; ReopenedHandles = reopened; Reopened = checkpoint; ReopenCoherent = reopenCoherent; }
+            public Document Document { get; } public ProjectState Project { get; } public string ProjectId { get; } public string Nonce { get; } public IReadOnlyList<string> ElementIds { get; }
             public List<string> ReopenedHandles { get; } public ProjectPersistenceCheckpoint Reopened { get; }
             public bool ReopenCoherent { get; }
             public List<string> RebuiltHandles { get; set; } = new List<string>(); public ProjectPersistenceCheckpoint? Rebuilt { get; set; }
