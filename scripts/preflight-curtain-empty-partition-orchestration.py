@@ -88,7 +88,8 @@ if body.count('allowPostCommitUi: false') != 2:
 for token in (
     'CurtainWallBuildSelectionGuard.Validate(document, project)',
     'ProjectStateSnapshot.Capture(project)',
-    'CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore)',
+    'var undoAdmission = CurtainWallUndoCoordinator.OwnerStateSnapshot.Capture(project, undoBefore.OwnerIds)',
+    'CurtainWallUndoCoordinator.BeginTransition(document, project, undoBefore, undoAdmission)',
     'using (var commandTransaction = document.Database.TransactionManager.StartTransaction())',
     'undoTransition.StageAfter(project, commandTransaction, undoAfter)',
     'commandTransaction.Commit();',
