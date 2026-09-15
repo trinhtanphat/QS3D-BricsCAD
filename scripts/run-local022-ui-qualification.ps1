@@ -37,8 +37,8 @@ if ($RenderExperiment -and ($NativeApi -or $UiDriver -cne 'OBSERVED_CLICK_V2')) 
 }
 $operatorWaitPolicy = if ($PauseForOperator) { 'PAUSE_FOR_OPERATOR_V1' } else { 'WALL_CLOCK_V1' }
 $taskRepo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$source = '99c6dd4a91fcbb0bb911b2593ca2f84246df451e'
-$v25PackageSha256 = '3ef6d526f60815b123b35fe239e404c1a9c47ff2e8053f9985c8edc7069a5474'
+$source = 'e1c2cea395db11365bdba6f113a5ba7583e88cc3'
+$v25PackageSha256 = '6aa178ebd1982880f1f4a5e13c6153fd2647ac9fe1ebb18fd61f2c6ebbff3845'
 # Matched V25/V26 identities are frozen; V26 still requires a cleaned V25 predecessor.
 $base = Join-Path $taskRepo 'artifacts\issue-5718-local022'
 $runRoot = Join-Path $base $AllocationName
@@ -80,6 +80,25 @@ function Assert-NoLocal022Hosts {
     if (@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(cloudflared|tunnel-client)' }).Count) {
         throw 'Existing tunnel; no mutation.'
     }
+}
+function Assert-Local022CurrentMainProductIdentity([string]$RepoRoot, [string]$FrozenSource) {
+    $currentMain = (& git -C $RepoRoot rev-parse --verify origin/main).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $currentMain -cnotmatch '^[a-f0-9]{40}$') { throw 'Could not resolve protected origin/main before LOCAL-022 execution.' }
+    & git -C $RepoRoot merge-base --is-ancestor $FrozenSource $currentMain
+    if ($LASTEXITCODE -ne 0) { throw 'Frozen LOCAL-022 product source is not an ancestor of protected main.' }
+    $productPathspecs = @(
+        'src/QS3D.BricsCAD.V25/', 'src/QS3D.BricsCAD.V26/', 'src/QS3D.Core/',
+        'external/QS3D-Platform', '.gitmodules',
+        'scripts/package-v25.ps1', 'scripts/package-v26.ps1',
+        'scripts/new-v26-candidate-provenance.ps1', 'scripts/assert-v26-host-reference-safety.ps1',
+        'scripts/build-v25-with-stable-references.ps1', 'scripts/build-v26-with-stable-references.ps1',
+        'scripts/assert-v26-candidate-identity.ps1', 'scripts/write-v26-package-checksum.ps1'
+    )
+    & git -C $RepoRoot diff --quiet --no-ext-diff "$FrozenSource..$currentMain" -- @productPathspecs
+    $driftStatus = $LASTEXITCODE
+    if ($driftStatus -eq 1) { throw 'Protected main product/package identity advanced beyond the frozen LOCAL-022 pair.' }
+    if ($driftStatus -ne 0) { throw "Could not classify protected-main product/package drift (git diff exit=$driftStatus)." }
+    return $currentMain
 }
 function Assert-Local022NativeV25Predecessor($Receipt, $Allocation, $Restoration, [string]$Source, [string]$PackageHash) {
     # Current runners record explicit mode fields in both artifacts. Missing
@@ -134,6 +153,7 @@ $remoteHead = @(& git -C $taskRepo ls-remote origin ('refs/heads/' + (& git -C $
 if ($LASTEXITCODE -ne 0 -or $remoteHead.Count -ne 1 -or -not $remoteHead[0].StartsWith($HarnessSha + "`t")) {
     throw 'Exact harness must be pushed before licensed execution.'
 }
+[void](Assert-Local022CurrentMainProductIdentity $taskRepo $source)
 Assert-NoLocal022Hosts
 foreach ($path in @($runRoot,$restoreRoot)) { if (Test-Path -LiteralPath $path) { throw 'Consumed allocation.' } }
 if ($HostMajor -eq 26) {
@@ -196,7 +216,7 @@ try {
     $parameters = @{
         ProductDir = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor"
         PackageZip = Join-Path $PackageRoot "QS3D-BricsCAD-V$HostMajor.zip"
-        PackageSha256 = if ($HostMajor -eq 25) { $v25PackageSha256 } else { 'c738c1ae1da5569a61bd58f2776d8715e3850d1bf0e27d3f219cbcf31cff2bd4' }
+        PackageSha256 = if ($HostMajor -eq 25) { $v25PackageSha256 } else { '670103ca6ca7ed20749fed77acd8fe255da76fa3cd6f12702af92b7f222038f5' }
         ProductSourceSha = $source
         ProbeDll = Join-Path $taskRepo "tests\QS3D.LocalQualification.V$HostMajor\bin\Release\$framework\QS3D.LocalQualification.V$HostMajor.dll"
         ArtifactDir = $runRoot

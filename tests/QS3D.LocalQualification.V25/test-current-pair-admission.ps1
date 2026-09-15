@@ -1,9 +1,9 @@
 $ErrorActionPreference = 'Stop'
 $repo = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$source = '99c6dd4a91fcbb0bb911b2593ca2f84246df451e'
-$v25Hash = '3ef6d526f60815b123b35fe239e404c1a9c47ff2e8053f9985c8edc7069a5474'
-$v26Hash = 'c738c1ae1da5569a61bd58f2776d8715e3850d1bf0e27d3f219cbcf31cff2bd4'
-$version = '0.2.0-preview.23'
+$source = 'e1c2cea395db11365bdba6f113a5ba7583e88cc3'
+$v25Hash = '6aa178ebd1982880f1f4a5e13c6153fd2647ac9fe1ebb18fd61f2c6ebbff3845'
+$v26Hash = '670103ca6ca7ed20749fed77acd8fe255da76fa3cd6f12702af92b7f222038f5'
+$version = '0.2.0-preview.24'
 
 function Read-Script([string]$RelativePath) {
     return [IO.File]::ReadAllText((Join-Path $repo $RelativePath))
@@ -37,6 +37,25 @@ function Assert-ScriptStageWitnessContract([string]$Text) {
     )) { Assert-ContainsLiteral $Text $required 'V25 script-stage witness contract' }
 }
 
+function Assert-V26ProvenanceContract([string]$Text) {
+    foreach ($required in @(
+        "Assert-JsonPropertySet `$provenance @('product', 'target', 'releaseTag', 'productVersion', 'sourceCommit', 'packageSha256', 'installerSha256', 'hostReferences')",
+        '9330806cf29e1e6b01758191aa3d9e8d301d9d3125470b6d139f78c7772f9740',
+        'if (@($provenance.hostReferences).Count -ne 4)',
+        "Assert-JsonPropertySet `$record @('name', 'length', 'sha256')",
+        'Candidate provenance host-reference bytes differ from the installed V26 host.'
+    )) { Assert-ContainsLiteral $Text $required 'V26 provenance admission' }
+}
+function Assert-CurrentMainProductIdentityContract([string]$Text) {
+    foreach ($required in @(
+        'function Assert-Local022CurrentMainProductIdentity', 'rev-parse --verify origin/main',
+        'merge-base --is-ancestor', 'diff --quiet --no-ext-diff',
+        'src/QS3D.BricsCAD.V25/', 'src/QS3D.BricsCAD.V26/', 'src/QS3D.Core/',
+        'external/QS3D-Platform', 'scripts/package-v25.ps1', 'scripts/package-v26.ps1',
+        'scripts/new-v26-candidate-provenance.ps1', 'scripts/assert-v26-candidate-identity.ps1',
+        'Protected main product/package identity advanced beyond the frozen LOCAL-022 pair.'
+    )) { Assert-ContainsLiteral $Text $required 'current-main product identity gate' }
+}
 $v25 = Read-Script 'scripts\test-bricscad-v25-single-footing.ps1'
 $v26 = Read-Script 'scripts\test-bricscad-v26-single-footing.ps1'
 $wrapper = Read-Script 'scripts\run-local022-ui-qualification.ps1'
@@ -54,6 +73,32 @@ if ($wrapper.Contains('Current-source V26 package unavailable')) {
 }
 Assert-NativeV25PredecessorGate $wrapper
 Assert-ScriptStageWitnessContract $v25
+Assert-V26ProvenanceContract $v26
+$provenanceMutated = $v26.Replace("'installerSha256', 'hostReferences'", "'installerSha256'")
+$provenanceNegativeRejected = $false
+try { Assert-V26ProvenanceContract $provenanceMutated } catch { $provenanceNegativeRejected = $true }
+if (-not $provenanceNegativeRejected) { throw 'negative V26 provenance schema mutation was not rejected' }
+Assert-CurrentMainProductIdentityContract $wrapper
+$parseErrors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $repo 'scripts\run-local022-ui-qualification.ps1'),[ref]$null,[ref]$parseErrors)
+if($parseErrors.Count){throw 'wrapper AST parse failed'}
+$fn=@($ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -ceq 'Assert-Local022CurrentMainProductIdentity'},$true))
+if($fn.Count -ne 1){throw 'current-main product identity helper is unavailable'}
+. ([scriptblock]::Create($fn[0].Extent.Text))
+$tmp=Join-Path ([IO.Path]::GetTempPath()) ('local022-main-identity-'+[Guid]::NewGuid().ToString('N'))
+try {
+    git init -q $tmp; git -C $tmp config user.email 'local022@test.invalid'; git -C $tmp config user.name 'LOCAL022 Test'
+    New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'docs'),(Join-Path $tmp 'src\QS3D.Core') | Out-Null
+    Set-Content (Join-Path $tmp 'docs\note.txt') 'source'; Set-Content (Join-Path $tmp 'src\QS3D.Core\core.txt') 'source'
+    git -C $tmp add .; git -C $tmp commit -q -m source; $frozen=(git -C $tmp rev-parse HEAD).Trim()
+    Set-Content (Join-Path $tmp 'docs\note.txt') 'harmless'; git -C $tmp add .; git -C $tmp commit -q -m harmless
+    git -C $tmp update-ref refs/remotes/origin/main HEAD
+    [void](Assert-Local022CurrentMainProductIdentity $tmp $frozen)
+    Set-Content (Join-Path $tmp 'src\QS3D.Core\core.txt') 'drift'; git -C $tmp add .; git -C $tmp commit -q -m product-drift
+    git -C $tmp update-ref refs/remotes/origin/main HEAD
+    $rejected=$false; try { Assert-Local022CurrentMainProductIdentity $tmp $frozen } catch { $rejected=$true }
+    if(-not $rejected){throw 'product drift was not rejected'}
+} finally { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 $witnessMutated = $v25.Replace('after_phase_command', 'after_phase_commanX')
 $witnessNegativeRejected = $false
 try { Assert-ScriptStageWitnessContract $witnessMutated } catch { $witnessNegativeRejected = $true }
