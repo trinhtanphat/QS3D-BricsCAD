@@ -6,6 +6,7 @@ import tempfile
 source = Path("scripts/assert-v26-candidate-identity.ps1").read_text(encoding="utf-8")
 
 required_tokens = (
+    "function Normalize-JsonIdentityText",
     "function Get-JsonPropertyOccurrenceCount",
     "$provenanceText = Read-HeldText",
     "$metadataText = $reader.ReadToEnd()",
@@ -15,7 +16,7 @@ for token in required_tokens:
     if token not in source:
         raise SystemExit(f"ERROR: V26 candidate identity path-scope contract missing anchor: {token}")
 
-helper_start = source.index("function Get-JsonPropertyOccurrenceCount")
+helper_start = source.index("function Normalize-JsonIdentityText")
 helper_end = source.index("if ([string]::IsNullOrWhiteSpace($ExpectedInstallerSha256)", helper_start)
 helper_block = source[helper_start:helper_end]
 
@@ -49,6 +50,14 @@ $cases = @(
     @{ Json='{"framework":"net8.0-windows","extension":[{"framework":"ignored"}]}'; Name='framework'; Expected=1 },
     @{ Json='{"schemaVersion":2,"extension":{"schemaVersion":999}}'; Name='schemaVersion'; Expected=1 }
 )
+$bomJson = ([string][char]0xFEFF) + '{"product":"QS3D"}'
+$normalizedBomJson = Normalize-JsonIdentityText -JsonText $bomJson
+try { $bomParsed = $normalizedBomJson | ConvertFrom-Json -ErrorAction Stop } catch { throw ('single leading UTF-8 BOM JSON failed after normalization: ' + $_.Exception.Message) }
+if ([string]$bomParsed.product -cne 'QS3D') { throw 'normalized single-BOM JSON parsed to wrong identity' }
+$doubleBomRejected = $false
+try { $null = Normalize-JsonIdentityText -JsonText (([string][char]0xFEFF)+([string][char]0xFEFF)+'{"product":"QS3D"}') } catch { $doubleBomRejected = $true }
+if (-not $doubleBomRejected) { throw 'multiple leading BOM markers were admitted' }
+
 foreach ($case in $cases) {
     $actual = Get-JsonPropertyOccurrenceCount -JsonText $case.Json -PropertyName $case.Name
     if ($actual -ne $case.Expected) {
