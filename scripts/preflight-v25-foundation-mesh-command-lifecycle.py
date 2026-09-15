@@ -50,7 +50,6 @@ if not errors:
         'transaction.Commit();',
         'cadCommitted = true;',
         'catch (ObjectDisposedException operationError)',
-        'if (cadCommitted)',
         'cleanupWarning = true;',
         'rollback.Restore(project);',
         'new AggregateException(operationError, restoreError)',
@@ -59,6 +58,20 @@ if not errors:
     for token in required_builder:
         if token not in builder:
             errors.append("FoundationMeshSolidBuilder.cs missing atomic committed-outcome contract: " + token)
+
+    disposed_catch = builder.find('catch (ObjectDisposedException operationError)')
+    generic_catch = builder.find('catch (Exception operationError)', disposed_catch + 1)
+    if disposed_catch < 0 or generic_catch < 0:
+        errors.append("Foundation Mesh must keep separate ObjectDisposedException and generic exception paths")
+    else:
+        disposed_body = builder[disposed_catch:generic_catch]
+        generic_tail = builder[generic_catch:builder.find('return new FoundationMeshBuildResult', generic_catch)]
+        if 'if (cadCommitted)' not in disposed_body or 'cleanupWarning = true;' not in disposed_body:
+            errors.append("Only native ObjectDisposedException cleanup after durable commit may become a cleanup warning")
+        if 'cleanupWarning = true;' in generic_tail:
+            errors.append("Generic post-commit exceptions must not be swallowed as cleanup success; rethrow them like ColumnTieSolidBuilder")
+        if 'throw;' not in generic_tail:
+            errors.append("Generic Foundation Mesh exceptions must propagate after any required precommit rollback")
 
     for forbidden in ('document.Editor.SelectImplied()', 'document.Editor.GetSelection()', 'document.Editor.SetImpliedSelection('):
         if forbidden in builder:
@@ -70,4 +83,4 @@ if errors:
     print("FAILED with", len(errors), "error(s).")
     sys.exit(1)
 
-print("PASS: Foundation Mesh uses one admitted selection snapshot, exact document/native-generation affinity, rollback-owned precommit failure, committed post-cleanup outcome, and redacted generation-safe UI publication.")
+print("PASS: Foundation Mesh uses one admitted selection snapshot, exact document/native-generation affinity, rollback-owned precommit failure, bounded native-disposal postcommit warning, and redacted generation-safe UI publication.")
