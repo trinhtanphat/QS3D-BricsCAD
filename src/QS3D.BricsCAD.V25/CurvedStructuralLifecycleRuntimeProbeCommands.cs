@@ -221,6 +221,11 @@ namespace QS3D.BricsCAD.V25
             });
         });
 
+        private static void LifeBuild(bool slab)
+        {
+            LifeSelect(slab);
+            new Build3DCommands().Build3D();
+        }
         private static void LifeSelect(bool slab)
         {
             var context = LifeContext(true);
@@ -234,12 +239,6 @@ namespace QS3D.BricsCAD.V25
             var objectIds = CadHandleService.Resolve(context.Document, sourceHandles);
             LifeRequire(objectIds.Count == sourceHandles.Count, "source selection did not resolve");
             context.Document.Editor.SetImpliedSelection(objectIds.ToArray());
-        }
-
-        private static void LifeBuild(bool slab)
-        {
-            LifeSelect(slab);
-            new Build3DCommands().Build3D();
         }
 
         private static LifeDocumentState LifeSeedDocument(Document document, ProjectState project)
