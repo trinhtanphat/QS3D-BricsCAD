@@ -16,7 +16,6 @@ $windowInteropPath = Join-Path $PSScriptRoot "bricscad-runner-window-interop.ps1
 if (-not (Test-Path -LiteralPath $windowInteropPath -PathType Leaf)) { throw "Curved lifecycle window helper is missing." }
 . $windowInteropPath
 
-# Native vocabulary retained by the qualification contract: _.UNDO "_Mark" "_Back" "_Begin" "_End"
 function Read-LifeMarker {
     param([Parameter(Mandatory = $true)][string]$Path)
     $marker = @{}
@@ -51,9 +50,11 @@ function Remove-LifeFile {
     if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force -ErrorAction Stop }
 }
 function Wait-LifeMarker {
-    param([string]$Path, [Diagnostics.Process]$Process, [datetime]$Deadline)
+    param([string]$Path, [Diagnostics.Process]$Process, [datetime]$Deadline, [string]$FailurePath = "")
     while ((Get-Date) -lt $Deadline) {
         if (Test-Path -LiteralPath $Path -PathType Leaf) { return }
+        if ($FailurePath.Length -gt 0 -and (Test-Path -LiteralPath $FailurePath -PathType Leaf)) { throw "Curved lifecycle published a failure marker before the expected phase marker." }
+        $null = Close-Qs3dProxyInformationDialog -Process $Process
         $Process.Refresh()
         if ($Process.HasExited) { throw "BricsCAD exited before the curved lifecycle marker." }
         Start-Sleep -Milliseconds 500
@@ -98,20 +99,23 @@ $fixtureHash = (Get-FileHash -LiteralPath $FixtureDwg -Algorithm SHA256).Hash.To
 foreach ($drawing in @($drawingA, $drawingB)) { if ((Get-FileHash -LiteralPath $drawing -Algorithm SHA256).Hash.ToUpperInvariant() -ne $fixtureHash) { throw "Curved lifecycle disposable copy hash mismatch." } }
 $resultPath = Join-Path $ArtifactDir "curved-structural-lifecycle-result.txt"
 $phasePath = Join-Path $ArtifactDir "curved-structural-lifecycle-session1.txt"
-$script1 = Join-Path $ArtifactDir "curved-structural-lifecycle-session1.private.scr"
-$script2 = Join-Path $ArtifactDir "curved-structural-lifecycle-session2.private.scr"
+$scriptUndo = Join-Path $ArtifactDir "curved-structural-lifecycle-undo.private.scr"
+$scriptRedo = Join-Path $ArtifactDir "curved-structural-lifecycle-redo.private.scr"
+$scriptReopen = Join-Path $ArtifactDir "curved-structural-lifecycle-reopen.private.scr"
 $metadataPath = Join-Path $ArtifactDir "curved-structural-lifecycle-metadata.json"
 $nativeInsunits = if ($NativeDrawingUnit -eq "Meter") { "6" } else { "4" }
 $nonce = [Guid]::NewGuid().ToString("N")
 $environmentNames = @("QS3D_CURVED_LIFECYCLE_RESULT","QS3D_CURVED_LIFECYCLE_PHASE_RESULT","QS3D_CURVED_LIFECYCLE_NONCE","QS3D_CURVED_LIFECYCLE_SOURCE_SHA","QS3D_CURVED_LIFECYCLE_DWG_A","QS3D_CURVED_LIFECYCLE_DWG_B","QS3D_CURVED_LIFECYCLE_EXPECTED_REOPEN_FINGERPRINT")
 $oldEnvironment = @{}
 foreach ($name in $environmentNames) { $oldEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process") }
-$process1 = $null
-$process2 = $null
+$processUndo = $null
+$processRedo = $null
+$processReopen = $null
 $process_cleanup_verified = $false
 $script_cleanup_verified = $false
 $sidecar_cleanup_verified = $false
 $drawing_restore_verified = $false
+$undoMarker = $null
 $phaseMarker = $null
 $finalMarker = $null
 $startedAt = Get-Date
@@ -122,37 +126,46 @@ try {
     $env:QS3D_CURVED_LIFECYCLE_SOURCE_SHA = $ExpectedSourceSha
     $env:QS3D_CURVED_LIFECYCLE_DWG_A = $drawingA
     $env:QS3D_CURVED_LIFECYCLE_DWG_B = $drawingB
-    $session1 = @(
+
+    $undoSession = @(
         "FILEDIA","0","CMDECHO","1","TILEMODE","1","INSUNITS",$nativeInsunits,"UCS","W",
-        "NETLOAD",('"'+$PluginDll+'"'),
-        "QS3DCURVEDLIFEPREPARE","_.UNDO","_Mark",
-        "QS3DCURVEDLIFEBUILDBEAMS",
-        "QS3DCURVEDLIFEBUILDSLAB","QS3DCURVEDLIFECAPTUREBASELINE",
-        "_.UNDO","_Back","QS3DCURVEDLIFECHECKUNDO",
-        "_.UNDO","_Begin","QS3DCURVEDLIFEBUILDBEAMS",
-        "QS3DCURVEDLIFEBUILDSLAB","QS3DCURVEDLIFECAPTUREBASELINE",
-        "_.UNDO","_End","_.U","_.REDO","QS3DCURVEDLIFECAPTUREREDO","QS3DCURVEDLIFECHECKREDO",
+        "NETLOAD",('"'+$PluginDll+'"'),"QS3DCURVEDLIFEPREPARE",
+        "QS3DCURVEDLIFEBUILDBEAMS","QS3DCURVEDLIFEBUILDSLAB","QS3DCURVEDLIFECAPTUREBASELINE",
+        "_.U","_.U","QS3DCURVEDLIFECHECKUNDO","QS3DCURVEDLIFEUNDOPROOF",
+        "_.CLOSE","_N","_.QUIT","_N"
+    )
+    [IO.File]::WriteAllLines($scriptUndo, $undoSession, [Text.Encoding]::ASCII)
+    $argsUndo = '"' + $drawingA + '" /P "' + $Profile + '" /B "' + $scriptUndo + '"'
+    $processUndo = Start-Process -FilePath $bricscadExe -ArgumentList $argsUndo -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
+    Wait-LifeMarker -Path $phasePath -Process $processUndo -Deadline ((Get-Date).AddSeconds($StartupTimeoutSeconds)) -FailurePath $resultPath
+    $undoMarker = Read-LifeMarker -Path $phasePath
+    foreach ($pair in @(@("status","PASS"),@("command","QS3DCURVEDLIFEUNDOPROOF"),@("undo_coherent","true"),@("undo_generated_absent","true"),@("generated_count","4"))) { Require-LifeValue -Marker $undoMarker -Key $pair[0] -Expected $pair[1] }
+    if (-not $processUndo.WaitForExit(30000)) { throw "Curved lifecycle Undo-only process did not exit gracefully." }
+    if ((Get-FileHash -LiteralPath $drawingA -Algorithm SHA256).Hash.ToUpperInvariant() -ne $fixtureHash) { throw "Curved lifecycle Undo-only process did not discard drawing A changes." }
+    $undoSidecar = [IO.Path]::ChangeExtension($drawingA, ".qsdb")
+    $undoPrivate = @($undoSidecar,($undoSidecar+".bak"),($undoSidecar+".lock"),[IO.Path]::ChangeExtension($drawingA,".dwl"),[IO.Path]::ChangeExtension($drawingA,".dwl2"),[IO.Path]::ChangeExtension($drawingA,".bak"))
+    if (@($undoPrivate | Where-Object { Test-Path -LiteralPath $_ }).Count -gt 0) { throw "Curved lifecycle Undo-only process left private drawing state." }
+    Remove-LifeFile -Path $phasePath
+
+    $redoSession = @(
+        "FILEDIA","0","CMDECHO","1","TILEMODE","1","INSUNITS",$nativeInsunits,"UCS","W",
+        "NETLOAD",('"'+$PluginDll+'"'),"QS3DCURVEDLIFEPREPARE",
+        "QS3DCURVEDLIFEBUILDBEAMS","QS3DCURVEDLIFEBUILDSLAB","QS3DCURVEDLIFECAPTUREBASELINE",
+        "_.U","_.U","_.REDO","_.REDO","QS3DCURVEDLIFECAPTUREREDO","QS3DCURVEDLIFECHECKREDO",
         "QS3DSAVE","_.QSAVE","QS3DCURVEDLIFESESSION1","_.CLOSE","_N","_.QUIT","_N"
     )
-    [IO.File]::WriteAllLines($script1, $session1, [Text.Encoding]::ASCII)
-    $args1 = '"' + $drawingA + '" /P "' + $Profile + '" /B "' + $script1 + '"'
-    $process1 = Start-Process -FilePath $bricscadExe -ArgumentList $args1 -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
-    $deadline = (Get-Date).AddSeconds($StartupTimeoutSeconds)
-    while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $phasePath -PathType Leaf)) {
-        if (Test-Path -LiteralPath $resultPath -PathType Leaf) { break }
-        $null = Close-Qs3dProxyInformationDialog -Process $process1
-        $process1.Refresh(); if ($process1.HasExited) { throw "BricsCAD session one exited before its marker." }
-        Start-Sleep -Milliseconds 500
-    }
-    if (-not (Test-Path -LiteralPath $phasePath -PathType Leaf)) { throw "Curved lifecycle session one did not publish PASS marker." }
+    [IO.File]::WriteAllLines($scriptRedo, $redoSession, [Text.Encoding]::ASCII)
+    $argsRedo = '"' + $drawingA + '" /P "' + $Profile + '" /B "' + $scriptRedo + '"'
+    $processRedo = Start-Process -FilePath $bricscadExe -ArgumentList $argsRedo -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
+    Wait-LifeMarker -Path $phasePath -Process $processRedo -Deadline ((Get-Date).AddSeconds($StartupTimeoutSeconds)) -FailurePath $resultPath
     $phaseMarker = Read-LifeMarker -Path $phasePath
-    foreach ($pair in @(@("status","PASS"),@("command","QS3DCURVEDLIFESESSION1"),@("undo_coherent","true"),@("redo_coherent","true"),@("undo_generated_absent","true"),@("saved_checkpoint_matches","true"),@("generated_count","4"))) { Require-LifeValue -Marker $phaseMarker -Key $pair[0] -Expected $pair[1] }
+    foreach ($pair in @(@("status","PASS"),@("command","QS3DCURVEDLIFESESSION1"),@("redo_coherent","true"),@("saved_checkpoint_matches","true"),@("generated_count","4"))) { Require-LifeValue -Marker $phaseMarker -Key $pair[0] -Expected $pair[1] }
     $expectedReopenFingerprint = [string]$phaseMarker["reopen_fingerprint"]
     if ($expectedReopenFingerprint -notmatch '^[0-9A-F]{64}$') { throw "Curved lifecycle reopen fingerprint is invalid." }
     $env:QS3D_CURVED_LIFECYCLE_EXPECTED_REOPEN_FINGERPRINT = $expectedReopenFingerprint
-    if (-not $process1.WaitForExit(30000)) { throw "Curved lifecycle session one did not exit gracefully." }
+    if (-not $processRedo.WaitForExit(30000)) { throw "Curved lifecycle Redo/save process did not exit gracefully." }
 
-    $session2 = @(
+    $reopenSession = @(
         "FILEDIA","0","CMDECHO","1","TILEMODE","1","INSUNITS",$nativeInsunits,"UCS","W",
         "NETLOAD",('"'+$PluginDll+'"'),"QS3DCURVEDLIFEREOPEN",
         "QS3DCURVEDLIFEBUILDBEAMS","QS3DCURVEDLIFEBUILDSLAB","QS3DCURVEDLIFEAFTERREBUILD",
@@ -160,20 +173,21 @@ try {
         "QS3DCURVEDLIFEPREPAREB","QS3DCURVEDLIFEBUILDBEAMS","QS3DCURVEDLIFEBUILDSLAB","QS3DCURVEDLIFECAPTUREB",
         "QS3DCURVEDLIFEACTIVATEA","QS3DCURVEDLIFECHECKA","QS3DCURVEDLIFEACTIVATEB","QS3DCURVEDLIFECOMPLETE","_.QUIT","_N"
     )
-    [IO.File]::WriteAllLines($script2, $session2, [Text.Encoding]::ASCII)
-    $args2 = '"' + $drawingA + '" /P "' + $Profile + '" /B "' + $script2 + '"'
-    $process2 = Start-Process -FilePath $bricscadExe -ArgumentList $args2 -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
-    Wait-LifeMarker -Path $resultPath -Process $process2 -Deadline ((Get-Date).AddSeconds($StartupTimeoutSeconds))
+    [IO.File]::WriteAllLines($scriptReopen, $reopenSession, [Text.Encoding]::ASCII)
+    $argsReopen = '"' + $drawingA + '" /P "' + $Profile + '" /B "' + $scriptReopen + '"'
+    $processReopen = Start-Process -FilePath $bricscadExe -ArgumentList $argsReopen -PassThru -WindowStyle Hidden -WorkingDirectory $ArtifactDir
+    Wait-LifeMarker -Path $resultPath -Process $processReopen -Deadline ((Get-Date).AddSeconds($StartupTimeoutSeconds))
     $finalMarker = Read-LifeMarker -Path $resultPath
     foreach ($pair in @(@("status","PASS"),@("command","QS3DCURVEDLIFECOMPLETE"),@("reopen_coherent","true"),@("rebuild_coherent","true"),@("old_generated_removed","true"),@("new_generated_disjoint","true"),@("rebuild_counts_stable","true"),@("multi_dwg_isolated","true"),@("drawing_a_unchanged","true"),@("drawing_b_unchanged","true"),@("generated_count","4"),@("error_code","NONE"))) { Require-LifeValue -Marker $finalMarker -Key $pair[0] -Expected $pair[1] }
-    if (-not $process2.WaitForExit(30000)) { throw "Curved lifecycle session two did not exit gracefully." }
+    if (-not $processReopen.WaitForExit(30000)) { throw "Curved lifecycle cold-reopen process did not exit gracefully." }
 }
 finally {
-    Stop-LifeProcess -Process $process1
-    Stop-LifeProcess -Process $process2
+    Stop-LifeProcess -Process $processUndo
+    Stop-LifeProcess -Process $processRedo
+    Stop-LifeProcess -Process $processReopen
     $process_cleanup_verified = Wait-Qs3dNoExactBricsCadProcesses -ExpectedExecutable $bricscadExe -TimeoutSeconds 30
-    foreach ($script in @($script1,$script2)) { Remove-LifeFile -Path $script }
-    $script_cleanup_verified = -not (Test-Path -LiteralPath $script1) -and -not (Test-Path -LiteralPath $script2)
+    foreach ($script in @($scriptUndo,$scriptRedo,$scriptReopen)) { Remove-LifeFile -Path $script }
+    $script_cleanup_verified = -not (Test-Path -LiteralPath $scriptUndo) -and -not (Test-Path -LiteralPath $scriptRedo) -and -not (Test-Path -LiteralPath $scriptReopen)
     foreach ($drawing in @($drawingA,$drawingB)) {
         $sidecar = [IO.Path]::ChangeExtension($drawing, ".qsdb")
         foreach ($private in @($sidecar,($sidecar+".bak"),($sidecar+".lock"),[IO.Path]::ChangeExtension($drawing,".dwl"),[IO.Path]::ChangeExtension($drawing,".dwl2"),[IO.Path]::ChangeExtension($drawing,".bak"))) { Remove-LifeFile -Path $private }
@@ -199,7 +213,7 @@ $metadata = [ordered]@{
     core_sha256 = (Get-FileHash -LiteralPath $coreDll -Algorithm SHA256).Hash.ToUpperInvariant()
     drawing_sha256 = $fixtureHash; process_cleanup_verified = $process_cleanup_verified
     script_cleanup_verified = $script_cleanup_verified; sidecar_cleanup_verified = $sidecar_cleanup_verified
-    drawing_restore_verified = $drawing_restore_verified; marker = $finalMarker
+    drawing_restore_verified = $drawing_restore_verified; undo_marker = $undoMarker; phase_marker = $phaseMarker; marker = $finalMarker
     started_at = $startedAt.ToUniversalTime().ToString("O"); completed_at = (Get-Date).ToUniversalTime().ToString("O")
 }
 $metadata | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $metadataPath -Encoding UTF8
