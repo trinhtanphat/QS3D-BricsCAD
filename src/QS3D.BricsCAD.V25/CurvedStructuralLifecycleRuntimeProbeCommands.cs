@@ -53,6 +53,12 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DCURVEDLIFESELECTSLAB", CommandFlags.Modal)]
         public void CurvedLifeSelectSlab() => LifeRun("select_slab", () => LifeSelect(true));
 
+        [CommandMethod("QS3DCURVEDLIFEBUILDBEAMS", CommandFlags.Modal)]
+        public void CurvedLifeBuildBeams() => LifeRun("build_beams", () => LifeBuild(false));
+
+        [CommandMethod("QS3DCURVEDLIFEBUILDSLAB", CommandFlags.Modal)]
+        public void CurvedLifeBuildSlab() => LifeRun("build_slab", () => LifeBuild(true));
+
         [CommandMethod("QS3DCURVEDLIFECAPTUREBASELINE", CommandFlags.Modal)]
         public void CurvedLifeCaptureBaseline() => LifeRun("baseline", () =>
         {
@@ -228,6 +234,12 @@ namespace QS3D.BricsCAD.V25
             var objectIds = CadHandleService.Resolve(context.Document, sourceHandles);
             LifeRequire(objectIds.Count == sourceHandles.Count, "source selection did not resolve");
             context.Document.Editor.SetImpliedSelection(objectIds.ToArray());
+        }
+
+        private static void LifeBuild(bool slab)
+        {
+            LifeSelect(slab);
+            new Build3DCommands().Build3D();
         }
 
         private static LifeDocumentState LifeSeedDocument(Document document, ProjectState project)
