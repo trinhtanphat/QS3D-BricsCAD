@@ -86,38 +86,14 @@ for token in (
 ):
     require(transformer, token, "V26 script transformer")
 
-# Independently model the exact major-token transform against today's hardened V25 templates.
 template_expectations = {
-    "scripts/install-v25-autoload.ps1": [
-        "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "BricsCAD-V26", "^V26", "QS3D-BricsCAD-V26-Update-"
-    ],
-    "scripts/uninstall-v25-autoload.ps1": [
-        "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "BricsCAD-V26", "^V26", "QS3D-BricsCAD-V26-Update-"
-    ],
-    "scripts/update-v25.ps1": [
-        "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "BricsCAD-V26",
-        "QS3D-BricsCAD-V26.update.json", "QS3D-BricsCAD-V26.zip",
-        "install-v26-autoload.ps1", "QS3D-BricsCAD-V26-Update-"
-    ],
-    "scripts/finalize-v25-signed-package.ps1": [
-        "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip",
-        "install-v26-autoload.ps1", "uninstall-v26-autoload.ps1", "update-v26.ps1"
-    ],
-    "scripts/new-v25-update-manifest.ps1": [
-        "QS3D-BricsCAD-V26", "QS3D-BricsCAD-V26.update.json",
-        "new-v26-update-manifest-validation-core.ps1", "Qs3dV26UpdateManifestPublicationNative.cs",
-        "V26 update-manifest publication requires Windows"
-    ],
-    "scripts/new-v25-update-manifest-validation-core.ps1": [
-        "QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip",
-        "QS3D-BricsCAD-V26.update.json", "install-v26-autoload.ps1",
-        "uninstall-v26-autoload.ps1", "update-v26.ps1"
-    ],
-    "scripts/Qs3dV25UpdateManifestPublicationNative.cs": [
-        "Qs3dV26UpdateManifestPublicationNative", "NtSetInformationFile",
-        "FileRenameInformation", "PublishOwnedGenerationInDirectory",
-        "RollbackOwnedGenerationInDirectory"
-    ],
+    "scripts/install-v25-autoload.ps1": ["QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "BricsCAD-V26", "^V26", "QS3D-BricsCAD-V26-Update-"],
+    "scripts/uninstall-v25-autoload.ps1": ["QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "BricsCAD-V26", "^V26", "QS3D-BricsCAD-V26-Update-"],
+    "scripts/update-v25.ps1": ["QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "BricsCAD-V26", "QS3D-BricsCAD-V26.update.json", "QS3D-BricsCAD-V26.zip", "install-v26-autoload.ps1", "QS3D-BricsCAD-V26-Update-"],
+    "scripts/finalize-v25-signed-package.ps1": ["QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip", "install-v26-autoload.ps1", "uninstall-v26-autoload.ps1", "update-v26.ps1"],
+    "scripts/new-v25-update-manifest.ps1": ["QS3D-BricsCAD-V26", "QS3D-BricsCAD-V26.update.json", "new-v26-update-manifest-validation-core.ps1", "Qs3dV26UpdateManifestPublicationNative.cs", "V26 update-manifest publication requires Windows"],
+    "scripts/new-v25-update-manifest-validation-core.ps1": ["QS3D.BricsCAD.V26.dll", "BricsCAD V26 x64", "QS3D-BricsCAD-V26.zip", "QS3D-BricsCAD-V26.update.json", "install-v26-autoload.ps1", "uninstall-v26-autoload.ps1", "update-v26.ps1"],
+    "scripts/Qs3dV25UpdateManifestPublicationNative.cs": ["Qs3dV26UpdateManifestPublicationNative", "NtSetInformationFile", "FileRenameInformation", "PublishOwnedGenerationInDirectory", "RollbackOwnedGenerationInDirectory"],
 }
 for rel, expected in template_expectations.items():
     source = read(rel)
@@ -128,37 +104,20 @@ for rel, expected in template_expectations.items():
         if token not in generated:
             errors.append(f"independent V26 transform from {rel} missing: {token}")
 
-# The V26 manifest wrapper must generate all three files into one held workspace,
-# retain each returned FileStream, verify identity before and after execution, then
-# dispose and delete only each exact admitted generation before workspace cleanup.
 for token in (
-    "new-v26-script-from-v25.ps1",
-    "new-v25-update-manifest-validation-core.ps1",
-    "Qs3dV25UpdateManifestPublicationNative.cs",
-    "new-v25-update-manifest.ps1",
-    "new-v26-update-manifest-validation-core.ps1",
-    "Qs3dV26UpdateManifestPublicationNative.cs",
-    "-PassThruHeldGeneration",
-    "$heldGenerations = [Collections.Generic.List[object]]::new()",
-    "Assert-HeldGeneratedTemplate -Admission $admission",
-    "GetIdentity($Admission.Stream.SafeFileHandle)",
-    "V26 manifest generation graph is incomplete",
-    "& $tempScript @forward",
+    "new-v26-script-from-v25.ps1", "new-v25-update-manifest-validation-core.ps1", "Qs3dV25UpdateManifestPublicationNative.cs",
+    "new-v25-update-manifest.ps1", "new-v26-update-manifest-validation-core.ps1", "Qs3dV26UpdateManifestPublicationNative.cs",
+    "-PassThruHeldGeneration", "$heldGenerations = [Collections.Generic.List[object]]::new()",
+    "Assert-HeldGeneratedTemplate -Admission $admission", "GetIdentity($Admission.Stream.SafeFileHandle)",
+    "V26 manifest generation graph is incomplete", "& $tempScript @forward",
     "Remove-ExactGeneratedScriptGeneration -Path $held.Path -ExpectedIdentity $identity",
-    "Remove-HeldManifestWorkspace -Handle $workspaceHandle",
-    "Marshal.AllocHGlobal(1)",
-    "Marshal.WriteByte(buffer, 0, 1)",
-    "SetFileInformationByHandle(handle, FileDispositionInfo, buffer, 1)",
+    "Remove-HeldManifestWorkspace -Handle $workspaceHandle", "Marshal.AllocHGlobal(1)",
+    "Marshal.WriteByte(buffer, 0, 1)", "SetFileInformationByHandle(handle, FileDispositionInfo, buffer, 1)",
 ):
     require(manifest, token, "V26 manifest generator")
-for token in (
-    "[MarshalAs(UnmanagedType.Bool)]",
-    "Marshal.SizeOf(typeof(FILE_DISPOSITION_INFO))",
-):
+for token in ("[MarshalAs(UnmanagedType.Bool)]", "Marshal.SizeOf(typeof(FILE_DISPOSITION_INFO))"):
     forbid(manifest, token, "V26 manifest generator disposition ABI")
 
-# Ordering: dependencies first, public wrapper last; all remain held across execution;
-# exact-generation cleanup occurs only after execution and stream disposal.
 validation_generate = manifest.find("Source = 'new-v25-update-manifest-validation-core.ps1'")
 native_generate = manifest.find("Source = 'Qs3dV25UpdateManifestPublicationNative.cs'")
 wrapper_generate = manifest.find("Source = 'new-v25-update-manifest.ps1'")
@@ -174,180 +133,109 @@ if min(validation_generate, native_generate, wrapper_generate, held_add, execute
     errors.append("V26 split manifest generation order must be dependencies -> wrapper -> hold all -> execute -> reverify -> dispose -> exact-generation cleanup -> held-workspace cleanup")
 
 for token in (
-    "src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows",
-    "QS3D-BricsCAD-V26",
-    "QS3D-BricsCAD-V26.zip",
-    "QS3D.BricsCAD.V26.dll",
-    "QS3D.BricsCAD.V26.runtimeconfig.json",
-    "BricsCAD V26 x64",
-    "framework = 'net8.0-windows'",
-    "new-v26-script-from-v25.ps1",
-    "install-v26-autoload.ps1",
-    "uninstall-v26-autoload.ps1",
-    "update-v26.ps1",
-    "BrxMgd.dll",
-    "TD_Mgd.dll",
-    "SHA256SUMS.txt",
+    "src/QS3D.BricsCAD.V26/bin/x64/Release/net8.0-windows", "QS3D-BricsCAD-V26", "QS3D-BricsCAD-V26.zip",
+    "QS3D.BricsCAD.V26.dll", "QS3D.BricsCAD.V26.runtimeconfig.json", "BricsCAD V26 x64", "framework = 'net8.0-windows'",
+    "new-v26-script-from-v25.ps1", "install-v26-autoload.ps1", "uninstall-v26-autoload.ps1", "update-v26.ps1",
+    "BrxMgd.dll", "TD_Mgd.dll", "SHA256SUMS.txt",
 ):
     require(package, token, "V26 packager")
 for token in ("src/QS3D.BricsCAD.V25/bin/x64/Release/net48", "QS3D-BricsCAD-V25.zip", "BricsCAD V25 x64"):
     forbid(package, token, "V26 packager")
 
-for text, label, template in (
-    (sign, "V26 signer", "sign-v25.ps1"),
-    (verify, "V26 signature verifier", "verify-v25-signatures.ps1"),
-):
+for text, label, template in ((sign, "V26 signer", "sign-v25.ps1"), (verify, "V26 signature verifier", "verify-v25-signatures.ps1")):
     require(text, "Set-StrictMode -Version Latest", label)
     require(text, template, label)
-
-for text, label, template_name in (
-    (finalize, "V26 finalizer", "finalize-v25-signed-package.ps1"),
-    (manifest, "V26 manifest generator", "new-v25-update-manifest.ps1"),
-):
+for text, label, template_name in ((finalize, "V26 finalizer", "finalize-v25-signed-package.ps1"), (manifest, "V26 manifest generator", "new-v25-update-manifest.ps1")):
     require(text, "new-v26-script-from-v25.ps1", label)
     require(text, template_name, label)
     require(text, "V25 token", label)
     require(text, "QS3D-BricsCAD-V26", label)
 
-# Release channel isolation: V25/V26 share a repository stream but only the exact
-# major-specific manifest asset makes a release eligible for that client's channel.
-for text, label, asset in (
-    (v25_release_client, "V25 release client", "QS3D-BricsCAD-V25.update.json"),
-    (v26_release_client, "V26 release client", "QS3D-BricsCAD-V26.update.json"),
-):
+for text, label, asset in ((v25_release_client, "V25 release client", "QS3D-BricsCAD-V25.update.json"), (v26_release_client, "V26 release client", "QS3D-BricsCAD-V26.update.json")):
     require(text, asset, label)
     require(text, "if (manifestUri == null) continue;", label)
     require(text, "UpdateManifestAssetName", label)
 for token in ("QS3D-BricsCAD-V25.update.json", "QS3D-BricsCAD-V25-Updater"):
     forbid(v26_release_client, token, "V26 release client")
 
-# V26 targets .NET 8 with warnings-as-errors. Keep updater HTTP on HttpClient so
-# obsolete WebRequest/CreateHttp (SYSLIB0014) cannot re-enter this release lane.
 require(build_props, "<TreatWarningsAsErrors>true</TreatWarningsAsErrors>", "Directory.Build.props")
 require(build_props, "<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>", "Directory.Build.props")
-for text, label in (
-    (v26_release_client, "V26 release client"),
-    (v26_manifest_probe, "V26 manifest probe"),
-):
-    for token in (
-        "using System.Net.Http;",
-        "HttpClient",
-        "HttpClientHandler",
-        "HttpCompletionOption.ResponseHeadersRead",
-        "CancellationTokenSource",
-        "Timeout.InfiniteTimeSpan",
-    ):
+for text, label in ((v26_release_client, "V26 release client"), (v26_manifest_probe, "V26 manifest probe")):
+    for token in ("using System.Net.Http;", "HttpClient", "HttpClientHandler", "HttpCompletionOption.ResponseHeadersRead", "CancellationTokenSource", "Timeout.InfiniteTimeSpan"):
         require(text, token, label)
     for token in ("WebRequest.CreateHttp", "HttpWebRequest"):
         forbid(text, token, label)
 
-for token in (
-    'private const string Target = "BricsCAD V26 x64";',
-    'request.Headers.UserAgent.ParseAdd("QS3D-BricsCAD-V26-Updater")',
-    '"QS3D-BricsCAD-V26.zip"',
-    "GitHubReleaseClient.UpdateManifestAssetName",
-    "schemaVersion 2",
-):
+for token in ('private const string Target = "BricsCAD V26 x64";', 'request.Headers.UserAgent.ParseAdd("QS3D-BricsCAD-V26-Updater")', '"QS3D-BricsCAD-V26.zip"', "GitHubReleaseClient.UpdateManifestAssetName", "schemaVersion 2"):
     require(v26_manifest_probe, token, "V26 manifest probe")
 for token in ("BricsCAD V25 x64", "QS3D-BricsCAD-V25.zip", "QS3D-BricsCAD-V25.update.json"):
     forbid(v26_manifest_probe, token, "V26 manifest probe")
 
-for token in (
-    "Global\\\\QS3D-BricsCAD-V26-Update-",
-    'Path.Combine(installDirectory, "update-v26.ps1")',
-    "TryVerifyAuthenticode",
-    "WinVerifyTrust",
-    "TryAcquireCrossProcessReservation",
-    "WorkerReadyTimeoutMilliseconds",
-    "-AllowedPackageHost @('github.com')",
-    "-ExpectedSignerThumbprint $expectedSigner",
-):
+for token in ("Global\\\\QS3D-BricsCAD-V26-Update-", 'Path.Combine(installDirectory, "update-v26.ps1")', "TryVerifyAuthenticode", "WinVerifyTrust", "TryAcquireCrossProcessReservation", "WorkerReadyTimeoutMilliseconds", "-AllowedPackageHost @('github.com')", "-ExpectedSignerThumbprint $expectedSigner"):
     require(v26_launcher, token, "V26 secure update launcher")
 for token in ("QS3D-BricsCAD-V25-Update-", "update-v25.ps1"):
     forbid(v26_launcher, token, "V26 secure update launcher")
-
 for token in ("QS3DUPDATE", "UpdateCenterWindowHost.Show()", "QS3DUPDATE V26 error"):
     require(v26_update_command, token, "V26 update command")
 for token in ("UpdateBootstrapper.Start();", "TryCleanup(UpdateBootstrapper.Stop);"):
     require(v26_entry, token, "V26 PluginEntry")
 
 for token in (
-    "workflow_dispatch:",
-    "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
-    "runs-on: [self-hosted, windows, x64, bricscad-v26]",
-    "BRICSCAD_V26_DIR",
-    "V26_HOST_REFERENCE_STATE",
-    "assert-v26-host-reference-safety.ps1",
-    "Microsoft\\.WindowsDesktop\\.App 8\\.",
-    "preflight-bricscad-v26.py",
-    "preflight-v26-package-release.py",
-    "package-v26.ps1",
-    "sign-v26.ps1",
-    "verify-v26-signatures.ps1",
-    "finalize-v26-signed-package.ps1",
-    "test-bricscad-v26-runtime.ps1",
-    "new-v26-update-manifest.ps1",
-    "QS3D-BricsCAD-V26.update.json",
-    "QS3D-BricsCAD-V26.zip.sha256",
-    "Stable V26 release requires run_runtime=true",
-    "Stable V26 release requires sign_package=true",
-    "draft = $true",
-    "draft = $false",
-    "Assert-RemoteReleaseTagTargetsWorkflowSha",
-    "git ls-remote --tags origin",
-    "application/octet-stream",
-    "uploadedAsset.url",
-    "invoke-v26-held-release-upload.ps1",
-    "$expectedLength = [int64]$admittedAssets[$expectedAsset].Length",
-    "$expectedHash = [string]$admittedAssets[$expectedAsset].Sha256",
-    "verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset",
-    "Uploaded V26 release asset size mismatch",
-    "Uploaded V26 release asset SHA-256 mismatch",
-    "Draft V26 release contains unexpected assets",
+    "workflow_dispatch:", "github.event_name == 'workflow_dispatch' && inputs.confirm_release == 'RELEASE'",
+    "runs-on: [self-hosted, windows, x64, bricscad-v26]", "BRICSCAD_V26_DIR", "V26_HOST_REFERENCE_STATE",
+    "assert-v26-host-reference-safety.ps1", "Microsoft\\.WindowsDesktop\\.App 8\\.", "preflight-bricscad-v26.py",
+    "preflight-v26-package-release.py", "package-v26.ps1", "sign-v26.ps1", "verify-v26-signatures.ps1",
+    "finalize-v26-signed-package.ps1", "test-bricscad-v26-runtime.ps1", "new-v26-update-manifest.ps1",
+    "QS3D-BricsCAD-V26.update.json", "QS3D-BricsCAD-V26.zip.sha256", "Stable V26 release requires run_runtime=true",
+    "Stable V26 release requires sign_package=true", "draft = $true", "draft = $false", "Assert-RemoteReleaseTagTargetsWorkflowSha",
+    "git ls-remote --tags origin", "application/octet-stream", "uploadedAsset.url", "invoke-v26-held-release-upload.ps1",
+    "$expectedLength = [int64]$admittedAssets[$expectedAsset].Length", "$expectedHash = [string]$admittedAssets[$expectedAsset].Sha256",
+    "verify-v26-held-file.ps1 -Operation Hash -Path $downloadedAsset", "Uploaded V26 release asset size mismatch",
+    "Uploaded V26 release asset SHA-256 mismatch", "Draft V26 release contains unexpected assets",
 ):
     require(release_surface, token, "V26 release surface")
-for token in (
-    "Get-FileHash -LiteralPath $localAsset",
-    "Get-FileHash -LiteralPath $downloadedAsset",
-    "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset",
-    "-InFile $asset",
-):
+for token in ("Get-FileHash -LiteralPath $localAsset", "Get-FileHash -LiteralPath $downloadedAsset", "verify-v26-held-file.ps1 -Operation Hash -Path $localAsset", "-InFile $asset"):
     forbid(release_surface, token, "V26 release surface")
 
-for token in (
-    "Assert-NoReparseAncestor",
-    "[IO.FileAttributes]::ReparsePoint",
-    "$admittedLength = [int64]$admitted.Length",
-    "$admittedWriteTicks = [int64]$admitted.LastWriteTimeUtc.Ticks",
-    "[IO.FileShare]::Read",
-    "$sha.ComputeHash($held.Stream)",
-):
+for token in ("Assert-NoReparseAncestor", "[IO.FileAttributes]::ReparsePoint", "$admittedLength = [int64]$admitted.Length", "$admittedWriteTicks = [int64]$admitted.LastWriteTimeUtc.Ticks", "[IO.FileShare]::Read", "$sha.ComputeHash($held.Stream)"):
     require(release_asset_verifier, token, "V26 release asset held verifier")
 
+# Held-upload authority must preserve exact-generation admission while ensuring a
+# bearer credential cannot follow a redirect and a remote ACK cannot be accepted
+# without an authoritative Created/state/size/digest binding to the held bytes.
 for token in (
-    "Assert-NoReparseAncestor",
-    "[IO.FileAttributes]::ReparsePoint",
-    "[IO.FileShare]::Read",
-    "$sha.ComputeHash($held.Stream)",
-    "$held.Stream.Position = 0",
-    "[System.Net.Http.StreamContent]::new($held.Stream)",
-    "[System.Net.Http.HttpClient]::new()",
-    "UploadedAssetId",
-    "Sha256",
+    "Assert-NoReparseAncestor", "[IO.FileAttributes]::ReparsePoint", "[IO.FileShare]::Read",
+    "$sha.ComputeHash($held.Stream)", "$held.Stream.Position = 0", "[System.Net.Http.StreamContent]::new($held.Stream)",
+    "[System.Net.Http.HttpClientHandler]::new()", "$handler.AllowAutoRedirect = $false",
+    "[System.Net.Http.HttpClient]::new($handler)", "$response.StatusCode -ne [System.Net.HttpStatusCode]::Created",
+    "ConvertFrom-Json -ErrorAction Stop", "[string]$uploaded.state, 'uploaded'", "[string]$uploaded.digest",
+    "UploadedAssetId", "Sha256",
 ):
     require(held_upload, token, "V26 held upload helper")
+for token in ("[System.Net.Http.HttpClient]::new()", "$response.IsSuccessStatusCode", ": $responseBody"):
+    forbid(held_upload, token, "V26 held upload helper")
 
-for token in (
-    "@('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')",
-    "$version.FileMajorPart -ne 26",
-    "function Get-StableHostFileState",
-    "function Assert-StableHostFileState",
-):
+hash_pos = held_upload.find("$sha.ComputeHash($held.Stream)")
+rewind_pos = held_upload.find("$held.Stream.Position = 0")
+handler_pos = held_upload.find("[System.Net.Http.HttpClientHandler]::new()")
+redirect_pos = held_upload.find("$handler.AllowAutoRedirect = $false")
+auth_pos = held_upload.find("DefaultRequestHeaders.Authorization")
+content_pos = held_upload.find("[System.Net.Http.StreamContent]::new($held.Stream)")
+send_pos = held_upload.find("SendAsync")
+status_pos = held_upload.find("$response.StatusCode -ne [System.Net.HttpStatusCode]::Created")
+parse_pos = held_upload.find("ConvertFrom-Json -ErrorAction Stop")
+state_pos = held_upload.find("[string]$uploaded.state, 'uploaded'")
+digest_pos = held_upload.find("[string]$uploaded.digest")
+dispose_pos = held_upload.rfind("$held.Stream.Dispose()")
+held_upload_positions = [hash_pos, rewind_pos, handler_pos, redirect_pos, auth_pos, content_pos, send_pos, status_pos, parse_pos, state_pos, digest_pos, dispose_pos]
+if min(held_upload_positions) < 0 or held_upload_positions != sorted(held_upload_positions):
+    errors.append("V26 held upload helper must hash -> rewind -> disable redirects -> authorize -> stream -> send -> require 201 -> parse -> bind state/digest -> dispose the same admitted generation")
+
+for token in ("@('bricscad.exe', 'BrxMgd.dll', 'TD_Mgd.dll', 'TD_MgdBrep.dll')", "$version.FileMajorPart -ne 26", "function Get-StableHostFileState", "function Assert-StableHostFileState"):
     require(host_safety, token, "V26 host-reference safety helper")
 
 if release_surface.count("Assert-RemoteReleaseTagTargetsWorkflowSha") < 3:
     errors.append("V26 release surface must define and invoke remote tag/SHA verification both before and after asset verification")
-
 release_create = release_surface.find('$release = Invoke-RestMethod -Method Post')
 first_tag_check = release_surface.find('Assert-RemoteReleaseTagTargetsWorkflowSha', release_create + 1)
 held_upload_call = release_surface.find('invoke-v26-held-release-upload.ps1', first_tag_check + 1)
@@ -356,26 +244,14 @@ held_remote_hash = release_surface.find('verify-v26-held-file.ps1 -Operation Has
 asset_hash_check = release_surface.find('Uploaded V26 release asset SHA-256 mismatch', held_remote_hash + 1)
 second_tag_check = release_surface.find('Assert-RemoteReleaseTagTargetsWorkflowSha', asset_hash_check + 1)
 publish_release = release_surface.find('$published = Invoke-RestMethod -Method Patch', second_tag_check + 1)
-if min(release_create, first_tag_check, held_upload_call, admitted_hash, held_remote_hash, asset_hash_check, second_tag_check, publish_release) < 0 or not (
-    release_create < first_tag_check < held_upload_call < admitted_hash < held_remote_hash < asset_hash_check < second_tag_check < publish_release
-):
+if min(release_create, first_tag_check, held_upload_call, admitted_hash, held_remote_hash, asset_hash_check, second_tag_check, publish_release) < 0 or not (release_create < first_tag_check < held_upload_call < admitted_hash < held_remote_hash < asset_hash_check < second_tag_check < publish_release):
     errors.append("V26 release publication order must be draft create -> tag/SHA check -> held upload/admitted SHA -> remote SHA -> tag/SHA recheck -> publish")
 
 for token in ("QS3D-BricsCAD-V25", "BRICSCAD_V25_DIR", "bricscad-v25", "QS3D.BricsCAD.V25.dll"):
     forbid(release_surface, token, "V26 release surface")
 for trigger in ("\n  push:", "\n  pull_request:", "\n  schedule:", "\n  workflow_run:"):
     forbid(workflow, trigger, "V26 release workflow")
-
-for token in (
-    "<TargetFramework>net8.0-windows</TargetFramework>",
-    "<UseWindowsForms>true</UseWindowsForms>",
-    "<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>",
-    "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>",
-    "Updates\\SemanticReleaseVersion.cs",
-    "Updates\\UpdateBootstrapper.cs",
-    "Updates\\UpdateCenterWindow.cs",
-    "Updates\\UpdateCoordinator.cs",
-):
+for token in ("<TargetFramework>net8.0-windows</TargetFramework>", "<UseWindowsForms>true</UseWindowsForms>", "<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>", "<AssemblyName>QS3D.BricsCAD.V26</AssemblyName>", "Updates\\SemanticReleaseVersion.cs", "Updates\\UpdateBootstrapper.cs", "Updates\\UpdateCenterWindow.cs", "Updates\\UpdateCoordinator.cs"):
     require(v26_project, token, "V26 project")
 plugin_version = property_value("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj", "Version")
 plugin_info = property_value("src/QS3D.BricsCAD.V26/QS3D.BricsCAD.V26.csproj", "InformationalVersion")
@@ -392,5 +268,4 @@ if errors:
         print("ERROR:", error)
     print(f"FAILED with {len(errors)} error(s).")
     sys.exit(1)
-
 print("PASS: V26 packaging preserves hardened V25 transaction/security logic under guarded major transformation; split manifest wrapper/core/native generations are all transformed, byte-verified, held through execution and exact-generation cleaned; release upload/tag/hash admission remains held and fail-closed.")
