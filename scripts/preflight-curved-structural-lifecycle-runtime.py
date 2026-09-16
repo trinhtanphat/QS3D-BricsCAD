@@ -23,6 +23,8 @@ source = require_tokens(SOURCE, [
     'CommandMethod("QS3DCURVEDLIFEPREPARE"',
     'CommandMethod("QS3DCURVEDLIFESELECTBEAMS"',
     'CommandMethod("QS3DCURVEDLIFESELECTSLAB"',
+    'CommandMethod("QS3DCURVEDLIFEBUILDBEAMS"',
+    'CommandMethod("QS3DCURVEDLIFEBUILDSLAB"',
     'CommandMethod("QS3DCURVEDLIFECAPTUREBASELINE"',
     'CommandMethod("QS3DCURVEDLIFECHECKUNDO"',
     'CommandMethod("QS3DCURVEDLIFECAPTUREREDO"',
@@ -47,6 +49,7 @@ require_tokens(SOURCE, [
     'reopen_coherent=" + LifeBool(a.ReopenCoherent)',
     'ExistingProjectMutationContext.Require(',
     'ProjectContextCoordinator.Save(',
+    'new Build3DCommands().Build3D();',
     'beam_arc',
     'beam_circle',
     'beam_polyline_curved',
@@ -67,7 +70,7 @@ require_tokens(RUNNER, [
     'Get-Qs3dExactBricsCadProcesses',
     'QS3DCURVEDLIFEPREPARE',
     '_.UNDO', '"_Mark"', '"_Back"', '"_Begin"', '"_End"',
-    'QS3DBUILD3D', '_.U', '_.REDO',
+    'QS3DCURVEDLIFEBUILDBEAMS', 'QS3DCURVEDLIFEBUILDSLAB', '_.U', '_.REDO',
     'QS3DSAVE', '_.QSAVE',
     'QS3DCURVEDLIFEREOPEN',
     'QS3D_CURVED_LIFECYCLE_EXPECTED_REOPEN_FINGERPRINT',
@@ -105,13 +108,13 @@ if runner and runner.count('Start-Process -FilePath $bricscadExe') < 2:
 if runner:
     compact_runner = ''.join(runner.split())
     undo_scenario = (
-        '"_.UNDO","_Mark","QS3DCURVEDLIFESELECTBEAMS","QS3DBUILD3D",'
-        '"QS3DCURVEDLIFESELECTSLAB","QS3DBUILD3D","QS3DCURVEDLIFECAPTUREBASELINE",'
+        '"_.UNDO","_Mark","QS3DCURVEDLIFEBUILDBEAMS",'
+        '"QS3DCURVEDLIFEBUILDSLAB","QS3DCURVEDLIFECAPTUREBASELINE",'
         '"_.UNDO","_Back","QS3DCURVEDLIFECHECKUNDO"'
     )
     redo_scenario = (
-        '"QS3DCURVEDLIFESELECTBEAMS","_.UNDO","_Begin","QS3DBUILD3D",'
-        '"QS3DCURVEDLIFESELECTSLAB","QS3DBUILD3D","QS3DCURVEDLIFECAPTUREBASELINE",'
+        '"_.UNDO","_Begin","QS3DCURVEDLIFEBUILDBEAMS",'
+        '"QS3DCURVEDLIFEBUILDSLAB","QS3DCURVEDLIFECAPTUREBASELINE",'
         '"_.UNDO","_End","_.U","_.REDO","QS3DCURVEDLIFECAPTUREREDO",'
         '"QS3DCURVEDLIFECHECKREDO"'
     )
@@ -119,6 +122,13 @@ if runner:
         errors.append("curved lifecycle runner must isolate native Undo proof behind UNDO Mark/Back")
     if redo_scenario not in compact_runner:
         errors.append("curved lifecycle runner must preserve a contiguous U/REDO chain in its isolated Redo proof")
+
+    for forbidden_handoff in (
+        '"QS3DCURVEDLIFESELECTBEAMS","QS3DBUILD3D"',
+        '"QS3DCURVEDLIFESELECTSLAB","QS3DBUILD3D"',
+    ):
+        if forbidden_handoff in compact_runner:
+            errors.append("curved lifecycle runner must not cross a BricsCAD command boundary between source selection and QS3DBUILD3D")
     if '"QS3DCURVEDLIFECHECKUNDO","_.REDO"' in compact_runner:
         errors.append("curved lifecycle runner must not insert a probe command between native Undo and Redo")
 
