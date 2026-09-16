@@ -62,6 +62,8 @@ namespace QS3D.Core.SmokeTests
             RejectsInvalidOperation(
                 () => QuantBimWorkbenchStateCodec.Decode(encoded.Replace("Revision=", "Unexpected=")),
                 "unexpected state field is rejected");
+
+            QuantBimStandaloneCompositionSmoke.Run();
         }
 
         private static void RejectsInvalidOperation(Action action, string label)
