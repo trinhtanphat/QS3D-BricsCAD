@@ -92,6 +92,14 @@ for forbidden in (
     if forbidden in source:
         errors.append(f"curved lifecycle marker must not expose: {forbidden}")
 
+if 'ReferenceEquals(state.Project, context.Project)' in source:
+    errors.append('curved lifecycle session affinity must not require ProjectState object identity across native Undo/Redo')
+for token in (
+    'public string ProjectId { get; }',
+    'string.Equals(state.ProjectId, context.Project.ProjectId, StringComparison.Ordinal)',
+):
+    if token not in source:
+        errors.append(f'curved lifecycle canonical ProjectId affinity missing contract token: {token}')
 if runner and runner.count('Start-Process -FilePath $bricscadExe') < 2:
     errors.append("curved lifecycle runner must use two isolated BricsCAD processes")
 
