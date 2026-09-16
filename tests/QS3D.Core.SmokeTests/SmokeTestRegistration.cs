@@ -256,6 +256,7 @@ namespace QS3D.Core.SmokeTests
             CubicostParitySmoke.Run();
             QsCubicostDownstreamSmoke.Run();
             QsCubicostDomainWorkflowsSmoke.Run();
+            ConstructionLifecycleWorkflowSmoke.Run();
         }
     }
 }
