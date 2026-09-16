@@ -53,6 +53,12 @@ namespace QS3D.BricsCAD.V25
         [CommandMethod("QS3DCURVEDLIFESELECTSLAB", CommandFlags.Modal)]
         public void CurvedLifeSelectSlab() => LifeRun("select_slab", () => LifeSelect(true));
 
+        [CommandMethod("QS3DCURVEDLIFEBUILDBEAMS", CommandFlags.Modal)]
+        public void CurvedLifeBuildBeams() => LifeRun("build_beams", () => LifeBuild(false));
+
+        [CommandMethod("QS3DCURVEDLIFEBUILDSLAB", CommandFlags.Modal)]
+        public void CurvedLifeBuildSlab() => LifeRun("build_slab", () => LifeBuild(true));
+
         [CommandMethod("QS3DCURVEDLIFECAPTUREBASELINE", CommandFlags.Modal)]
         public void CurvedLifeCaptureBaseline() => LifeRun("baseline", () =>
         {
@@ -70,6 +76,21 @@ namespace QS3D.BricsCAD.V25
             LifeRequire(state.After != null && state.AfterHandles.Count == LifeElementIds.Length, "baseline missing");
             state.UndoGeneratedAbsent = LifeAllAbsent(context.Document, state.AfterHandles);
             state.UndoCoherent = state.Before.Matches(context.Project) && state.UndoGeneratedAbsent;
+        });
+
+        [CommandMethod("QS3DCURVEDLIFEUNDOPROOF", CommandFlags.Modal)]
+        public void CurvedLifeUndoProof() => LifeRun("undo_proof", () =>
+        {
+            var context = LifeContext(true);
+            var state = LifeRequireSessionOne(context);
+            LifeRequire(state.UndoCoherent && state.UndoGeneratedAbsent, "Undo lifecycle is not coherent");
+            LifeWriteMarker(context.PhasePath, new[]
+            {
+                "status=PASS", "command=QS3DCURVEDLIFEUNDOPROOF", "nonce=" + context.Nonce,
+                "schema=" + LifeSchema, "qualification_boundary=LOCAL_003_CURVED_LIFECYCLE_ONLY",
+                "production_local003_qualified=false", "undo_coherent=true", "undo_generated_absent=true",
+                "generated_count=" + state.AfterHandles.Count.ToString(CultureInfo.InvariantCulture)
+            });
         });
 
         [CommandMethod("QS3DCURVEDLIFECAPTUREREDO", CommandFlags.Modal)]
@@ -97,7 +118,7 @@ namespace QS3D.BricsCAD.V25
         {
             var context = LifeContext(true);
             var state = LifeRequireSessionOne(context);
-            LifeRequire(state.UndoCoherent && state.RedoCoherent, "Undo/Redo lifecycle is not coherent");
+            LifeRequire(state.RedoCoherent, "Redo lifecycle is not coherent");
             ProjectContextCoordinator.Save(context.Document);
             var savedCheckpoint = ProjectPersistenceCheckpoint.Capture(context.Project, state.ElementIds);
             LifeRequire(savedCheckpoint.Matches(context.Project), "saved persistence checkpoint is unstable");
@@ -106,8 +127,8 @@ namespace QS3D.BricsCAD.V25
             {
                 "status=PASS", "command=QS3DCURVEDLIFESESSION1", "nonce=" + context.Nonce,
                 "schema=" + LifeSchema, "qualification_boundary=LOCAL_003_CURVED_LIFECYCLE_ONLY",
-                "production_local003_qualified=false", "undo_coherent=true", "redo_coherent=true",
-                "undo_generated_absent=true", "saved_checkpoint_matches=true",
+                "production_local003_qualified=false", "redo_coherent=true",
+                "saved_checkpoint_matches=true",
                 "reopen_fingerprint=" + reopenFingerprint,
                 "generated_count=" + state.AfterHandles.Count.ToString(CultureInfo.InvariantCulture)
             });
@@ -215,6 +236,11 @@ namespace QS3D.BricsCAD.V25
             });
         });
 
+        private static void LifeBuild(bool slab)
+        {
+            LifeSelect(slab);
+            new Build3DCommands().Build3D();
+        }
         private static void LifeSelect(bool slab)
         {
             var context = LifeContext(true);
