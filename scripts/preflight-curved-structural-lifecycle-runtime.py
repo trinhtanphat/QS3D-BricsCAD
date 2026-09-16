@@ -92,8 +92,35 @@ for forbidden in (
     if forbidden in source:
         errors.append(f"curved lifecycle marker must not expose: {forbidden}")
 
+if 'ReferenceEquals(state.Project, context.Project)' in source:
+    errors.append('curved lifecycle session affinity must not require ProjectState object identity across native Undo/Redo')
+for token in (
+    'public string ProjectId { get; }',
+    'string.Equals(state.ProjectId, context.Project.ProjectId, StringComparison.Ordinal)',
+):
+    if token not in source:
+        errors.append(f'curved lifecycle canonical ProjectId affinity missing contract token: {token}')
 if runner and runner.count('Start-Process -FilePath $bricscadExe') < 2:
     errors.append("curved lifecycle runner must use two isolated BricsCAD processes")
+if runner:
+    compact_runner = ''.join(runner.split())
+    undo_scenario = (
+        '"_.UNDO","_Mark","QS3DCURVEDLIFESELECTBEAMS","QS3DBUILD3D",'
+        '"QS3DCURVEDLIFESELECTSLAB","QS3DBUILD3D","QS3DCURVEDLIFECAPTUREBASELINE",'
+        '"_.UNDO","_Back","QS3DCURVEDLIFECHECKUNDO"'
+    )
+    redo_scenario = (
+        '"QS3DCURVEDLIFESELECTBEAMS","_.UNDO","_Begin","QS3DBUILD3D",'
+        '"QS3DCURVEDLIFESELECTSLAB","QS3DBUILD3D","QS3DCURVEDLIFECAPTUREBASELINE",'
+        '"_.UNDO","_End","_.U","_.REDO","QS3DCURVEDLIFECAPTUREREDO",'
+        '"QS3DCURVEDLIFECHECKREDO"'
+    )
+    if undo_scenario not in compact_runner:
+        errors.append("curved lifecycle runner must isolate native Undo proof behind UNDO Mark/Back")
+    if redo_scenario not in compact_runner:
+        errors.append("curved lifecycle runner must preserve a contiguous U/REDO chain in its isolated Redo proof")
+    if '"QS3DCURVEDLIFECHECKUNDO","_.REDO"' in compact_runner:
+        errors.append("curved lifecycle runner must not insert a probe command between native Undo and Redo")
 
 if errors:
     for error in errors:
