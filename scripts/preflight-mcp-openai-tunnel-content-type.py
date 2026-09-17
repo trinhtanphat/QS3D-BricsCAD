@@ -62,9 +62,9 @@ def main() -> None:
     require(server, 'string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)',
             "dedicated local-auth header must be a security-sensitive singleton")
     require(server, 'private static bool IsValidLocalTunnelAuthorization(',
-            "provider-scoped local tunnel auth helper is missing")
-    require(server, 'McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel',
-            "dedicated local-auth helper is not scoped fail-closed to OpenAI Secure Tunnel")
+            "live OpenAI-tunnel-scoped local auth helper is missing")
+    require(server, 'if (!McpOpenAiSecureTunnelManager.IsRunning) return false;',
+            "dedicated local-auth helper is not scoped fail-closed to a live QS3D-owned OpenAI Secure Tunnel")
     require(server, 'headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)',
             "embedded MCP does not read the dedicated local-auth header")
     require(server, 'if (!TryExtractBearerToken(authorization, out token)) return false;',

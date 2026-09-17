@@ -27,20 +27,20 @@ def bearer_token(value: str | None) -> str | None:
 
 
 def is_valid_local_tunnel_authorization_model(
-    headers: dict[str, str], *, openai_provider: bool, local_token: str
+    headers: dict[str, str], *, openai_tunnel_running: bool, local_token: str
 ) -> bool:
-    if not openai_provider:
+    if not openai_tunnel_running:
         return False
     candidate = bearer_token(headers.get(LOCAL_HEADER))
     return candidate is not None and hmac.compare_digest(candidate, local_token)
 
 
 def authorize_model(
-    headers: dict[str, str], *, openai_provider: bool, local_token: str, oauth_tokens: set[str]
+    headers: dict[str, str], *, openai_tunnel_running: bool, local_token: str, oauth_tokens: set[str]
 ) -> bool:
-    if LOCAL_HEADER in headers and openai_provider:
+    if LOCAL_HEADER in headers and openai_tunnel_running:
         return is_valid_local_tunnel_authorization_model(
-            headers, openai_provider=openai_provider, local_token=local_token
+            headers, openai_tunnel_running=openai_tunnel_running, local_token=local_token
         )
 
     authorization = bearer_token(headers.get("Authorization"))
@@ -60,20 +60,20 @@ def simulate_post(
     headers: dict[str, str],
     body: str,
     *,
-    openai_provider: bool,
+    openai_tunnel_running: bool,
     local_token: str,
     oauth_tokens: set[str],
 ) -> int:
     if not authorize_model(
         headers,
-        openai_provider=openai_provider,
+        openai_tunnel_running=openai_tunnel_running,
         local_token=local_token,
         oauth_tokens=oauth_tokens,
     ):
         return 401
 
     trusted_openai_tunnel_request = is_valid_local_tunnel_authorization_model(
-        headers, openai_provider=openai_provider, local_token=local_token
+        headers, openai_tunnel_running=openai_tunnel_running, local_token=local_token
     )
     if not has_json_content_type(headers) and not trusted_openai_tunnel_request:
         return 415
@@ -112,7 +112,7 @@ def verify_behavior() -> None:
     if simulate_post(
         trusted_missing,
         valid_body,
-        openai_provider=True,
+        openai_tunnel_running=True,
         local_token=local,
         oauth_tokens=set(),
     ) != 200:
@@ -125,7 +125,7 @@ def verify_behavior() -> None:
     if simulate_post(
         trusted_rewritten,
         valid_body,
-        openai_provider=True,
+        openai_tunnel_running=True,
         local_token=local,
         oauth_tokens=set(),
     ) != 200:
@@ -141,7 +141,7 @@ def verify_behavior() -> None:
     if simulate_post(
         wrong_local,
         valid_body,
-        openai_provider=True,
+        openai_tunnel_running=True,
         local_token=local,
         oauth_tokens={oauth},
     ) != 401:
@@ -156,7 +156,7 @@ def verify_behavior() -> None:
     if simulate_post(
         trusted_garbage,
         "not-json-at-all",
-        openai_provider=True,
+        openai_tunnel_running=True,
         local_token=local,
         oauth_tokens=set(),
     ) != 400:
@@ -170,7 +170,7 @@ def verify_behavior() -> None:
     if simulate_post(
         oauth_wrong_content_type,
         valid_body,
-        openai_provider=False,
+        openai_tunnel_running=False,
         local_token=local,
         oauth_tokens={oauth},
     ) != 415:
@@ -183,12 +183,12 @@ def verify_source_contract() -> None:
     require(
         server,
         "private static bool IsValidLocalTunnelAuthorization(",
-        "active server is missing the provider-scoped local tunnel validation helper",
+        "active server is missing the live OpenAI-tunnel-scoped local validation helper",
     )
     require(
         server,
-        "McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel",
-        "local tunnel helper is not scoped fail-closed to the OpenAI provider",
+        "if (!McpOpenAiSecureTunnelManager.IsRunning) return false;",
+        "local tunnel helper is not scoped fail-closed to a live QS3D-owned OpenAI tunnel",
     )
     require(
         server,
