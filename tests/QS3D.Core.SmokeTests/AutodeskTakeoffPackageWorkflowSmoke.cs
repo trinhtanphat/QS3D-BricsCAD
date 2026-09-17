@@ -14,7 +14,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void PackagePreservesEvidenceAndBuildsDeterministicEstimate()
         {
-            var calibration = new DrawingCalibration(2d, "m");
+            var calibration = new DrawingCalibration(1d, 2d, "m");
             var sheet = new DrawingSheet2D("A101", "Plan", DrawingSheetSourceKind.Pdf, "plan.pdf", "R2", calibration);
             var takeoff = new CalibratedTakeoffEngine2D().Extract(sheet, new[]
             {
@@ -34,7 +34,7 @@ namespace QS3D.Core.SmokeTests
 
         private static void PackageRefusesMultipleCurrentRevisionsForSameSheet()
         {
-            var calibration = new DrawingCalibration(1d, "m");
+            var calibration = new DrawingCalibration(1d, 1d, "m");
             var engine = new CalibratedTakeoffEngine2D();
             var oldSheet = new DrawingSheet2D("A101", "Plan", DrawingSheetSourceKind.Pdf, "old.pdf", "R1", calibration);
             var newSheet = new DrawingSheet2D("A101", "Plan", DrawingSheetSourceKind.Pdf, "new.pdf", "R2", calibration);
@@ -48,7 +48,7 @@ namespace QS3D.Core.SmokeTests
         private static IngestedDrawingSheet2D FakeIngested(DrawingSheet2D sheet)
         {
             var ctor = typeof(IngestedDrawingSheet2D).GetConstructors(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic).Single();
-            return (IngestedDrawingSheet2D)ctor.Invoke(new object[] { sheet, new string('a', 64), 100, 1, null, 0, 0 });
+            return (IngestedDrawingSheet2D)ctor.Invoke(new object[] { sheet, new string('a', 64), 100, 1, null!, 0, 0 });
         }
 
         private static void Require(bool condition, string message)
