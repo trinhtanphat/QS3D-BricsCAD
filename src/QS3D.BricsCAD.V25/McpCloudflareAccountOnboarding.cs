@@ -96,6 +96,8 @@ namespace QS3D.BricsCAD.V25
         public static string LastMessage { get { lock (Sync) return _lastMessage; } }
         public static string LastError { get { lock (Sync) return _lastError; } }
         public static bool IsConfigured => !string.IsNullOrWhiteSpace(CloudflaredPath) && !string.IsNullOrWhiteSpace(SavedHostname);
+        public static bool AutoStartEnabled => ReadText(AutoStartPath) == "1";
+        public static void SetAutoStart(bool enabled) => WriteText(AutoStartPath, enabled ? "1" : "0");
         internal static Process? OwnedProcess { get { lock (Sync) return _process; } }
 
         public static bool IsRunning

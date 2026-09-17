@@ -532,6 +532,21 @@ namespace QS3D.BricsCAD.V25
                 WriteResponse(stream, 403, "Forbidden", "{\"error\":\"invalid MCP Origin\"}", null);
                 return;
             }
+            if (request.Path.StartsWith("/qs3d/dashboard/", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!IsValidDirectLocalBearer(request.Headers))
+                {
+                    WriteResponse(stream, 401, "Unauthorized", "{\"error\":\"local dashboard bearer required\"}", null);
+                    return;
+                }
+
+                McpDashboardHttpResponse dashboardResponse;
+                if (McpLocalDashboardControl.TryHandle(request.Method, request.Path, request.Body, out dashboardResponse))
+                {
+                    WriteResponse(stream, dashboardResponse.StatusCode, dashboardResponse.Reason, dashboardResponse.Body, null);
+                    return;
+                }
+            }
             if (request.Method == "GET" && string.Equals(request.Path, "/healthz", StringComparison.OrdinalIgnoreCase))
             {
                 WriteResponse(stream, 200, "OK", "{\"ok\":true,\"service\":\"qs3d-bricscad-mcp\",\"running\":true,\"version\":\"" + ServerVersion + "\"}", null);
@@ -1363,9 +1378,21 @@ namespace QS3D.BricsCAD.V25
 
         private static bool IsValidLocalTunnelAuthorization(IDictionary<string, string> headers)
         {
-            if (McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel) return false;
+            // Dual-tunnel mode decouples process liveness from the selected/preferred provider.
+            // The dedicated OpenAI local-origin header is accepted only while QS3D owns a live
+            // OpenAI tunnel process, and still requires the exact constant-time local bearer.
+            if (!McpOpenAiSecureTunnelManager.IsRunning) return false;
             string authorization;
             if (!headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)) return false;
+            string token;
+            if (!TryExtractBearerToken(authorization, out token)) return false;
+            return ConstantTimeEquals(token, GetBearerToken());
+        }
+
+        private static bool IsValidDirectLocalBearer(IDictionary<string, string> headers)
+        {
+            string authorization;
+            if (!headers.TryGetValue("Authorization", out authorization)) return false;
             string token;
             if (!TryExtractBearerToken(authorization, out token)) return false;
             return ConstantTimeEquals(token, GetBearerToken());
@@ -1375,8 +1402,7 @@ namespace QS3D.BricsCAD.V25
         {
             oauthAccessToken = false;
 
-            if (McpTransportCoordinator.SelectedProvider == McpTransportProvider.OpenAiSecureTunnel
-                && headers.ContainsKey(LocalTunnelAuthorizationHeader))
+            if (headers.ContainsKey(LocalTunnelAuthorizationHeader))
             {
                 return IsValidLocalTunnelAuthorization(headers);
             }

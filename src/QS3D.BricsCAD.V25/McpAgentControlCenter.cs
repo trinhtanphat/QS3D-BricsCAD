@@ -1513,7 +1513,6 @@ namespace QS3D.BricsCAD.V25
         {
             StopQuickUrlPolling();
             McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.CloudflareNamedTunnel);
-            McpOpenAiSecureTunnelManager.StopForHostShutdown();
             string error;
             if (!McpCloudflareAccountTunnelManager.StartSaved(out error))
             {
@@ -1531,7 +1530,6 @@ namespace QS3D.BricsCAD.V25
         private void StartQuickTunnel()
         {
             McpTransportCoordinator.SetSelectedProvider(McpTransportProvider.CloudflareQuickTunnel);
-            McpOpenAiSecureTunnelManager.StopForHostShutdown();
             string error;
             if (!McpCloudflareAccountTunnelManager.StartQuickTunnel(out error))
             {

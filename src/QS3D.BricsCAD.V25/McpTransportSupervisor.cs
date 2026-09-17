@@ -349,11 +349,8 @@ namespace QS3D.BricsCAD.V25
                 return false;
             }
 
-            // Exactly one external route may be active. This does not create/replace the embedded
-            // MCP listener and therefore cannot create a second CAD mutation writer boundary.
-            StopOtherDurableProvider(provider);
-            try { McpCloudflareTunnelManager.StopForHostShutdown(); } catch { }
-
+            // Durable transports are independent outbound routes to the same loopback MCP.
+            // Supervisor recovery owns only the requested provider and must not stop the sibling lane.
             bool started;
             if (provider == McpTransportProvider.OpenAiSecureTunnel)
             {
@@ -367,14 +364,6 @@ namespace QS3D.BricsCAD.V25
             if (!started || !IsProviderRunning(provider)) return false;
             CaptureOwnedProcess(provider);
             return true;
-        }
-
-        private static void StopOtherDurableProvider(McpTransportProvider active)
-        {
-            if (active != McpTransportProvider.OpenAiSecureTunnel)
-                StopProvider(McpTransportProvider.OpenAiSecureTunnel);
-            if (active != McpTransportProvider.CloudflareNamedTunnel)
-                StopProvider(McpTransportProvider.CloudflareNamedTunnel);
         }
 
         private static void StopProvider(McpTransportProvider provider)
