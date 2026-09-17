@@ -144,7 +144,7 @@ cloudflared --version
 Then return to Agent Center and **Refresh**. QS3D should discover the WinGet binary, verify the Cloudflare Authenticode signer and reuse it instead of downloading a second copy.
 
 
-### 3.5 Local Private Commander dashboard ? loopback operations view
+### 3.5 Local Private Commander dashboard - loopback operations view
 
 QS3D ships a standalone local operations dashboard at **`http://127.0.0.1:3220/`**. It is bound to loopback only and is designed to remain available after Windows sign-in even when BricsCAD is not yet running. The dashboard shows local MCP reachability/latency, ChatGPT web reachability, OpenAI tunnel readiness, Cloudflare public-route reachability, the currently preferred provider, and a compact fault-localization view.
 
@@ -152,7 +152,7 @@ The browser never receives the QS3D MCP bearer. The dashboard process reads the 
 
 OpenAI Tunnel ID may be supplied from the dashboard. A Runtime API key typed there is forwarded only over loopback to `McpOpenAiSecureTunnelManager.Start`, which persists it through the existing verified **Windows Credential Manager** contract. The dashboard does not write the Runtime API key, MCP bearer, Cloudflare credential, or OAuth token to dashboard files, command lines, logs, status JSON, or HTML. The password input is cleared after each action.
 
-`scripts/install-mcp-local-dashboard.ps1` publishes the dashboard self-contained for Windows x64, installs it under `%LOCALAPPDATA%\QS3D\McpDashboard`, registers the idempotent Scheduled Task **QS3D MCP Local Dashboard** at user logon, and verifies `127.0.0.1:3220`. Tunnel autostart remains owned by the plugin transport managers: when the MCP host starts, each durable lane with its own autostart flag enabled may start independently.
+`scripts/install-mcp-local-dashboard.ps1` publishes the dashboard as a framework-dependent Windows x64 app after verifying that `Microsoft.AspNetCore.App 8.x` is installed, installs it under `%LOCALAPPDATA%\QS3D\McpDashboard`, registers the idempotent Scheduled Task **QS3D MCP Local Dashboard** at user logon, and verifies `127.0.0.1:3220`. Tunnel autostart remains owned by the plugin transport managers: when the MCP host starts, each durable lane with its own autostart flag enabled may start independently.
 
 The OpenAI dedicated local-origin header remains fail-closed in dual-tunnel mode: it is accepted only while QS3D owns a live OpenAI tunnel process and only when the exact local bearer matches in constant time. It is no longer gated on `SelectedProvider`, because selected/preferred state is UI/supervision preference rather than process liveness. Cloudflare public OAuth/bearer rules are unchanged.
 
@@ -291,14 +291,14 @@ The local matrix must cover at least:
 19. Cloudflare authorization deny/approve, PKCE S256 and representative tool scan;
 20. Quick Tunnel test-only URL churn and required reconnect;
 21. provider switching does not cause a non-selected running transport to be reported as selected READY, while an independently running sibling durable transport remains running;
-24. local dashboard `127.0.0.1:3220` loopback-only bind, same-origin mutation guard, bearer non-disclosure, MCP/ChatGPT/tunnel latency indicators and start/stop/restart controls for both durable lanes;
-25. simultaneous OpenAI Secure Tunnel + Cloudflare Named Tunnel runtime, including independent autostart flags and no cross-provider teardown when either lane starts/restarts;
 22. public OAuth code/token/refresh replay/resource-binding invariants on the Cloudflare path;
 23. `background_only` startup and same-process background controls;
+24. local dashboard `127.0.0.1:3220` loopback-only bind, same-origin mutation guard, bearer non-disclosure, MCP/ChatGPT/tunnel latency indicators and start/stop/restart controls for both durable lanes;
+25. simultaneous OpenAI Secure Tunnel + Cloudflare Named Tunnel runtime, including independent autostart flags and no cross-provider teardown when either lane starts/restarts;
 26. local desktop-consent OFF rejection, local Resume/Pause, AUTO-RENEW remaining ON beyond 10 minutes of idle time, and blue overlay while guarded actions run;
 27. bounded screenshot/clipboard/mouse/drag/type/key behavior only under existing consent/confirmation rules;
 28. bounded `desktop_sequence` success/rejection/cancellation contracts;
-29. physical Esc×2 emergency stop and CAD cancel;
+29. physical Esc twice emergency stop and CAD cancel;
 30. versioned backup/recovery-to-new-copy;
 31. one confirmed disposable-DWG mutation plus audit/save/reopen;
 32. clean V25/V26 process shutdown with tunnel processes stopped.
