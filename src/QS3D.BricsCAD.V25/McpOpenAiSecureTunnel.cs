@@ -66,7 +66,15 @@ namespace QS3D.BricsCAD.V25
 
         public static void TryAutoStartPreferred()
         {
-            McpTransportSupervisor.TryAutoStartPreferred(SelectedProvider);
+            var preferred = SelectedProvider;
+            McpTransportSupervisor.TryAutoStartPreferred(preferred);
+
+            // Preference controls supervision/UI only. The sibling durable lane may also be
+            // configured for autostart and must be allowed to coexist independently.
+            if (preferred != McpTransportProvider.OpenAiSecureTunnel)
+                McpOpenAiSecureTunnelManager.TryAutoStart();
+            if (preferred != McpTransportProvider.CloudflareNamedTunnel)
+                McpCloudflareAccountTunnelManager.TryAutoStart();
         }
 
         public static bool IsChatGptRegistrationAcknowledged()
@@ -220,6 +228,8 @@ namespace QS3D.BricsCAD.V25
         }
 
         public static bool IsConfigured => IsValidTunnelId(SavedTunnelId) && IsUsableClientPath(SavedClientPath);
+        public static bool AutoStartEnabled => ReadText(AutoStartFile) == "1";
+        public static void SetAutoStart(bool enabled) => WriteTextVerified(AutoStartFile, enabled ? "1" : "0");
         internal static Process? OwnedProcess { get { lock (Sync) return _process; } }
 
         public static bool IsRunning
@@ -349,9 +359,9 @@ namespace QS3D.BricsCAD.V25
                 WriteRuntimeConfig(normalizedTunnelId, McpEmbeddedServer.Endpoint);
                 try { if (File.Exists(HealthUrlPath)) File.Delete(HealthUrlPath); } catch { }
 
-                // One selected transport should own external reachability at a time.
-                McpCloudflareAccountTunnelManager.StopForHostShutdown();
-                McpCloudflareTunnelManager.StopForHostShutdown();
+                // OpenAI and Cloudflare are independent outbound lanes. Starting one durable
+                // transport must never tear down the other; SelectedProvider is preference/UI state,
+                // not exclusive process ownership. Quick Tunnel remains separately managed.
                 StopProcessOnly();
                 ClearDiagnostics();
                 string staleCleanup;
