@@ -4,6 +4,7 @@ namespace QS3D.Core.SmokeTests
     {
         internal static void RunAll()
         {
+            AutodeskTakeoffPackageWorkflowSmoke.Run();
             ProjectQuantitySmoke.Run();
             GoldenProjectE2ERegressionSmoke.Run();
             P0QuantityContractRegressionSmoke.Run();
