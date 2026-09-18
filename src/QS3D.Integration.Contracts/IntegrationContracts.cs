@@ -60,6 +60,75 @@ public sealed record DiffEntry(string EntityId, string ChangeKind, string? Befor
 public sealed record TenderRef(string TenderId, string RevisionId, string Currency);
 public sealed record ProcurementRef(string ProcurementId, string TenderId, string Status);
 
+public sealed record ExternalSystemRef(string System, string ExternalId, string? ExternalProjectId = null);
+public sealed record SupplierRef(string SupplierId, string Name, string Status, ExternalSystemRef? External = null);
+public sealed record SubcontractCommitmentRef(
+    string CommitmentId,
+    string ProcurementId,
+    string SupplierId,
+    decimal CommittedAmount,
+    string Currency,
+    string Status,
+    ExternalSystemRef? External = null);
+public sealed record PurchaseOrderRef(
+    string PurchaseOrderId,
+    string ProcurementId,
+    string SupplierId,
+    decimal OrderedAmount,
+    string Currency,
+    string Status,
+    DateTimeOffset? RequiredAtUtc,
+    ExternalSystemRef? External = null);
+public sealed record DeliveryRef(
+    string DeliveryId,
+    string PurchaseOrderId,
+    string Status,
+    DateTimeOffset? PlannedAtUtc,
+    DateTimeOffset? ReceivedAtUtc,
+    IReadOnlyList<EvidenceRef> Evidence);
+public sealed record ProcurementProgress(
+    string ProcurementId,
+    decimal PercentComplete,
+    decimal CommittedAmount,
+    decimal ActualAmount,
+    string Currency,
+    DateTimeOffset CapturedAtUtc);
+public sealed record CostControlSnapshot(
+    string ProjectId,
+    string SnapshotId,
+    decimal BudgetAmount,
+    decimal CommittedAmount,
+    decimal ActualAmount,
+    decimal ForecastAmount,
+    string Currency,
+    DateTimeOffset CapturedAtUtc);
+public sealed record FieldProgressRef(
+    string ProgressId,
+    string ProjectId,
+    string WorkPackageId,
+    decimal PercentComplete,
+    DateTimeOffset CapturedAtUtc,
+    IReadOnlyList<EvidenceRef> Evidence,
+    ExternalSystemRef? External = null);
+public sealed record ProjectControlRef(
+    string ControlId,
+    string ProjectId,
+    string ControlType,
+    string Status,
+    DateTimeOffset CapturedAtUtc,
+    ExternalSystemRef? External = null);
+public sealed record ConstructionLifecyclePublication(
+    ProjectRef Project,
+    SnapshotRef Snapshot,
+    IReadOnlyList<SupplierRef> Suppliers,
+    IReadOnlyList<SubcontractCommitmentRef> SubcontractCommitments,
+    IReadOnlyList<PurchaseOrderRef> PurchaseOrders,
+    IReadOnlyList<DeliveryRef> Deliveries,
+    IReadOnlyList<ProcurementProgress> ProcurementProgress,
+    CostControlSnapshot CostControl,
+    IReadOnlyList<FieldProgressRef> FieldProgress,
+    IReadOnlyList<ProjectControlRef> ProjectControls);
+
 public sealed record QuantityPublication(
     ProjectRef Project,
     ModelRef Model,
