@@ -13,7 +13,7 @@ contracts = {
     "beam stirrups": ("src/QS3D.BricsCAD.V25/Cad/BeamStirrupSolidBuilder.cs", 'geometry.rebar.beam.stirrup', "BuildSelected(\n            Document document,\n            ProjectState project,\n            ObjectId[] selectedIds,\n            ISet<string> expectedTargetIds)"),
     "slab mesh": ("src/QS3D.BricsCAD.V25/Cad/SlabMeshSolidBuilder.cs", 'geometry.rebar.slab.mesh', "BuildSelected(Document document, ProjectState project)"),
     "structural-wall mesh": ("src/QS3D.BricsCAD.V25/Cad/StructuralWallMeshSolidBuilder.cs", 'geometry.rebar.wall.mesh', "BuildSelected(Document document, ProjectState project)"),
-    "foundation mesh": ("src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs", 'geometry.rebar.foundation.mesh', "BuildSelected(Document document, ProjectState project)"),
+    "foundation mesh": ("src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs", 'geometry.rebar.foundation.mesh', "BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)"),
 }
 
 for label, (relative, event_name, build_signature) in contracts.items():
