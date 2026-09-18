@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 
 var anonymous = new ClaimsPrincipal(new ClaimsIdentity());
 Require(await Status(ApiAuthorization.Authorize(anonymous, "quantity:read")) == 401, "anonymous request must be 401");
