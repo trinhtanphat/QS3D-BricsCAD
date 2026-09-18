@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using Bricscad.ApplicationServices;
-using Bricscad.EditorInput;
 using QS3D.Core.Audit;
 using QS3D.Core.Domain;
 using QS3D.Core.Geometry;
@@ -18,6 +17,7 @@ namespace QS3D.BricsCAD.V25.Cad
     {
         public int Elements { get; set; }
         public int Bars { get; set; }
+        public bool PostCommitCleanupWarning { get; set; }
     }
 
     internal static class FoundationMeshSolidBuilder
@@ -43,20 +43,15 @@ namespace QS3D.BricsCAD.V25.Cad
             public string FootprintMode { get; set; } = string.Empty;
         }
 
-        public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project)
+        public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)
         {
             if (document == null) throw new ArgumentNullException(nameof(document));
             if (project == null) throw new ArgumentNullException(nameof(project));
-            var selection = document.Editor.SelectImplied();
-            if (selection.Status != PromptStatus.OK || selection.Value == null)
-            {
-                selection = document.Editor.GetSelection();
-                if (selection.Status != PromptStatus.OK || selection.Value == null) return new FoundationMeshBuildResult();
-                document.Editor.SetImpliedSelection(selection.Value.GetObjectIds());
-            }
+            if (selectedIds == null) throw new ArgumentNullException(nameof(selectedIds));
+            var ids = (ObjectId[])selectedIds.Clone();
 
             var selectedHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var id in selection.Value.GetObjectIds())
+            foreach (var id in ids)
                 try { selectedHandles.Add(id.Handle.ToString()); } catch { }
 
             var elements = project.Elements
@@ -80,6 +75,7 @@ namespace QS3D.BricsCAD.V25.Cad
             var batchBars = 0;
             var rollback = ProjectStateSnapshot.Capture(project);
             var cadCommitted = false;
+            var cleanupWarning = false;
             try
             {
                 using (document.LockDocument())
@@ -94,14 +90,7 @@ namespace QS3D.BricsCAD.V25.Cad
                         var family = project.FindFamily(element.FamilyId);
                         var xGroup = ParseDirection(element, family, "RebarFoundationXNotation");
                         var yGroup = ParseDirection(element, family, "RebarFoundationYNotation");
-                        var verticalPlacement = CadElementVerticalPlacement.Resolve(
-                            document,
-                            project,
-                            element,
-                            family,
-                            polyline.Elevation,
-                            "ThicknessM",
-                            .5d);
+                        var verticalPlacement = CadElementVerticalPlacement.Resolve(document, project, element, family, polyline.Elevation, "ThicknessM", .5d);
                         var thicknessM = verticalPlacement.HeightM;
                         var coverM = CadGeometryGuard.Number(element, family, "RebarFoundationCoverM", CadGeometryGuard.Number(element, family, "RebarCoverM", .05d));
                         if (coverM < 0d) throw new InvalidOperationException(element.Id + "/RebarFoundationCoverM phải >= 0.");
@@ -117,19 +106,10 @@ namespace QS3D.BricsCAD.V25.Cad
                         {
                             var layout = RectangularSlabMeshPlanner.Plan(new RectangularSlabMeshInput
                             {
-                                SpanXM = rectangle.SpanXM,
-                                SpanYM = rectangle.SpanYM,
-                                ThicknessM = thicknessM,
-                                CoverM = coverM,
-                                XDiameterMm = xGroup.DiameterMm,
-                                YDiameterMm = yGroup.DiameterMm,
-                                XSpacingMm = xGroup.SpacingMm,
-                                XCount = xGroup.Quantity,
-                                YSpacingMm = yGroup.SpacingMm,
-                                YCount = yGroup.Quantity,
-                                IncludeBottom = includeBottom,
-                                IncludeTop = includeTop,
-                                XClosestToFace = xClosest
+                                SpanXM = rectangle.SpanXM, SpanYM = rectangle.SpanYM, ThicknessM = thicknessM, CoverM = coverM,
+                                XDiameterMm = xGroup.DiameterMm, YDiameterMm = yGroup.DiameterMm, XSpacingMm = xGroup.SpacingMm,
+                                XCount = xGroup.Quantity, YSpacingMm = yGroup.SpacingMm, YCount = yGroup.Quantity,
+                                IncludeBottom = includeBottom, IncludeTop = includeTop, XClosestToFace = xClosest
                             });
                             ReserveBatchBars(ref batchBars, layout.Count);
                             ErasePrevious(document, transaction, project, element, ownership);
@@ -142,18 +122,10 @@ namespace QS3D.BricsCAD.V25.Cad
                         var footprintM = ReadPolygonFootprint(document, element, polyline);
                         var polygonLayout = PolygonalSlabMeshPlanner.Plan(new PolygonalSlabMeshInput
                         {
-                            FootprintM = footprintM,
-                            ThicknessM = thicknessM,
-                            CoverM = coverM,
-                            XDiameterMm = xGroup.DiameterMm,
-                            YDiameterMm = yGroup.DiameterMm,
-                            XSpacingMm = xGroup.SpacingMm,
-                            XCount = xGroup.Quantity,
-                            YSpacingMm = yGroup.SpacingMm,
-                            YCount = yGroup.Quantity,
-                            IncludeBottom = includeBottom,
-                            IncludeTop = includeTop,
-                            XClosestToFace = xClosest
+                            FootprintM = footprintM, ThicknessM = thicknessM, CoverM = coverM,
+                            XDiameterMm = xGroup.DiameterMm, YDiameterMm = yGroup.DiameterMm, XSpacingMm = xGroup.SpacingMm,
+                            XCount = xGroup.Quantity, YSpacingMm = yGroup.SpacingMm, YCount = yGroup.Quantity,
+                            IncludeBottom = includeBottom, IncludeTop = includeTop, XClosestToFace = xClosest
                         });
                         ReserveBatchBars(ref batchBars, polygonLayout.Count);
                         ErasePrevious(document, transaction, project, element, ownership);
@@ -167,6 +139,19 @@ namespace QS3D.BricsCAD.V25.Cad
                     cadCommitted = true;
                 }
             }
+            catch (ObjectDisposedException operationError)
+            {
+                if (cadCommitted) cleanupWarning = true;
+                else
+                {
+                    try { rollback.Restore(project); }
+                    catch (Exception restoreError)
+                    {
+                        throw new InvalidOperationException("Foundation mesh replacement failed before CAD commit and project rollback also failed.", new AggregateException(operationError, restoreError));
+                    }
+                    throw;
+                }
+            }
             catch (Exception operationError)
             {
                 if (!cadCommitted)
@@ -174,55 +159,21 @@ namespace QS3D.BricsCAD.V25.Cad
                     try { rollback.Restore(project); }
                     catch (Exception restoreError)
                     {
-                        throw new InvalidOperationException(
-                            "Foundation mesh replacement failed before CAD commit and project rollback also failed.",
-                            new AggregateException(operationError, restoreError));
+                        throw new InvalidOperationException("Foundation mesh replacement failed before CAD commit and project rollback also failed.", new AggregateException(operationError, restoreError));
                     }
                 }
                 throw;
             }
 
-            return new FoundationMeshBuildResult { Elements = pending.Count, Bars = pending.Sum(x => x.Handles.Count) };
+            return new FoundationMeshBuildResult { Elements = pending.Count, Bars = pending.Sum(x => x.Handles.Count), PostCommitCleanupWarning = cleanupWarning };
         }
 
-        private static PendingUpdate CreateUpdate(
-            ProjectState project,
-            ProjectElement element,
-            CadElementVerticalPlacement verticalPlacement,
-            RebarGroup xGroup,
-            RebarGroup yGroup,
-            double coverM,
-            double xSpacingM,
-            double ySpacingM,
-            bool includeBottom,
-            bool includeTop,
-            string footprintMode)
+        private static PendingUpdate CreateUpdate(ProjectState project, ProjectElement element, CadElementVerticalPlacement verticalPlacement, RebarGroup xGroup, RebarGroup yGroup, double coverM, double xSpacingM, double ySpacingM, bool includeBottom, bool includeTop, string footprintMode)
         {
-            return new PendingUpdate
-            {
-                Project = project,
-                Element = element,
-                VerticalPlacement = verticalPlacement,
-                XDiameterMm = xGroup.DiameterMm,
-                YDiameterMm = yGroup.DiameterMm,
-                CoverM = coverM,
-                XSpacingM = xSpacingM,
-                YSpacingM = ySpacingM,
-                Faces = includeBottom && includeTop ? "Both" : (includeTop ? "Top" : "Bottom"),
-                FootprintMode = footprintMode
-            };
+            return new PendingUpdate { Project = project, Element = element, VerticalPlacement = verticalPlacement, XDiameterMm = xGroup.DiameterMm, YDiameterMm = yGroup.DiameterMm, CoverM = coverM, XSpacingM = xSpacingM, YSpacingM = ySpacingM, Faces = includeBottom && includeTop ? "Both" : (includeTop ? "Top" : "Bottom"), FootprintMode = footprintMode };
         }
 
-        private static void AppendRectangleBars(
-            Document document,
-            Transaction transaction,
-            BlockTableRecord modelSpace,
-            Polyline source,
-            ProjectElement element,
-            RectangleFrame frame,
-            double centerZ,
-            RectangularSlabMeshLayout layout,
-            PendingUpdate update)
+        private static void AppendRectangleBars(Document document, Transaction transaction, BlockTableRecord modelSpace, Polyline source, ProjectElement element, RectangleFrame frame, double centerZ, RectangularSlabMeshLayout layout, PendingUpdate update)
         {
             foreach (var placement in layout.Bars)
             {
@@ -232,28 +183,14 @@ namespace QS3D.BricsCAD.V25.Cad
                 var elevationOffset = CadGeometryGuard.ToDrawingUnits(document, placement.ElevationOffsetM, element.Id + "/foundation mesh elevation");
                 var length = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.LengthM, element.Id + "/foundation mesh bar length"), element.Id + "/foundation mesh bar length drawing");
                 var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.DiameterMm / 2000d, element.Id + "/foundation mesh bar radius"), element.Id + "/foundation mesh bar radius drawing");
-                var center = new Point3d(
-                    CadGeometryGuard.Add(frame.Center.X, CadGeometryGuard.Multiply(distribution.X, distributionOffset, element.Id + "/foundation mesh distribution X"), element.Id + "/foundation mesh center X"),
-                    CadGeometryGuard.Add(frame.Center.Y, CadGeometryGuard.Multiply(distribution.Y, distributionOffset, element.Id + "/foundation mesh distribution Y"), element.Id + "/foundation mesh center Y"),
-                    CadGeometryGuard.Add(centerZ, elevationOffset, element.Id + "/foundation mesh center Z"));
+                var center = new Point3d(CadGeometryGuard.Add(frame.Center.X, CadGeometryGuard.Multiply(distribution.X, distributionOffset, element.Id + "/foundation mesh distribution X"), element.Id + "/foundation mesh center X"), CadGeometryGuard.Add(frame.Center.Y, CadGeometryGuard.Multiply(distribution.Y, distributionOffset, element.Id + "/foundation mesh distribution Y"), element.Id + "/foundation mesh center Y"), CadGeometryGuard.Add(centerZ, elevationOffset, element.Id + "/foundation mesh center Z"));
                 var half = length / 2d;
-                var start = new Point3d(
-                    CadGeometryGuard.Subtract(center.X, CadGeometryGuard.Multiply(run.X, half, element.Id + "/foundation mesh start X offset"), element.Id + "/foundation mesh start X"),
-                    CadGeometryGuard.Subtract(center.Y, CadGeometryGuard.Multiply(run.Y, half, element.Id + "/foundation mesh start Y offset"), element.Id + "/foundation mesh start Y"),
-                    CadGeometryGuard.Finite(center.Z, element.Id + "/foundation mesh start Z"));
+                var start = new Point3d(CadGeometryGuard.Subtract(center.X, CadGeometryGuard.Multiply(run.X, half, element.Id + "/foundation mesh start X offset"), element.Id + "/foundation mesh start X"), CadGeometryGuard.Subtract(center.Y, CadGeometryGuard.Multiply(run.Y, half, element.Id + "/foundation mesh start Y offset"), element.Id + "/foundation mesh start Y"), CadGeometryGuard.Finite(center.Z, element.Id + "/foundation mesh start Z"));
                 AppendBar(document, transaction, modelSpace, source, element, start, run, length, radius, update);
             }
         }
 
-        private static void AppendPolygonBars(
-            Document document,
-            Transaction transaction,
-            BlockTableRecord modelSpace,
-            Polyline source,
-            ProjectElement element,
-            double centerZ,
-            PolygonalSlabMeshLayout layout,
-            PendingUpdate update)
+        private static void AppendPolygonBars(Document document, Transaction transaction, BlockTableRecord modelSpace, Polyline source, ProjectElement element, double centerZ, PolygonalSlabMeshLayout layout, PendingUpdate update)
         {
             foreach (var placement in layout.Bars)
             {
@@ -263,28 +200,14 @@ namespace QS3D.BricsCAD.V25.Cad
                 var endY = CadGeometryGuard.ToDrawingUnits(document, placement.EndM.Y, element.Id + "/foundation polygon mesh end Y");
                 var elevationOffset = CadGeometryGuard.ToDrawingUnits(document, placement.ElevationOffsetM, element.Id + "/foundation polygon mesh elevation");
                 var startZ = CadGeometryGuard.Add(centerZ, elevationOffset, element.Id + "/foundation polygon mesh start Z");
-                var run = new Vector3d(
-                    CadGeometryGuard.Subtract(endX, startX, element.Id + "/foundation polygon mesh run X"),
-                    CadGeometryGuard.Subtract(endY, startY, element.Id + "/foundation polygon mesh run Y"),
-                    0d);
+                var run = new Vector3d(CadGeometryGuard.Subtract(endX, startX, element.Id + "/foundation polygon mesh run X"), CadGeometryGuard.Subtract(endY, startY, element.Id + "/foundation polygon mesh run Y"), 0d);
                 var length = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.LengthM, element.Id + "/foundation polygon mesh bar length"), element.Id + "/foundation polygon mesh bar length drawing");
                 var radius = CadGeometryGuard.Positive(CadGeometryGuard.ToDrawingUnits(document, placement.DiameterMm / 2000d, element.Id + "/foundation polygon mesh bar radius"), element.Id + "/foundation polygon mesh bar radius drawing");
-                var start = new Point3d(startX, startY, startZ);
-                AppendBar(document, transaction, modelSpace, source, element, start, run, length, radius, update);
+                AppendBar(document, transaction, modelSpace, source, element, new Point3d(startX, startY, startZ), run, length, radius, update);
             }
         }
 
-        private static void AppendBar(
-            Document document,
-            Transaction transaction,
-            BlockTableRecord modelSpace,
-            Polyline source,
-            ProjectElement element,
-            Point3d start,
-            Vector3d direction,
-            double length,
-            double radius,
-            PendingUpdate update)
+        private static void AppendBar(Document document, Transaction transaction, BlockTableRecord modelSpace, Polyline source, ProjectElement element, Point3d start, Vector3d direction, double length, double radius, PendingUpdate update)
         {
             Solid3d? bar = CreateCylinder(document, start, direction, length, radius, element.Id + "/foundation mesh bar");
             try
@@ -301,8 +224,7 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static void ReserveBatchBars(ref int batchBars, int count)
         {
-            if (count < 0 || batchBars > MaxBarsPerBatch - count)
-                throw new InvalidOperationException("Foundation mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
+            if (count < 0 || batchBars > MaxBarsPerBatch - count) throw new InvalidOperationException("Foundation mesh batch vượt giới hạn " + MaxBarsPerBatch + " bar.");
             batchBars = checked(batchBars + count);
         }
 
@@ -320,100 +242,46 @@ namespace QS3D.BricsCAD.V25.Cad
             update.Element.Properties["GeneratedFoundationMeshFaces"] = update.Faces;
             CadElementVerticalPlacement.CommitSnapshot(update.Element, "GeneratedFoundationMesh", update.VerticalPlacement);
             update.Element.ClearGeneratedFoundationMeshStale();
-            AuditTrail.ForProject(project).Record(
-                "geometry.rebar.foundation.mesh",
-                update.Element.Id,
-                update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars • " + update.FootprintMode);
+            AuditTrail.ForProject(project).Record("geometry.rebar.foundation.mesh", update.Element.Id, update.Handles.Count.ToString(CultureInfo.InvariantCulture) + " bars • " + update.FootprintMode);
         }
 
-        private sealed class RectangleFrame
-        {
-            public Point3d Center { get; set; }
-            public Vector3d XAxis { get; set; }
-            public Vector3d YAxis { get; set; }
-            public double SpanXM { get; set; }
-            public double SpanYM { get; set; }
-        }
+        private sealed class RectangleFrame { public Point3d Center { get; set; } public Vector3d XAxis { get; set; } public Vector3d YAxis { get; set; } public double SpanXM { get; set; } public double SpanYM { get; set; } }
 
         private static RectangleFrame? TryReadRectangle(Document document, ProjectElement element, Polyline polyline)
         {
             ValidateCommonFootprint(element, polyline);
             if (polyline.NumberOfVertices != 4) return null;
-
-            var p0 = polyline.GetPoint2dAt(0);
-            var p1 = polyline.GetPoint2dAt(1);
-            var p2 = polyline.GetPoint2dAt(2);
-            var p3 = polyline.GetPoint2dAt(3);
-            var xdx = CadGeometryGuard.Subtract(p1.X, p0.X, element.Id + "/foundation X dx");
-            var xdy = CadGeometryGuard.Subtract(p1.Y, p0.Y, element.Id + "/foundation X dy");
-            var ydx = CadGeometryGuard.Subtract(p2.X, p1.X, element.Id + "/foundation Y dx");
-            var ydy = CadGeometryGuard.Subtract(p2.Y, p1.Y, element.Id + "/foundation Y dy");
-            var spanXDrawing = CadGeometryGuard.Hypot(xdx, xdy, element.Id + "/foundation X span");
-            var spanYDrawing = CadGeometryGuard.Hypot(ydx, ydy, element.Id + "/foundation Y span");
+            var p0 = polyline.GetPoint2dAt(0); var p1 = polyline.GetPoint2dAt(1); var p2 = polyline.GetPoint2dAt(2); var p3 = polyline.GetPoint2dAt(3);
+            var xdx = CadGeometryGuard.Subtract(p1.X, p0.X, element.Id + "/foundation X dx"); var xdy = CadGeometryGuard.Subtract(p1.Y, p0.Y, element.Id + "/foundation X dy");
+            var ydx = CadGeometryGuard.Subtract(p2.X, p1.X, element.Id + "/foundation Y dx"); var ydy = CadGeometryGuard.Subtract(p2.Y, p1.Y, element.Id + "/foundation Y dy");
+            var spanXDrawing = CadGeometryGuard.Hypot(xdx, xdy, element.Id + "/foundation X span"); var spanYDrawing = CadGeometryGuard.Hypot(ydx, ydy, element.Id + "/foundation Y span");
             if (spanXDrawing <= 1e-9d || spanYDrawing <= 1e-9d) return null;
-
-            var ux = xdx / spanXDrawing;
-            var uy = xdy / spanXDrawing;
-            var vx = ydx / spanYDrawing;
-            var vy = ydy / spanYDrawing;
-            var orthogonality = Math.Abs(CadGeometryGuard.Add(
-                CadGeometryGuard.Multiply(ux, vx, element.Id + "/foundation dot X"),
-                CadGeometryGuard.Multiply(uy, vy, element.Id + "/foundation dot Y"),
-                element.Id + "/foundation orthogonality"));
+            var ux = xdx / spanXDrawing; var uy = xdy / spanXDrawing; var vx = ydx / spanYDrawing; var vy = ydy / spanYDrawing;
+            var orthogonality = Math.Abs(CadGeometryGuard.Add(CadGeometryGuard.Multiply(ux, vx, element.Id + "/foundation dot X"), CadGeometryGuard.Multiply(uy, vy, element.Id + "/foundation dot Y"), element.Id + "/foundation orthogonality"));
             if (orthogonality > 1e-6d) return null;
-
-            var tolerance = CadGeometryGuard.Add(
-                CadGeometryGuard.Multiply(Math.Max(spanXDrawing, spanYDrawing), 1e-6d, element.Id + "/foundation tolerance scale"),
-                1e-8d,
-                element.Id + "/foundation tolerance");
+            var tolerance = CadGeometryGuard.Add(CadGeometryGuard.Multiply(Math.Max(spanXDrawing, spanYDrawing), 1e-6d, element.Id + "/foundation tolerance scale"), 1e-8d, element.Id + "/foundation tolerance");
             var expectedP2X = CadGeometryGuard.Add(CadGeometryGuard.Add(p0.X, xdx, element.Id + "/foundation expected P2 X"), ydx, element.Id + "/foundation expected P2 X");
             var expectedP2Y = CadGeometryGuard.Add(CadGeometryGuard.Add(p0.Y, xdy, element.Id + "/foundation expected P2 Y"), ydy, element.Id + "/foundation expected P2 Y");
-            var expectedP3X = CadGeometryGuard.Add(p0.X, ydx, element.Id + "/foundation expected P3 X");
-            var expectedP3Y = CadGeometryGuard.Add(p0.Y, ydy, element.Id + "/foundation expected P3 Y");
-            if (Distance(p2.X, p2.Y, expectedP2X, expectedP2Y, element.Id + "/foundation P2 closure") > tolerance ||
-                Distance(p3.X, p3.Y, expectedP3X, expectedP3Y, element.Id + "/foundation P3 closure") > tolerance)
-                return null;
-
-            return new RectangleFrame
-            {
-                Center = new Point3d(
-                    CadGeometryGuard.Midpoint(p0.X, p2.X, element.Id + "/foundation center X"),
-                    CadGeometryGuard.Midpoint(p0.Y, p2.Y, element.Id + "/foundation center Y"),
-                    CadGeometryGuard.Finite(polyline.Elevation, element.Id + "/foundation center Z")),
-                XAxis = new Vector3d(ux, uy, 0d),
-                YAxis = new Vector3d(vx, vy, 0d),
-                SpanXM = CadGeometryGuard.ToMeters(document, spanXDrawing, element.Id + "/foundation X span"),
-                SpanYM = CadGeometryGuard.ToMeters(document, spanYDrawing, element.Id + "/foundation Y span")
-            };
+            var expectedP3X = CadGeometryGuard.Add(p0.X, ydx, element.Id + "/foundation expected P3 X"); var expectedP3Y = CadGeometryGuard.Add(p0.Y, ydy, element.Id + "/foundation expected P3 Y");
+            if (Distance(p2.X, p2.Y, expectedP2X, expectedP2Y, element.Id + "/foundation P2 closure") > tolerance || Distance(p3.X, p3.Y, expectedP3X, expectedP3Y, element.Id + "/foundation P3 closure") > tolerance) return null;
+            return new RectangleFrame { Center = new Point3d(CadGeometryGuard.Midpoint(p0.X, p2.X, element.Id + "/foundation center X"), CadGeometryGuard.Midpoint(p0.Y, p2.Y, element.Id + "/foundation center Y"), CadGeometryGuard.Finite(polyline.Elevation, element.Id + "/foundation center Z")), XAxis = new Vector3d(ux, uy, 0d), YAxis = new Vector3d(vx, vy, 0d), SpanXM = CadGeometryGuard.ToMeters(document, spanXDrawing, element.Id + "/foundation X span"), SpanYM = CadGeometryGuard.ToMeters(document, spanYDrawing, element.Id + "/foundation Y span") };
         }
 
         private static IReadOnlyList<Point2> ReadPolygonFootprint(Document document, ProjectElement element, Polyline polyline)
         {
             ValidateCommonFootprint(element, polyline);
-            if (polyline.Normal.Z < 1d - 1e-9d)
-                throw new InvalidOperationException(element.Id + ": polygonal Foundation mesh hiện yêu cầu plan-view POLYLINE có normal +Z.");
-
+            if (polyline.Normal.Z < 1d - 1e-9d) throw new InvalidOperationException(element.Id + ": polygonal Foundation mesh hiện yêu cầu plan-view POLYLINE có normal +Z.");
             var points = new List<Point2>(polyline.NumberOfVertices);
-            for (var index = 0; index < polyline.NumberOfVertices; index++)
-            {
-                var point = polyline.GetPoint2dAt(index);
-                points.Add(new Point2(
-                    CadGeometryGuard.ToMeters(document, point.X, element.Id + "/foundation polygon X"),
-                    CadGeometryGuard.ToMeters(document, point.Y, element.Id + "/foundation polygon Y")));
-            }
+            for (var index = 0; index < polyline.NumberOfVertices; index++) { var point = polyline.GetPoint2dAt(index); points.Add(new Point2(CadGeometryGuard.ToMeters(document, point.X, element.Id + "/foundation polygon X"), CadGeometryGuard.ToMeters(document, point.Y, element.Id + "/foundation polygon Y"))); }
             return points.AsReadOnly();
         }
 
         private static void ValidateCommonFootprint(ProjectElement element, Polyline polyline)
         {
-            if (!polyline.Closed || polyline.NumberOfVertices < 3)
-                throw new InvalidOperationException(element.Id + ": QS3DFOUNDATIONREBAR3D yêu cầu closed POLYLINE có ít nhất 3 vertex.");
+            if (!polyline.Closed || polyline.NumberOfVertices < 3) throw new InvalidOperationException(element.Id + ": QS3DFOUNDATIONREBAR3D yêu cầu closed POLYLINE có ít nhất 3 vertex.");
             var normal = polyline.Normal;
-            if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || Math.Abs(Math.Abs(normal.Z) - 1d) > 1e-9d)
-                throw new InvalidOperationException(element.Id + ": Foundation mesh footprint phải nằm trên mặt phẳng XY.");
-            for (var index = 0; index < polyline.NumberOfVertices; index++)
-                if (Math.Abs(CadGeometryGuard.Finite(polyline.GetBulgeAt(index), element.Id + "/foundation bulge")) > 1e-12d)
-                    throw new InvalidOperationException(element.Id + ": polygonal Foundation mesh chưa hỗ trợ bulge/curved boundary; dùng straight-segment closed POLYLINE.");
+            if (Math.Abs(normal.X) > 1e-9d || Math.Abs(normal.Y) > 1e-9d || Math.Abs(Math.Abs(normal.Z) - 1d) > 1e-9d) throw new InvalidOperationException(element.Id + ": Foundation mesh footprint phải nằm trên mặt phẳng XY.");
+            for (var index = 0; index < polyline.NumberOfVertices; index++) if (Math.Abs(CadGeometryGuard.Finite(polyline.GetBulgeAt(index), element.Id + "/foundation bulge")) > 1e-12d) throw new InvalidOperationException(element.Id + ": polygonal Foundation mesh chưa hỗ trợ bulge/curved boundary; dùng straight-segment closed POLYLINE.");
             CadGeometryGuard.Finite(polyline.Elevation, element.Id + "/foundation elevation");
         }
 
@@ -448,30 +316,20 @@ namespace QS3D.BricsCAD.V25.Cad
 
         private static Solid3d CreateCylinder(Document document, Point3d start, Vector3d direction, double length, double radius, string label)
         {
-            length = CadGeometryGuard.Positive(length, label + "/length");
-            radius = CadGeometryGuard.Positive(radius, label + "/radius");
+            length = CadGeometryGuard.Positive(length, label + "/length"); radius = CadGeometryGuard.Positive(radius, label + "/radius");
             var magnitude = CadGeometryGuard.Hypot3(direction.X, direction.Y, direction.Z, label + "/axis magnitude");
             if (magnitude <= 1e-12d) throw new InvalidOperationException("Foundation mesh bar axis không hợp lệ: " + label);
             var unit = new Vector3d(direction.X / magnitude, direction.Y / magnitude, direction.Z / magnitude);
-            var startX = CadGeometryGuard.Finite(start.X, label + "/start X");
-            var startY = CadGeometryGuard.Finite(start.Y, label + "/start Y");
-            var startZ = CadGeometryGuard.Finite(start.Z, label + "/start Z");
+            var startX = CadGeometryGuard.Finite(start.X, label + "/start X"); var startY = CadGeometryGuard.Finite(start.Y, label + "/start Y"); var startZ = CadGeometryGuard.Finite(start.Z, label + "/start Z");
             Solid3d? solid = new Solid3d();
             try
             {
-                solid.SetDatabaseDefaults(document.Database);
-                solid.CreateFrustum(length, radius, radius, radius);
-                var dot = Math.Max(-1d, Math.Min(1d, unit.Z));
-                var angle = Math.Acos(dot);
-                var rotationAxis = Vector3d.ZAxis.CrossProduct(unit);
-                if (CadGeometryGuard.Hypot3(rotationAxis.X, rotationAxis.Y, rotationAxis.Z, label + "/rotation axis") > 1e-12d)
-                    solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin));
-                else if (unit.Z < 0d)
-                    solid.TransformBy(Matrix3d.Rotation(Math.PI, Vector3d.XAxis, Point3d.Origin));
+                solid.SetDatabaseDefaults(document.Database); solid.CreateFrustum(length, radius, radius, radius);
+                var dot = Math.Max(-1d, Math.Min(1d, unit.Z)); var angle = Math.Acos(dot); var rotationAxis = Vector3d.ZAxis.CrossProduct(unit);
+                if (CadGeometryGuard.Hypot3(rotationAxis.X, rotationAxis.Y, rotationAxis.Z, label + "/rotation axis") > 1e-12d) solid.TransformBy(Matrix3d.Rotation(angle, rotationAxis, Point3d.Origin));
+                else if (unit.Z < 0d) solid.TransformBy(Matrix3d.Rotation(Math.PI, Vector3d.XAxis, Point3d.Origin));
                 solid.TransformBy(Matrix3d.Displacement(new Vector3d(startX, startY, startZ)));
-                var complete = solid;
-                solid = null;
-                return complete;
+                var complete = solid; solid = null; return complete;
             }
             finally { solid?.Dispose(); }
         }
@@ -481,18 +339,13 @@ namespace QS3D.BricsCAD.V25.Cad
             Polyline? selected = null;
             foreach (var text in element.SourceHandles.Where(selectedHandles.Contains))
             {
-                if (!long.TryParse(text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value))
-                    throw new InvalidOperationException("Selected foundation source handle không hợp lệ cho " + element.Id + ": " + text);
-                ObjectId id;
-                try { id = document.Database.GetObjectId(false, new Handle(value), 0); }
-                catch { continue; }
+                if (!long.TryParse(text.Trim(), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value)) throw new InvalidOperationException("Selected foundation source handle không hợp lệ cho " + element.Id + ": " + text);
+                ObjectId id; try { id = document.Database.GetObjectId(false, new Handle(value), 0); } catch { continue; }
                 if (id.IsNull || !id.IsValid) continue;
                 var entity = transaction.GetObject(id, OpenMode.ForRead, true) as Entity;
                 if (entity == null || entity.IsErased) continue;
-                if (!(entity is Polyline polyline))
-                    throw new InvalidOperationException(element.Id + " cần source closed plan-view POLYLINE để dựng foundation mesh 3D.");
-                if (selected != null)
-                    throw new InvalidOperationException(element.Id + " có nhiều selected live source. Chọn đúng một Foundation POLYLINE.");
+                if (!(entity is Polyline polyline)) throw new InvalidOperationException(element.Id + " cần source closed plan-view POLYLINE để dựng foundation mesh 3D.");
+                if (selected != null) throw new InvalidOperationException(element.Id + " có nhiều selected live source. Chọn đúng một Foundation POLYLINE.");
                 selected = polyline;
             }
             return selected;
@@ -509,16 +362,13 @@ namespace QS3D.BricsCAD.V25.Cad
         {
             var raw = Text(element, family, key, fallback ? "true" : "false");
             if (bool.TryParse(raw, out var value)) return value;
-            if (raw == "1") return true;
-            if (raw == "0") return false;
+            if (raw == "1") return true; if (raw == "0") return false;
             throw new InvalidOperationException(element.Id + "/" + key + " phải là true/false hoặc 1/0.");
         }
 
         private static double Distance(double x1, double y1, double x2, double y2, string label)
         {
-            var dx = CadGeometryGuard.Subtract(x2, x1, label + "/dx");
-            var dy = CadGeometryGuard.Subtract(y2, y1, label + "/dy");
-            return CadGeometryGuard.Hypot(dx, dy, label);
+            var dx = CadGeometryGuard.Subtract(x2, x1, label + "/dx"); var dy = CadGeometryGuard.Subtract(y2, y1, label + "/dy"); return CadGeometryGuard.Hypot(dx, dy, label);
         }
     }
 }

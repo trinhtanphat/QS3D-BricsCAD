@@ -21,7 +21,7 @@ for relative in required:
 
 checks = {
     "src/QS3D.BricsCAD.V25/Cad/FoundationMeshSolidBuilder.cs": [
-        "using QS3D.Core.Persistence;", "using QS3D.Core.Geometry;", "using QS3D.Core.Audit;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;",
+        "using QS3D.Core.Persistence;", "using QS3D.Core.Geometry;", "using QS3D.Core.Audit;", "ProjectStateSnapshot.Capture(project)", "var cadCommitted = false;", "var ids = (ObjectId[])selectedIds.Clone();",
         "foreach (var update in pending) CommitSemanticUpdate(project, update);",
         "rollback.Restore(project)", "AggregateException(operationError, restoreError)",
         "RectangularSlabMeshPlanner.Plan", "PolygonalSlabMeshPlanner.Plan", "ElementCategory.Foundation", "GeneratedFoundationMeshHandles",
@@ -106,7 +106,7 @@ if foundation_builder.is_file():
     if "project.Touch();" in text:
         errors.append("Foundation mesh revision must remain per-element AuditTrail-owned; standalone project.Touch is redundant")
 
-    start = text.find("public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project)")
+    start = text.find("public static FoundationMeshBuildResult BuildSelected(Document document, ProjectState project, ObjectId[] selectedIds)")
     end = text.find("private static PendingUpdate CreateUpdate", start + 1) if start >= 0 else -1
     if start < 0 or end < 0:
         errors.append("foundation mesh atomicity guard cannot isolate BuildSelected method")

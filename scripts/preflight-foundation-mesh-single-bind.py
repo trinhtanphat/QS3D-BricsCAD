@@ -19,7 +19,7 @@ else:
         "ExistingProjectMutationContext.Require(document, \"Foundation Rebar 3D\")",
         "ResolveFoundationTargets(project, selectedHandles)",
         "expectedTargetIds.SetEquals(targets.Select(x => x.Id))",
-        "FoundationMeshSolidBuilder.BuildSelected(document, project)",
+        "FoundationMeshSolidBuilder.BuildSelected(document, project, selectedIds)",
         "x.Category == ElementCategory.Foundation",
         "x.SourceHandles.Any(selectedHandles.Contains)",
     )
@@ -33,7 +33,7 @@ else:
     zero_target = text.find("if (previewTargets.Count == 0)")
     bind = text.find("ExistingProjectMutationContext.Require(document, \"Foundation Rebar 3D\")")
     revalidate = text.find("expectedTargetIds.SetEquals(targets.Select(x => x.Id))")
-    build = text.find("FoundationMeshSolidBuilder.BuildSelected(document, project)")
+    build = text.find("FoundationMeshSolidBuilder.BuildSelected(document, project, selectedIds)")
     if min(selection, preview, preview_targets, zero_target, bind, revalidate, build) < 0:
         errors.append("Foundation command lifecycle ordering tokens are incomplete")
     elif not selection < preview < preview_targets < zero_target < bind < revalidate < build:
