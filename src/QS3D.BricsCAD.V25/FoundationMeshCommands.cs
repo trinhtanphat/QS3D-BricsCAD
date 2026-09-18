@@ -11,6 +11,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class FoundationMeshCommands
     {
         private const string OperationFailure = "QS3DFOUNDATIONREBAR3D lỗi: không thể tạo/cập nhật thép móng. Kiểm tra selection, project semantic và dữ liệu rebar rồi thử lại.";
+        private const string MutationOutcomeUnknown = "Foundation Rebar 3D: trạng thái commit chưa xác định sau lỗi native trong bước dựng hình. Không chạy lại lệnh để tránh tạo trùng; hãy refresh/kiểm tra model và project trước khi thao tác tiếp.";
         private const string UiSyncWarning = "UI sync warning: đã cập nhật thép móng nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
         private const string CleanupWarning = "Cleanup warning: thép móng đã được commit nhưng giải phóng tài nguyên native chưa hoàn tất; không chạy lại lệnh để tránh tạo trùng.";
 
@@ -69,7 +70,17 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Foundation Rebar 3D: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
                 RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
-                var result = FoundationMeshSolidBuilder.BuildSelected(document, project, selectedIds);
+                FoundationMeshBuildResult result;
+                try
+                {
+                    result = FoundationMeshSolidBuilder.BuildSelected(document, project, selectedIds);
+                }
+                catch (Exception)
+                {
+                    Report(document, nativeDatabaseIdentity, MutationOutcomeUnknown);
+                    return;
+                }
+
                 var message = result.Bars == 0
                     ? "Foundation Rebar 3D: chọn Foundation semantic có closed straight plan-view POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation. Rectangle giữ local X/Y; polygon dùng drawing X/Y."
                     : "Foundation Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh cho " + result.Elements + " móng.";
