@@ -10,17 +10,23 @@ namespace QS3D.BricsCAD.V25
 {
     public sealed class FoundationMeshCommands
     {
+        private const string OperationFailure = "QS3DFOUNDATIONREBAR3D lỗi: không thể tạo/cập nhật thép móng. Kiểm tra selection, project semantic và dữ liệu rebar rồi thử lại.";
+        private const string UiSyncWarning = "UI sync warning: đã cập nhật thép móng nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
+        private const string CleanupWarning = "Cleanup warning: thép móng đã được commit nhưng giải phóng tài nguyên native chưa hoàn tất; không chạy lại lệnh để tránh tạo trùng.";
+
         [CommandMethod("QS3DFOUNDATIONREBAR3D", CommandFlags.UsePickSet)]
         public void BuildFoundationMesh3D()
         {
             var document = Application.DocumentManager.MdiActiveDocument;
             if (document == null) return;
+            var nativeDatabaseIdentity = GetNativeDatabaseIdentity(document);
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try
             {
                 var selectedIds = CadSelectionGuard.AcquireCurrentSelection(document);
                 if (selectedIds.Length == 0)
                 {
-                    Report(document, "Foundation Rebar 3D: chọn Foundation semantic có closed straight plan-view POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation. Rectangle giữ local X/Y; polygon dùng drawing X/Y.");
+                    Report(document, nativeDatabaseIdentity, "Foundation Rebar 3D: chọn Foundation semantic có closed straight plan-view POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation. Rectangle giữ local X/Y; polygon dùng drawing X/Y.");
                     return;
                 }
 
@@ -32,20 +38,20 @@ namespace QS3D.BricsCAD.V25
                 }
                 if (selectedHandles.Count == 0)
                 {
-                    Report(document, "Foundation Rebar 3D: selection không có source handle hợp lệ.");
+                    Report(document, nativeDatabaseIdentity, "Foundation Rebar 3D: selection không có source handle hợp lệ.");
                     return;
                 }
 
                 if (!ProjectContextCoordinator.TryGetReadOnly(document, out var previewProject))
                 {
-                    Report(document, "Foundation Rebar 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
+                    Report(document, nativeDatabaseIdentity, "Foundation Rebar 3D: BLOCKED • chưa có QS3D project hiện hữu; lệnh không tạo project mới từ selection.");
                     return;
                 }
 
                 var previewTargets = ResolveFoundationTargets(previewProject, selectedHandles);
                 if (previewTargets.Count == 0)
                 {
-                    Report(document, "Foundation Rebar 3D: chọn Foundation semantic có closed straight plan-view POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation. Rectangle giữ local X/Y; polygon dùng drawing X/Y.");
+                    Report(document, nativeDatabaseIdentity, "Foundation Rebar 3D: chọn Foundation semantic có closed straight plan-view POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation. Rectangle giữ local X/Y; polygon dùng drawing X/Y.");
                     return;
                 }
 
@@ -62,15 +68,16 @@ namespace QS3D.BricsCAD.V25
                 if (!expectedTargetIds.SetEquals(targets.Select(x => x.Id)))
                     throw new InvalidOperationException("Foundation Rebar 3D: semantic target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
-                var result = FoundationMeshSolidBuilder.BuildSelected(document, project);
+                RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
+                var result = FoundationMeshSolidBuilder.BuildSelected(document, project, selectedIds);
                 var message = result.Bars == 0
                     ? "Foundation Rebar 3D: chọn Foundation semantic có closed straight plan-view POLYLINE + RebarFoundationXNotation/RebarFoundationYNotation. Rectangle giữ local X/Y; polygon dùng drawing X/Y."
                     : "Foundation Rebar 3D: đã tạo/cập nhật " + result.Bars + " thanh cho " + result.Elements + " móng.";
-                FinalizeUi(document, message);
+                FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Report(document, "QS3DFOUNDATIONREBAR3D lỗi: " + ex.Message);
+                Report(document, nativeDatabaseIdentity, OperationFailure);
             }
         }
 
@@ -80,30 +87,71 @@ namespace QS3D.BricsCAD.V25
                 .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-        private static void FinalizeUi(Document document, string message)
+        private static void FinalizeUi(Document document, IntPtr nativeDatabaseIdentity, string message, bool postCommitCleanupWarning)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            var publishedMessage = postCommitCleanupWarning ? message + " " + CleanupWarning : message;
             try
             {
-                PaletteCoordinator.RefreshProject();
+                RefreshModelTree(document, nativeDatabaseIdentity);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
                 document.Editor.Regen();
-                PaletteCoordinator.SetStatus(message);
-                document.Editor.WriteMessage("\nQS3D " + message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                SetPaletteStatusForDocument(document, nativeDatabaseIdentity, publishedMessage);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                document.Editor.WriteMessage("\nQS3D " + publishedMessage);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                TryWriteMessage(document, "\nQS3D " + message + " UI sync warning: " + ex.Message);
+                if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+                TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + publishedMessage + " " + UiSyncWarning);
             }
         }
 
-        private static void Report(Document document, string message)
+        private static IntPtr GetNativeDatabaseIdentity(Document document)
         {
+            try { return document.Database.UnmanagedObject; }
+            catch { return IntPtr.Zero; }
+        }
+
+        private static bool IsActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (nativeDatabaseIdentity == IntPtr.Zero ||
+                !ReferenceEquals(document, Application.DocumentManager.MdiActiveDocument))
+                return false;
+            try { return document.Database.UnmanagedObject == nativeDatabaseIdentity; }
+            catch { return false; }
+        }
+
+        private static void RequireActiveDocumentGeneration(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity))
+                throw new InvalidOperationException("Foundation Rebar 3D document generation changed before geometry mutation.");
+        }
+
+        private static void RefreshModelTree(Document document, IntPtr nativeDatabaseIdentity)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            PaletteCoordinator.RefreshProject();
+        }
+
+        private static void SetPaletteStatusForDocument(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
+            PaletteCoordinator.SetStatus(message);
+        }
+
+        private static void Report(Document document, IntPtr nativeDatabaseIdentity, string message)
+        {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { PaletteCoordinator.SetStatus(message); }
             catch { }
-            TryWriteMessage(document, "\nQS3D " + message);
+            TryWriteMessage(document, nativeDatabaseIdentity, "\nQS3D " + message);
         }
 
-        private static void TryWriteMessage(Document document, string message)
+        private static void TryWriteMessage(Document document, IntPtr nativeDatabaseIdentity, string message)
         {
+            if (!IsActiveDocumentGeneration(document, nativeDatabaseIdentity)) return;
             try { document.Editor.WriteMessage(message); }
             catch { }
         }
