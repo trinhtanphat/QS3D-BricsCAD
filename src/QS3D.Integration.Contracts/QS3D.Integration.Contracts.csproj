@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>true</IsPackable>
+    <PackageId>QS3D.Integration.Contracts</PackageId>
+    <Description>Versioned BricsCAD-independent interchange contracts for QS3D integrations.</Description>
+  </PropertyGroup>
+</Project>
