@@ -29,9 +29,9 @@ def bearer_token(value: str | None) -> str | None:
     return token or None
 
 
-def authorize_model(headers: dict[str, str], *, openai_provider: bool, local_token: str, oauth_tokens: set[str]) -> bool:
+def authorize_model(headers: dict[str, str], *, openai_tunnel_running: bool, local_token: str, oauth_tokens: set[str]) -> bool:
     local_authorization = headers.get(LOCAL_HEADER)
-    if local_authorization is not None and openai_provider:
+    if local_authorization is not None and openai_tunnel_running:
         candidate = bearer_token(local_authorization)
         return candidate is not None and hmac.compare_digest(candidate, local_token)
 
@@ -65,10 +65,10 @@ def parse_security_headers(pairs: list[tuple[str, str]]) -> dict[str, str]:
     return parsed
 
 
-def simulate_initialize(headers: dict[str, str], *, openai_provider: bool, local_token: str, oauth_tokens: set[str]) -> int:
+def simulate_initialize(headers: dict[str, str], *, openai_tunnel_running: bool, local_token: str, oauth_tokens: set[str]) -> int:
     if headers.get("Content-Type", "").split(";", 1)[0].strip().lower() != "application/json":
         return 415
-    if not authorize_model(headers, openai_provider=openai_provider, local_token=local_token, oauth_tokens=oauth_tokens):
+    if not authorize_model(headers, openai_tunnel_running=openai_tunnel_running, local_token=local_token, oauth_tokens=oauth_tokens):
         return 401
     body = json.loads('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"collision-regression","version":"1"}}}')
     return 200 if body.get("method") == "initialize" else 400
@@ -89,15 +89,15 @@ def verify_collision_behavior() -> None:
         fail("connector Authorization replaced the dedicated local credential")
     if effective.get("Authorization") != f"Bearer {connector}":
         fail("connector Authorization was not preserved independently")
-    if simulate_initialize(effective, openai_provider=True, local_token=local, oauth_tokens=set()) != 200:
+    if simulate_initialize(effective, openai_tunnel_running=True, local_token=local, oauth_tokens=set()) != 200:
         fail("Authorization collision simulation did not admit initialize through the dedicated local credential")
 
     direct_local = {"Authorization": f"Bearer {local}", "Content-Type": "application/json"}
-    if simulate_initialize(direct_local, openai_provider=True, local_token=local, oauth_tokens=set()) != 200:
+    if simulate_initialize(direct_local, openai_tunnel_running=True, local_token=local, oauth_tokens=set()) != 200:
         fail("direct local Authorization compatibility regressed")
 
     missing_local = {"Authorization": f"Bearer {connector}", "Content-Type": "application/json"}
-    if simulate_initialize(missing_local, openai_provider=True, local_token=local, oauth_tokens=set()) != 401:
+    if simulate_initialize(missing_local, openai_tunnel_running=True, local_token=local, oauth_tokens=set()) != 401:
         fail("missing dedicated credential unexpectedly authenticated the local-tunnel case")
 
     wrong_local = {
@@ -105,7 +105,7 @@ def verify_collision_behavior() -> None:
         "Authorization": f"Bearer {connector}",
         "Content-Type": "application/json",
     }
-    if simulate_initialize(wrong_local, openai_provider=True, local_token=local, oauth_tokens={connector}) != 401:
+    if simulate_initialize(wrong_local, openai_tunnel_running=True, local_token=local, oauth_tokens={connector}) != 401:
         fail("wrong dedicated credential fell back to connector Authorization")
 
     malformed_local = {
@@ -113,7 +113,7 @@ def verify_collision_behavior() -> None:
         "Authorization": f"Bearer {connector}",
         "Content-Type": "application/json",
     }
-    if simulate_initialize(malformed_local, openai_provider=True, local_token=local, oauth_tokens={connector}) != 401:
+    if simulate_initialize(malformed_local, openai_tunnel_running=True, local_token=local, oauth_tokens={connector}) != 401:
         fail("malformed dedicated credential fell back to connector Authorization")
 
     public_misuse = {
@@ -121,12 +121,12 @@ def verify_collision_behavior() -> None:
         "Authorization": "Bearer NOT_OAUTH",
         "Content-Type": "application/json",
     }
-    if simulate_initialize(public_misuse, openai_provider=False, local_token=local, oauth_tokens={connector}) != 401:
+    if simulate_initialize(public_misuse, openai_tunnel_running=False, local_token=local, oauth_tokens={connector}) != 401:
         fail("non-OpenAI/public path used the dedicated header to bypass existing auth")
 
     public_with_valid_oauth = dict(public_misuse)
     public_with_valid_oauth["Authorization"] = f"Bearer {connector}"
-    if simulate_initialize(public_with_valid_oauth, openai_provider=False, local_token=local, oauth_tokens={connector}) != 200:
+    if simulate_initialize(public_with_valid_oauth, openai_tunnel_running=False, local_token=local, oauth_tokens={connector}) != 200:
         fail("non-OpenAI path no longer honors its existing Authorization contract")
 
     try:
@@ -164,7 +164,7 @@ def verify_source_contract() -> None:
 
     require(server, 'string.Equals(name, LocalTunnelAuthorizationHeader, StringComparison.OrdinalIgnoreCase)', "dedicated header is not a security-sensitive singleton")
     require(server, 'private static bool IsValidLocalTunnelAuthorization(', "embedded MCP local tunnel validation helper is missing")
-    require(server, 'McpTransportCoordinator.SelectedProvider != McpTransportProvider.OpenAiSecureTunnel', "dedicated header is not scoped fail-closed to OpenAI Secure Tunnel")
+    require(server, 'if (!McpOpenAiSecureTunnelManager.IsRunning) return false;', "dedicated header is not scoped fail-closed to a live QS3D-owned OpenAI Secure Tunnel")
     require(server, 'headers.TryGetValue(LocalTunnelAuthorizationHeader, out authorization)', "embedded MCP does not read the dedicated local header")
     require(server, 'if (!TryExtractBearerToken(authorization, out token)) return false;', "malformed dedicated Bearer does not fail closed")
     require(server, 'return ConstantTimeEquals(token, GetBearerToken());', "dedicated bearer is not compared in constant time")
@@ -175,7 +175,7 @@ def verify_source_contract() -> None:
 def main() -> None:
     verify_collision_behavior()
     verify_source_contract()
-    print("PASS: OpenAI tunnel local-origin auth is collision-safe, provider-scoped, singleton, and preserves existing Authorization paths.")
+    print("PASS: OpenAI tunnel local-origin auth is collision-safe, live-tunnel-scoped, singleton, and preserves existing Authorization paths.")
 
 
 if __name__ == "__main__":

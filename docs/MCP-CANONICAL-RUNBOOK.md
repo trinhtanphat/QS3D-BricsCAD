@@ -14,7 +14,7 @@
 
 ## 1. Canonical architecture
 
-The embedded MCP stays local. Agent Center selects one external transport for ChatGPT reachability:
+The embedded MCP stays local. Agent Center selects a **preferred** external transport for ChatGPT reachability and UI guidance. The durable OpenAI Secure Tunnel and Cloudflare Named Tunnel are independent lanes and may run concurrently (dual-tunnel); preference does not imply exclusive process ownership:
 
 ```text
                                       ┌─ OpenAI Secure MCP Tunnel
@@ -143,6 +143,19 @@ cloudflared --version
 
 Then return to Agent Center and **Refresh**. QS3D should discover the WinGet binary, verify the Cloudflare Authenticode signer and reuse it instead of downloading a second copy.
 
+
+### 3.5 Local Private Commander dashboard - loopback operations view
+
+QS3D ships a standalone local operations dashboard at **`http://127.0.0.1:3220/`**. It is bound to loopback only and is designed to remain available after Windows sign-in even when BricsCAD is not yet running. The dashboard shows local MCP reachability/latency, ChatGPT web reachability, OpenAI tunnel readiness, Cloudflare public-route reachability, the currently preferred provider, and a compact fault-localization view.
+
+The browser never receives the QS3D MCP bearer. The dashboard process reads the existing local bearer only in process memory and proxies authenticated requests to the embedded MCP control bridge under `/qs3d/dashboard/*`. Mutating dashboard actions require same-origin requests plus a dedicated local dashboard header, and the embedded control bridge independently requires the exact local bearer. The dashboard is not a generic process/shell surface.
+
+OpenAI Tunnel ID may be supplied from the dashboard. A Runtime API key typed there is forwarded only over loopback to `McpOpenAiSecureTunnelManager.Start`, which persists it through the existing verified **Windows Credential Manager** contract. The dashboard does not write the Runtime API key, MCP bearer, Cloudflare credential, or OAuth token to dashboard files, command lines, logs, status JSON, or HTML. The password input is cleared after each action.
+
+`scripts/install-mcp-local-dashboard.ps1` publishes the dashboard as a framework-dependent Windows x64 app after verifying that `Microsoft.AspNetCore.App 8.x` is installed, installs it under `%LOCALAPPDATA%\QS3D\McpDashboard`, registers the idempotent Scheduled Task **QS3D MCP Local Dashboard** at user logon, and verifies `127.0.0.1:3220`. Tunnel autostart remains owned by the plugin transport managers: when the MCP host starts, each durable lane with its own autostart flag enabled may start independently.
+
+The OpenAI dedicated local-origin header remains fail-closed in dual-tunnel mode: it is accepted only while QS3D owns a live OpenAI tunnel process and only when the exact local bearer matches in constant time. It is no longer gated on `SelectedProvider`, because selected/preferred state is UI/supervision preference rather than process liveness. Cloudflare public OAuth/bearer rules are unchanged.
+
 ## 4. Authentication contracts
 
 ### Public-URL Cloudflare path
@@ -222,7 +235,7 @@ Transport status is provider-aware:
 - Cloudflare installer: trusted source/path plus bounded progress/cancel status are separate from tunnel READY state;
 - Quick Tunnel is explicitly marked test-only.
 
-Both V25 and V26 start embedded MCP and then auto-start only the preferred persistent transport. On clean installs the preference is OpenAI Secure Tunnel; existing saved Named Tunnel users retain Named Tunnel as the inferred preference until they explicitly switch. Quick Tunnel never auto-starts. Host teardown stops the selected/supervised tunnel processes before the embedded MCP stops.
+Both V25 and V26 start embedded MCP, supervise the preferred durable transport, and also honor the sibling durable transport's independent autostart flag. On clean installs the preference is OpenAI Secure Tunnel; existing saved Named Tunnel users retain Named Tunnel as the inferred preference until they explicitly switch. **dual-tunnel** therefore means OpenAI Secure Tunnel and Cloudflare Named Tunnel may both be RUNNING at the same time while only one remains the preferred/selected UI route. Quick Tunnel never auto-starts. Host teardown stops all QS3D-owned tunnel processes before the embedded MCP stops.
 
 Recovery remains two-layered: native BricsCAD autosave/BAK plus bounded versioned QS3D snapshots under `%LOCALAPPDATA%\QS3D\Backups`. Restore always writes a new `Recovered` copy and never silently overwrites the active/original DWG.
 
@@ -277,16 +290,18 @@ The local matrix must cover at least:
 18. Cloudflare Named Tunnel login/stable hostname/public `/mcp` + OAuth/DCR path;
 19. Cloudflare authorization deny/approve, PKCE S256 and representative tool scan;
 20. Quick Tunnel test-only URL churn and required reconnect;
-21. provider switching does not cause a non-selected running transport to be reported as selected READY;
+21. provider switching does not cause a non-selected running transport to be reported as selected READY, while an independently running sibling durable transport remains running;
 22. public OAuth code/token/refresh replay/resource-binding invariants on the Cloudflare path;
 23. `background_only` startup and same-process background controls;
-24. local desktop-consent OFF rejection, local Resume/Pause, AUTO-RENEW remaining ON beyond 10 minutes of idle time, and blue overlay while guarded actions run;
-25. bounded screenshot/clipboard/mouse/drag/type/key behavior only under existing consent/confirmation rules;
-26. bounded `desktop_sequence` success/rejection/cancellation contracts;
-27. physical Esc×2 emergency stop and CAD cancel;
-28. versioned backup/recovery-to-new-copy;
-29. one confirmed disposable-DWG mutation plus audit/save/reopen;
-30. clean V25/V26 process shutdown with tunnel processes stopped.
+24. local dashboard `127.0.0.1:3220` loopback-only bind, same-origin mutation guard, bearer non-disclosure, MCP/ChatGPT/tunnel latency indicators and start/stop/restart controls for both durable lanes;
+25. simultaneous OpenAI Secure Tunnel + Cloudflare Named Tunnel runtime, including independent autostart flags and no cross-provider teardown when either lane starts/restarts;
+26. local desktop-consent OFF rejection, local Resume/Pause, AUTO-RENEW remaining ON beyond 10 minutes of idle time, and blue overlay while guarded actions run;
+27. bounded screenshot/clipboard/mouse/drag/type/key behavior only under existing consent/confirmation rules;
+28. bounded `desktop_sequence` success/rejection/cancellation contracts;
+29. physical Esc twice emergency stop and CAD cancel;
+30. versioned backup/recovery-to-new-copy;
+31. one confirmed disposable-DWG mutation plus audit/save/reopen;
+32. clean V25/V26 process shutdown with tunnel processes stopped.
 
 Never commit Runtime API keys, OpenAI admin keys, access/refresh tokens, static bearer secrets, Cloudflare credentials, private paths/DWGs, clipboard contents, typed secrets, proprietary BricsCAD binaries or unsanitized screenshots.
 
