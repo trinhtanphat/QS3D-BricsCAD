@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
+from pathlib import Path
 import subprocess
 
-EXPECTED_PLATFORM_SHA = "8b0206d3b74e7bbb3c02ed71ac4c5aeef47d5efd"
+ROOT = Path(__file__).resolve().parents[1]
 SUBMODULE_PATH = "external/QS3D-Platform"
+PLATFORM = ROOT / SUBMODULE_PATH
+SMOKE = PLATFORM / "tests" / "QS3D.Platform.SmokeTests" / "QuantityScheduleCsvOutputBudgetModuleSmoke.cs"
 
 
 def gitlink_sha() -> str:
     result = subprocess.run(
         ["git", "ls-tree", "HEAD", SUBMODULE_PATH],
+        cwd=ROOT,
         check=True,
         capture_output=True,
         text=True,
@@ -22,11 +26,35 @@ def gitlink_sha() -> str:
     return fields[2]
 
 
-actual = gitlink_sha()
-if actual != EXPECTED_PLATFORM_SHA:
-    raise SystemExit(
-        "ERROR: QS3D-Platform does not contain the qualified Quantity Schedule CSV output-budget generation: "
-        f"expected {EXPECTED_PLATFORM_SHA}, got {actual}"
+def ensure_exact_checkout(expected: str) -> None:
+    result = subprocess.run(
+        ["git", "submodule", "update", "--init", "--depth", "1", "--", SUBMODULE_PATH],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
     )
+    if result.returncode != 0:
+        raise SystemExit("ERROR: cannot initialize pinned QS3D-Platform for CSV output-budget validation: " + result.stderr.strip())
+    head = subprocess.run(
+        ["git", "-C", str(PLATFORM), "rev-parse", "HEAD"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    actual = head.stdout.strip().lower() if head.returncode == 0 else ""
+    if actual != expected.lower():
+        raise SystemExit(f"ERROR: initialized QS3D-Platform HEAD does not match gitlink: expected {expected}, got {actual or '<unresolved>'}")
 
-print(f"PASS: QS3D-Platform Quantity Schedule CSV output-budget generation is pinned at {actual}")
+
+pinned = gitlink_sha()
+ensure_exact_checkout(pinned)
+if not SMOKE.is_file():
+    raise SystemExit(f"ERROR: pinned QS3D-Platform lacks CSV output-budget regression: {SMOKE.relative_to(ROOT)}")
+source = SMOKE.read_text(encoding="utf-8")
+for marker in ("RejectsCumulativeCsvAmplification();", "RepeatedSummaryCount = 600", "LargeElementNameChars = 30_000", "Throws<InvalidOperationException>"):
+    if marker not in source:
+        raise SystemExit(f"ERROR: pinned QS3D-Platform CSV output-budget regression is missing required contract marker: {marker}")
+
+print(f"PASS: pinned QS3D-Platform {pinned} contains the executable Quantity Schedule CSV output-budget regression")
