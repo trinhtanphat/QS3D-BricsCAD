@@ -96,7 +96,8 @@ namespace QS3D.Core.Reporting
                         Material = material,
                         Note = note,
                         DensityKgM3 = densityKgM3,
-                        DrawingFingerprint = drawingFingerprint
+                        DrawingFingerprint = drawingFingerprint,
+                        GenerationId = snapshot.GenerationId
                     };
                     rows[key] = row;
                     aggregate = new QuantityReportAggregateState();
@@ -255,6 +256,7 @@ namespace QS3D.Core.Reporting
             internal long Version { get; }
             internal string ProjectId { get; }
             internal string DrawingFingerprint { get; }
+            internal string GenerationId => ProjectId + ":" + Version.ToString(CultureInfo.InvariantCulture) + ":" + DrawingFingerprint;
             internal IReadOnlyList<ElementSnapshot> Elements { get; }
             internal IReadOnlyList<FloorSnapshot> Floors { get; }
             internal IReadOnlyList<ZoneSnapshot> Zones { get; }

@@ -30,6 +30,7 @@ namespace QS3D.Core.Export
             if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Export path is required.", nameof(path));
             if (rows == null) throw new ArgumentNullException(nameof(rows));
             var snapshot = SnapshotStandardRows(rows);
+            ValidateSingleGeneration(snapshot, "Quantity XLSX");
             ExportCore(path, snapshot, null);
         }
 
@@ -51,6 +52,7 @@ namespace QS3D.Core.Export
                     Category = source.Category ?? string.Empty,
                     FamilyName = source.FamilyName ?? string.Empty,
                     DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
+                    GenerationId = source.GenerationId ?? string.Empty,
                     Count = source.Count,
                     GrossConcreteM3 = source.GrossConcreteM3,
                     DeductionM3 = source.DeductionM3,
@@ -89,6 +91,19 @@ namespace QS3D.Core.Export
             return snapshot;
         }
 
+        private static string ValidateSingleGeneration(IReadOnlyList<QuantityReportRow> rows, string label)
+        {
+            string? generation = null;
+            foreach (var row in rows)
+            {
+                var current = row.GenerationId ?? string.Empty;
+                if (generation == null) generation = current;
+                else if (!string.Equals(generation, current, StringComparison.Ordinal))
+                    throw new InvalidDataException(label + " contains rows from different semantic generations.");
+            }
+            return generation ?? string.Empty;
+        }
+
         private static void SnapshotStrings(IList<string> source, IList<string> target)
         {
             var count = source.Count;
@@ -112,6 +127,10 @@ namespace QS3D.Core.Export
             if (summaryRows == null) throw new ArgumentNullException(nameof(summaryRows));
             var detailSnapshot = SnapshotEd2Rows(detailRows, nameof(detailRows), "ED2 CHI_TIET");
             var summarySnapshot = SnapshotEd2Rows(summaryRows, nameof(summaryRows), "ED2 TONG_HOP");
+            var detailGeneration = ValidateSingleGeneration(detailSnapshot, "ED2 CHI_TIET");
+            var summaryGeneration = ValidateSingleGeneration(summarySnapshot, "ED2 TONG_HOP");
+            if (!string.Equals(detailGeneration, summaryGeneration, StringComparison.Ordinal))
+                throw new InvalidDataException("ED2 CHI_TIET and TONG_HOP belong to different semantic generations.");
 
             var detailIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var detailHandles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -186,6 +205,7 @@ namespace QS3D.Core.Export
                     Material = source.Material ?? string.Empty,
                     Note = source.Note ?? string.Empty,
                     DrawingFingerprint = source.DrawingFingerprint ?? string.Empty,
+                    GenerationId = source.GenerationId ?? string.Empty,
                     Count = source.Count,
                     GrossConcreteM3 = source.GrossConcreteM3,
                     DeductionM3 = source.DeductionM3,

@@ -15,6 +15,7 @@ namespace QS3D.Core.Reporting
         public string Material { get; set; } = string.Empty;
         public string Note { get; set; } = string.Empty;
         public string DrawingFingerprint { get; set; } = string.Empty;
+        public string GenerationId { get; set; } = string.Empty;
         public int Count { get; set; }
         public double GrossConcreteM3 { get; set; }
         public double DeductionM3 { get; set; }
