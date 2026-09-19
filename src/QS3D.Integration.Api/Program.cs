@@ -50,7 +50,8 @@ public static class ApiAuthorization
 
     public static IResult? AuthorizeAccess(ClaimsPrincipal user, ResourceAccess? access)
     {
-        if (access is null) return null;
+        if (access is null)
+            return Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Resource not found");
         var tenant = user.FindFirstValue("tenant_id");
         if (!string.IsNullOrEmpty(access.TenantId) && !string.Equals(tenant, access.TenantId, StringComparison.Ordinal))
             return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Tenant boundary violation");
