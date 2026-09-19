@@ -52,6 +52,7 @@ public sealed record BoqItem(
     string? Currency,
     IReadOnlyList<string> QuantityIds);
 
+public sealed record EstimateRef(string EstimateId, string BoqItemId, decimal Quantity, decimal UnitRate, decimal Amount, string Currency);
 public sealed record ClassificationRef(string System, string Code, string? Title);
 public sealed record QaFinding(string FindingId, string Severity, string Message, IReadOnlyList<EvidenceRef> Evidence);
 public sealed record RevisionRef(string RevisionId, string ParentRevisionId, DateTimeOffset CapturedAtUtc);

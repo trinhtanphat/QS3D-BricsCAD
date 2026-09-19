@@ -7,10 +7,14 @@ Require(await Status(ApiAuthorization.Authorize(anonymous, "quantity:read")) == 
 var identity = new ClaimsIdentity(new[] {
     new Claim(ClaimTypes.NameIdentifier, "power-bi"),
     new Claim("scope", "project:read quantity:read"),
-    new Claim("tenant_id", "tenant-a") }, "smoke");
+    new Claim("tenant_id", "tenant-a"),
+    new Claim("project_id", "project-a") }, "smoke");
 var principal = new ClaimsPrincipal(identity);
 Require(ApiAuthorization.Authorize(principal, "quantity:read") is null, "granted scope rejected");
 Require(await Status(ApiAuthorization.Authorize(principal, "procurement:read")) == 403, "missing scope must be 403");
+Require(ApiAuthorization.AuthorizeAccess(principal, new ResourceAccess("project-a", "tenant-a")) is null, "matching tenant/project rejected");
+Require(await Status(ApiAuthorization.AuthorizeAccess(principal, new ResourceAccess("project-a", "tenant-b"))) == 403, "cross-tenant access must be 403");
+Require(await Status(ApiAuthorization.AuthorizeAccess(principal, new ResourceAccess("project-b", "tenant-a"))) == 403, "cross-project access must be 403");
 var context = ApiAuthorization.Context(principal);
 Require(context.Subject == "power-bi" && context.TenantId == "tenant-a", "subject/tenant lost");
 Require(context.Scopes.SequenceEqual(new[] { "project:read", "quantity:read" }), "scopes must be deterministic");
