@@ -13,6 +13,7 @@ var principal = new ClaimsPrincipal(identity);
 Require(ApiAuthorization.Authorize(principal, "quantity:read") is null, "granted scope rejected");
 Require(await Status(ApiAuthorization.Authorize(principal, "procurement:read")) == 403, "missing scope must be 403");
 Require(ApiAuthorization.AuthorizeAccess(principal, new ResourceAccess("project-a", "tenant-a")) is null, "matching tenant/project rejected");
+Require(await Status(ApiAuthorization.AuthorizeAccess(principal, null)) == 404, "missing access metadata must fail closed without disclosing resource existence");
 Require(await Status(ApiAuthorization.AuthorizeAccess(principal, new ResourceAccess("project-a", "tenant-b"))) == 403, "cross-tenant access must be 403");
 Require(await Status(ApiAuthorization.AuthorizeAccess(principal, new ResourceAccess("project-b", "tenant-a"))) == 403, "cross-project access must be 403");
 
