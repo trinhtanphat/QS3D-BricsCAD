@@ -13,6 +13,7 @@ namespace QS3D.BricsCAD.V25
     public sealed class BeamStirrupCommands
     {
         private const string OperationFailure = "QS3DREBARSTIRRUP3D lỗi: không thể tạo/cập nhật đai dầm. Kiểm tra selection, project semantic và dữ liệu stirrup rồi thử lại.";
+        private const string MutationOutcomeIndeterminate = "Beam Stirrup 3D: kết quả native mutation chưa xác định; KHÔNG chạy lại lệnh để tránh tạo trùng. Hãy refresh và kiểm tra CAD/project trước khi tiếp tục.";
         private const string HealthFailure = "QS3DREBARSTIRRUPHEALTH lỗi: không thể hoàn tất kiểm tra đai dầm. Kiểm tra project/drawing hiện hành rồi thử lại.";
         private const string UiSyncWarning = "UI sync warning: đã cập nhật đai dầm nhưng đồng bộ giao diện chưa hoàn tất. Dữ liệu CAD/project đã được giữ nguyên; hãy refresh giao diện.";
         private const string CleanupWarning = "Cleanup warning: đai dầm đã được commit nhưng giải phóng tài nguyên native chưa hoàn tất; không chạy lại lệnh để tránh tạo trùng.";
@@ -75,11 +76,27 @@ namespace QS3D.BricsCAD.V25
                     throw new InvalidOperationException("Beam Stirrup 3D: semantic Beam target set đã thay đổi sau khi đọc selection; hãy chọn lại target.");
 
                 RequireActiveDocumentGeneration(document, nativeDatabaseIdentity);
-                var result = BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds);
+                BeamStirrupBuildResult result;
+                try
+                {
+                    result = BeamStirrupSolidBuilder.BuildSelected(document, project, selectedIds, expectedTargetIds);
+                }
+                catch (Exception)
+                {
+                    Report(document, nativeDatabaseIdentity, MutationOutcomeIndeterminate);
+                    return;
+                }
+
+                if (result.PostCommitCleanupWarning)
+                {
+                    FinalizeUi(document, nativeDatabaseIdentity, MutationOutcomeIndeterminate, postCommitCleanupWarning: false);
+                    return;
+                }
+
                 var message = result.Stirrups == 0
                     ? "Beam Stirrup 3D: chọn Beam semantic LINE có RebarStirrupNotation (ví dụ D8@150 hoặc 20D8)."
                     : "Beam Stirrup 3D: đã tạo/cập nhật " + result.Stirrups + " đai trên " + result.Elements + " dầm.";
-                FinalizeUi(document, nativeDatabaseIdentity, message, result.PostCommitCleanupWarning);
+                FinalizeUi(document, nativeDatabaseIdentity, message, postCommitCleanupWarning: false);
             }
             catch (Exception)
             {
