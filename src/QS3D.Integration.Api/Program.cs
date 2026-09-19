@@ -55,7 +55,7 @@ public static class ApiAuthorization
         if (!string.IsNullOrEmpty(access.TenantId) && !string.Equals(tenant, access.TenantId, StringComparison.Ordinal))
             return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Tenant boundary violation");
         var projects = user.FindAll("project_id").Select(c => c.Value).ToHashSet(StringComparer.Ordinal);
-        if (projects.Count > 0 && !projects.Contains(access.ProjectId))
+        if (!string.IsNullOrEmpty(access.ProjectId) && !projects.Contains(access.ProjectId))
             return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Project boundary violation");
         return null;
     }
