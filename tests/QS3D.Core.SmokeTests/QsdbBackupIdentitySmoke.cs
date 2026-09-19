@@ -13,9 +13,26 @@ namespace QS3D.Core.SmokeTests
         internal static void Initialize()
         {
             RejectsCrossProjectBackupWhenParseablePrimaryIdentityIsPadded();
+            RejectsCrossProjectBackupWhenParseablePrimaryIdentityIsMissing();
+            RejectsCrossProjectBackupWhenParseablePrimaryIdentityIsBlank();
         }
 
-        private static void RejectsCrossProjectBackupWhenParseablePrimaryIdentityIsPadded()
+        private static void RejectsCrossProjectBackupWhenParseablePrimaryIdentityIsPadded() =>
+            RejectsCrossProjectBackupForAmbiguousPrimaryIdentity(
+                root => root.SetAttributeValue("projectId", " PROJECT-A "),
+                "padded");
+
+        private static void RejectsCrossProjectBackupWhenParseablePrimaryIdentityIsMissing() =>
+            RejectsCrossProjectBackupForAmbiguousPrimaryIdentity(
+                root => root.Attribute("projectId")?.Remove(),
+                "missing");
+
+        private static void RejectsCrossProjectBackupWhenParseablePrimaryIdentityIsBlank() =>
+            RejectsCrossProjectBackupForAmbiguousPrimaryIdentity(
+                root => root.SetAttributeValue("projectId", "   "),
+                "blank");
+
+        private static void RejectsCrossProjectBackupForAmbiguousPrimaryIdentity(Action<XElement> corruptIdentity, string label)
         {
             var directory = Path.Combine(Path.GetTempPath(), "qs3d-backup-identity-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(directory);
@@ -30,12 +47,12 @@ namespace QS3D.Core.SmokeTests
 
                 var primary = XDocument.Load(path, LoadOptions.PreserveWhitespace);
                 var root = primary.Root ?? throw new InvalidOperationException("Smoke fixture primary has no root.");
-                root.SetAttributeValue("projectId", " PROJECT-A ");
+                corruptIdentity(root);
                 primary.Save(path, SaveOptions.DisableFormatting);
 
                 Throws<InvalidDataException>(
                     () => store.LoadWithBackupFallback(path),
-                    "parseable primary with non-canonical identity must not authorize a different-project backup");
+                    "parseable primary with " + label + " identity must not authorize a different-project backup");
             }
             finally
             {
