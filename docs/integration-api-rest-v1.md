@@ -23,3 +23,7 @@ Clients should pin `/api/v1`, send the deployment provider's bearer/session cred
 ## Compatibility
 
 Routes under `/api/v1` obey the `qs3d.integration.v1` additive compatibility policy. Existing fields, meanings, units and identifiers cannot be removed or reinterpreted within v1. Breaking HTTP or DTO changes require `/api/v2` plus a new contract major identifier.
+
+## Cost and project boundaries
+
+`GET /api/v1/estimates/{id}` requires `cost:read` and returns the v1 `EstimateRef` contract. Read stores may attach `ResourceAccess(projectId, tenantId)` to a resource; the host checks `tenant_id` and `project_id` claims before reading the payload. When `ProjectId` is present on `ResourceAccess`, callers must carry a matching `project_id`; absence of a project claim fails closed with 403 rather than granting tenant-wide access. A non-empty `TenantId` likewise requires an exact `tenant_id` match. This prevents cross-tenant/project disclosure while preserving existing `/api/v1` routes and envelopes. Store implementations remain the application-composition seam; the default empty store publishes no synthetic business data.
